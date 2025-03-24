@@ -1,6 +1,6 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import { Inter } from 'next/font/google'
 import "./globals.css"
 import { AuthProvider } from "@/lib/auth-context"
 import { ThemeProvider } from "@/components/theme-provider"
@@ -11,6 +11,21 @@ export const metadata: Metadata = {
   title: "Sistema de Gestión Quadrifoglio",
   description: "Sistema de gestión para restaurantes Quadrifoglio",
   generator: "v0.dev",
+  icons: {
+    icon: [
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+    other: [
+      {
+        rel: "manifest",
+        url: "/site.webmanifest",
+      },
+    ],
+  },
 }
 
 export default function RootLayout({
@@ -28,9 +43,3 @@ export default function RootLayout({
     </html>
   )
 }
-
-import "./globals.css"
-
-
-
-import './globals.css'
