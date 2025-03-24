@@ -1,8 +1,7 @@
 "use client"
 
-import type React from "react"
-import { useState, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,18 +14,8 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
-  const { login, error, isLoading, setError } = useAuth()
+  const { login, isLoading, error, setError } = useAuth()
   const router = useRouter()
-  const searchParams = useSearchParams()
-
-  useEffect(() => {
-    // Check for success message from password reset
-    const message = searchParams.get("message")
-    if (message === "Password+updated+successfully") {
-      // You could show a success message here
-      console.log("Password updated successfully")
-    }
-  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -37,14 +26,11 @@ export default function LoginPage() {
     }
 
     try {
-      setError(null)
-
-      await login({ email, password })
-      
-      // No need to manually redirect, the login function already does this
-    } catch (error: any) {
-      console.error("Login error:", error)
-      // Error handling is done in the auth context
+      await login(email, password)
+      // Redirigir después de login exitoso
+      router.push("/")
+    } catch (err) {
+      // El error ya se maneja en el contexto
     }
   }
 

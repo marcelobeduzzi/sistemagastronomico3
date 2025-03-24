@@ -3,174 +3,130 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import type { User, LoginCredentials, AuthState } from "@/types/auth"
+import type { User } from "@/types/auth"
 
-interface AuthContextType extends AuthState {
-  login: (credentials: LoginCredentials) => Promise<void>
+// Definir tipos simplificados
+type AuthContextType = {
+  user: User | null
+  isLoading: boolean
+  error: string | null
+  login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
-  hasPermission: (permission: string) => boolean
   setError: (error: string | null) => void
-  setIsLoading: (isLoading: boolean) => void
 }
 
+// Crear el contexto
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-// Define role permissions
-const rolePermissions: Record<string, string[]> = {
-  admin: ["*"],
-  manager: [
-    "view:employees",
-    "view:attendance",
-    "view:payroll",
-    "view:delivery",
-    "view:audit",
-    "view:billing",
-    "view:balance",
-    "edit:employees",
-    "edit:attendance",
-    "edit:delivery",
-    "edit:audit",
-  ],
-  employee: ["view:attendance", "view:delivery", "view:audit"],
-  cashier: ["view:attendance", "view:delivery", "view:audit", "edit:delivery"],
-  waiter: ["view:attendance", "view:delivery", "view:audit", "edit:delivery"],
-  kitchen: ["view:attendance", "view:delivery", "view:audit", "edit:delivery"],
-}
-
+// Proveedor de autenticación
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClientComponentClient()
 
+  // Verificar sesión al cargar
   useEffect(() => {
-    validateSession()
-
-    // Subscribe to auth state changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "SIGNED_IN" && session?.user) {
-        await fetchUserData(session.user.id)
-      } else if (event === "SIGNED_OUT") {
-        setUser(null)
-        router.push("/login")
+    const checkSession = async () => {
+      try {
+        setIsLoading(true)
+        
+        // Obtener sesión actual
+        const { data: { session } } = await supabase.auth.getSession()
+        
+        if (session?.user) {
+          // Obtener datos del usuario
+          const { data, error: userError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', session.user.id)
+            .single()
+            
+          if (userError) throw userError
+          
+          if (data) {
+            setUser(data)
+          } else {
+            console.error("No user data found")
+          }
+        }
+      } catch (err: any) {
+        console.error("Session check error:", err)
+      } finally {
+        setIsLoading(false)
       }
-    })
-
+    }
+    
+    checkSession()
+    
+    // Suscribirse a cambios de autenticación
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === "SIGNED_IN" && session?.user) {
+          try {
+            const { data, error: userError } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', session.user.id)
+              .single()
+              
+            if (userError) throw userError
+            
+            if (data) {
+              setUser(data)
+            }
+          } catch (err) {
+            console.error("Error fetching user data:", err)
+          }
+        } else if (event === "SIGNED_OUT") {
+          setUser(null)
+        }
+      }
+    )
+    
     return () => {
       subscription.unsubscribe()
     }
-  }, [])
+  }, [supabase, router])
 
-  // Fixed validateSession function
-  const validateSession = async () => {
-    try {
-      setIsLoading(true)
-
-      // Use a proper timeout approach
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 5000)
-
-      try {
-        const { data, error: sessionError } = await supabase.auth.getSession()
-        
-        clearTimeout(timeoutId)
-        
-        if (sessionError) throw sessionError
-
-        if (data.session?.user) {
-          await fetchUserData(data.session.user.id)
-        } else {
-          // No active session
-          setUser(null)
-        }
-      } catch (err) {
-        if (err instanceof DOMException && err.name === "AbortError") {
-          throw new Error("Session validation timeout")
-        }
-        throw err
-      }
-    } catch (error: any) {
-      console.error("Session validation error:", error)
-      setError(error.message || "Error al validar la sesión")
-      // Clear any stale session data
-      setUser(null)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Update the fetchUserData function to handle errors better
-  const fetchUserData = async (userId: string) => {
-    try {
-      const { data: userData, error: userError } = await supabase.from("users").select("*").eq("id", userId).single()
-
-      if (userError) {
-        throw userError
-      }
-
-      if (!userData) {
-        throw new Error("No se encontraron datos del usuario")
-      }
-
-      setUser(userData)
-      setError(null) // Clear any previous errors
-    } catch (error: any) {
-      console.error("Error fetching user data:", error)
-      setError(error.message || "Error al obtener datos del usuario")
-      setUser(null)
-    }
-  }
-
-  const login = async (credentials: LoginCredentials) => {
+  // Función de login simplificada
+  const login = async (email: string, password: string) => {
     try {
       setIsLoading(true)
       setError(null)
-
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email: credentials.email,
-        password: credentials.password,
+      
+      // Iniciar sesión con Supabase
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password
       })
-
-      if (authError) throw authError
-
-      if (data.user) {
-        await fetchUserData(data.user.id)
-      } else {
-        throw new Error("No se pudo obtener información del usuario")
-      }
-    } catch (error: any) {
-      console.error("Login error:", error)
-      setError(error.message || "Error al iniciar sesión")
-      throw error
+      
+      if (signInError) throw signInError
+      
+      // La redirección se manejará en el componente de login
+    } catch (err: any) {
+      console.error("Login error:", err)
+      setError(err.message || "Error al iniciar sesión")
+      throw err
     } finally {
       setIsLoading(false)
     }
   }
 
-  // Update the logout function to properly clear session
+  // Función de logout
   const logout = async () => {
     try {
       setIsLoading(true)
-      const { error } = await supabase.auth.signOut()
-      if (error) throw error
-
+      await supabase.auth.signOut()
       setUser(null)
-      router.push("/login")
-    } catch (error: any) {
-      console.error("Logout error:", error)
-      setError(error.message || "Error al cerrar sesión")
+      router.push('/login')
+    } catch (err: any) {
+      console.error("Logout error:", err)
+      setError(err.message || "Error al cerrar sesión")
     } finally {
       setIsLoading(false)
     }
-  }
-
-  const hasPermission = (permission: string): boolean => {
-    if (!user) return false
-    const permissions = rolePermissions[user.role] || []
-    return permissions.includes("*") || permissions.includes(permission)
   }
 
   return (
@@ -181,9 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         error,
         login,
         logout,
-        hasPermission,
-        setError,
-        setIsLoading
+        setError
       }}
     >
       {children}
@@ -191,6 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 }
 
+// Hook para usar el contexto
 export function useAuth() {
   const context = useContext(AuthContext)
   if (context === undefined) {
