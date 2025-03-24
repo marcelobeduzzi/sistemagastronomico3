@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, memo, useMemo } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
@@ -36,119 +36,19 @@ interface NavItem {
   submenu?: NavItem[]
 }
 
-// Update the DashboardLayout component to handle loading states
-export function DashboardLayout({ children, isLoading }: { children: React.ReactNode; isLoading?: boolean }) {
-  const pathname = usePathname()
-  const [openSubmenu, setOpenSubmenu] = useState<string | null>(null)
-  const { user, logout } = useAuth()
-  const router = useRouter()
-
-  // Add error state
-  const [error, setError] = useState<string | null>(null)
-
-  // Check if user is authenticated
-  useEffect(() => {
-    if (!user && !isLoading) {
-      router.push("/login")
-    }
-  }, [user, router, isLoading])
-
-  const navItems: NavItem[] = [
-    {
-      title: "Dashboard",
-      href: "/",
-      icon: LayoutDashboard,
-    },
-    {
-      title: "Empleados",
-      href: "#",
-      icon: Users,
-      submenu: [
-        {
-          title: "Lista de Empleados",
-          href: "/empleados",
-          icon: Users,
-        },
-        {
-          title: "Nuevo Empleado",
-          href: "/empleados/nuevo",
-          icon: Users,
-        },
-        {
-          title: "Nómina",
-          href: "/nomina",
-          icon: DollarSign,
-        },
-      ],
-    },
-    {
-      title: "Control de Asistencias",
-      href: "/asistencias",
-      icon: Calendar,
-    },
-    {
-      title: "Delivery",
-      href: "#",
-      icon: TrendingUp,
-      submenu: [
-        {
-          title: "PedidosYa",
-          href: "/delivery/pedidosya",
-          icon: TrendingUp,
-        },
-        {
-          title: "Rappi",
-          href: "/delivery/rappi",
-          icon: TrendingUp,
-        },
-        {
-          title: "MercadoPago",
-          href: "/delivery/mercadopago",
-          icon: TrendingUp,
-        },
-        {
-          title: "Delivery Propio",
-          href: "/delivery/propio",
-          icon: TrendingUp,
-        },
-      ],
-    },
-    {
-      title: "Auditorías",
-      href: "/auditorias",
-      icon: ClipboardCheck,
-    },
-    {
-      title: "Facturación",
-      href: "/facturacion",
-      icon: ReceiptText,
-    },
-    {
-      title: "Balances",
-      href: "/balances",
-      icon: PieChart,
-    },
-    {
-      title: "Reportes",
-      href: "/reportes",
-      icon: BarChart3,
-    },
-    {
-      title: "Configuración",
-      href: "/configuracion",
-      icon: Settings,
-    },
-  ]
-
-  const toggleSubmenu = (title: string) => {
-    if (openSubmenu === title) {
-      setOpenSubmenu(null)
-    } else {
-      setOpenSubmenu(title)
-    }
-  }
-
-  const NavLink = ({ item }: { item: NavItem }) => {
+// Componente memoizado para NavLink para evitar re-renderizados innecesarios
+const NavLink = memo(
+  ({
+    item,
+    pathname,
+    toggleSubmenu,
+    openSubmenu,
+  }: {
+    item: NavItem
+    pathname: string
+    toggleSubmenu: (title: string) => void
+    openSubmenu: string | null
+  }) => {
     const isActive = pathname === item.href
     const hasSubmenu = item.submenu && item.submenu.length > 0
     const isSubmenuOpen = openSubmenu === item.title
@@ -207,9 +107,123 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         <span>{item.title}</span>
       </Link>
     )
-  }
+  },
+)
 
-  const handleLogout = () => {
+NavLink.displayName = "NavLink"
+
+// Update the DashboardLayout component to handle loading states
+export function DashboardLayout({ children, isLoading }: { children: React.ReactNode; isLoading?: boolean }) {
+  const pathname = usePathname()
+  const [openSubmenu, setOpenSubmenu] = useState<string | null>(null)
+  const { user, logout } = useAuth()
+  const router = useRouter()
+
+  // Add error state
+  const [error, setError] = useState<string | null>(null)
+
+  // Check if user is authenticated
+  useEffect(() => {
+    if (!user && !isLoading) {
+      router.push("/login")
+    }
+  }, [user, router, isLoading])
+
+  const navItems = useMemo(
+    () => [
+      {
+        title: "Dashboard",
+        href: "/",
+        icon: LayoutDashboard,
+      },
+      {
+        title: "Empleados",
+        href: "#",
+        icon: Users,
+        submenu: [
+          {
+            title: "Lista de Empleados",
+            href: "/empleados",
+            icon: Users,
+          },
+          {
+            title: "Nuevo Empleado",
+            href: "/empleados/nuevo",
+            icon: Users,
+          },
+          {
+            title: "Nómina",
+            href: "/nomina",
+            icon: DollarSign,
+          },
+        ],
+      },
+      {
+        title: "Control de Asistencias",
+        href: "/asistencias",
+        icon: Calendar,
+      },
+      {
+        title: "Delivery",
+        href: "#",
+        icon: TrendingUp,
+        submenu: [
+          {
+            title: "PedidosYa",
+            href: "/delivery/pedidosya",
+            icon: TrendingUp,
+          },
+          {
+            title: "Rappi",
+            href: "/delivery/rappi",
+            icon: TrendingUp,
+          },
+          {
+            title: "MercadoPago",
+            href: "/delivery/mercadopago",
+            icon: TrendingUp,
+          },
+          {
+            title: "Delivery Propio",
+            href: "/delivery/propio",
+            icon: TrendingUp,
+          },
+        ],
+      },
+      {
+        title: "Auditorías",
+        href: "/auditorias",
+        icon: ClipboardCheck,
+      },
+      {
+        title: "Facturación",
+        href: "/facturacion",
+        icon: ReceiptText,
+      },
+      {
+        title: "Balances",
+        href: "/balances",
+        icon: PieChart,
+      },
+      {
+        title: "Reportes",
+        href: "/reportes",
+        icon: BarChart3,
+      },
+      {
+        title: "Configuración",
+        href: "/configuracion",
+        icon: Settings,
+      },
+    ],
+    [],
+  )
+
+  const toggleSubmenu = useCallback((title: string) => {
+    setOpenSubmenu((prev) => (prev === title ? null : title))
+  }, [])
+
+  const handleLogout = useCallback(() => {
     try {
       logout()
     } catch (error) {
@@ -218,20 +232,25 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
       localStorage.removeItem("user")
       router.push("/login")
     }
-  }
+  }, [logout, router])
 
-  // Update the return statement to handle loading and errors
-  return (
-    <div className="flex min-h-screen bg-background">
-      {/* Sidebar para desktop */}
-      <aside className="hidden w-64 flex-col border-r bg-card px-4 py-6 md:flex">
+  // Memoizar el contenido de la barra lateral para evitar re-renderizados innecesarios
+  const sidebarContent = useMemo(
+    () => (
+      <>
         <div className="mb-6 px-2">
           <h1 className="text-xl font-bold">Quadrifoglio</h1>
           <p className="text-sm text-muted-foreground">Sistema de Gestión</p>
         </div>
         <nav className="flex-1 space-y-1">
           {navItems.map((item) => (
-            <NavLink key={item.title} item={item} />
+            <NavLink
+              key={item.title}
+              item={item}
+              pathname={pathname}
+              toggleSubmenu={toggleSubmenu}
+              openSubmenu={openSubmenu}
+            />
           ))}
         </nav>
         <div className="mt-6 border-t pt-4">
@@ -250,7 +269,16 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
             </Button>
           </div>
         </div>
-      </aside>
+      </>
+    ),
+    [pathname, toggleSubmenu, openSubmenu, user, handleLogout],
+  )
+
+  // Update the return statement to handle loading and errors
+  return (
+    <div className="flex min-h-screen bg-background">
+      {/* Sidebar para desktop */}
+      <aside className="hidden w-64 flex-col border-r bg-card px-4 py-6 md:flex">{sidebarContent}</aside>
 
       {/* Sidebar móvil */}
       <Sheet>
@@ -268,7 +296,13 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
             </div>
             <nav className="flex-1 overflow-auto p-4 space-y-1">
               {navItems.map((item) => (
-                <NavLink key={item.title} item={item} />
+                <NavLink
+                  key={item.title}
+                  item={item}
+                  pathname={pathname}
+                  toggleSubmenu={toggleSubmenu}
+                  openSubmenu={openSubmenu}
+                />
               ))}
             </nav>
             <div className="p-4 border-t">
@@ -316,4 +350,6 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
     </div>
   )
 }
+
+
 

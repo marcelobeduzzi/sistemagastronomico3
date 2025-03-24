@@ -1,19 +1,51 @@
 "use client"
 
 import { Calendar } from "@/components/ui/calendar"
+
+import { useEffect, useState, useCallback, useMemo } from "react"
 import Link from "next/link"
 import type { DateRange } from "react-day-picker"
-
-import { useEffect, useState } from "react"
 import { useAuth } from "@/lib/auth-context"
 import { DashboardLayout } from "@/app/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { DateRangePicker } from "@/components/date-range-picker"
-import { Users, ShoppingCart, DollarSign, Star, TrendingUp, TrendingDown } from "lucide-react"
+import { Users, ShoppingCart, DollarSign, Star, TrendingUp, TrendingDown, AlertCircle } from "lucide-react"
 import { formatCurrency } from "@/lib/export-utils"
 import { BarChart, LineChart, PieChart } from "@/components/charts"
-import { useSupabaseClient } from "@supabase/auth-helpers-react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+
+// Tipos para los datos del dashboard
+interface DashboardStats {
+  activeEmployees: number
+  activeEmployeesChange: number
+  totalDeliveryOrders: number
+  deliveryOrdersChange: number
+  totalRevenue: number
+  revenueChange: number
+  averageRating: number
+  ratingChange: number
+}
+
+interface ChartData {
+  labels: string[]
+  datasets: {
+    label?: string
+    data: number[]
+    backgroundColor?: string | string[]
+    borderColor?: string | string[]
+    borderWidth?: number
+  }[]
+}
+
+interface DashboardData {
+  stats: DashboardStats
+  charts: {
+    salesData: ChartData
+    deliveryData: ChartData
+    attendanceData: ChartData
+  }
+}
 
 export default function Dashboard() {
   const { user } = useAuth()
@@ -22,128 +54,76 @@ export default function Dashboard() {
     to: new Date(),
   })
 
-  const [stats, setStats] = useState({
-    activeEmployees: 0,
-    activeEmployeesChange: 0,
-    totalDeliveryOrders: 0,
-    deliveryOrdersChange: 0,
-    totalRevenue: 0,
-    revenueChange: 0,
-    averageRating: 0,
-    ratingChange: 0,
-  })
-
+  // Estado para los datos del dashboard
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [salesData, setSalesData] = useState<any>(null)
-  const [deliveryData, setDeliveryData] = useState<any>(null)
-  const [attendanceData, setAttendanceData] = useState<any>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  const supabase = useSupabaseClient()
+  // Función para obtener los datos del dashboard
+  const fetchDashboardData = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
 
-  useEffect(() => {
-    let isMounted = true
+    try {
+      const response = await fetch("/api/dashboard")
 
-    const fetchStats = async () => {
-      if (!isMounted) return
-      setIsLoading(true)
-
-      try {
-        // Get active employees count
-        const { data: activeEmployees } = await supabase.from("employees").select("id").eq("status", "active")
-
-        // Get delivery orders for the current month
-        const currentDate = new Date()
-        const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
-        const { data: deliveryOrders } = await supabase
-          .from("delivery_stats")
-          .select("*")
-          .gte("created_at", firstDayOfMonth.toISOString())
-
-        // Calculate statistics
-        const stats = {
-          activeEmployees: activeEmployees?.length || 0,
-          activeEmployeesChange: 5, // Mock data - would need historical data to calculate
-          totalDeliveryOrders: deliveryOrders?.length || 0,
-          deliveryOrdersChange: 10, // Mock data - would need historical data to calculate
-          totalRevenue: deliveryOrders?.reduce((sum, order) => sum + (order.revenue || 0), 0) || 0,
-          revenueChange: 15, // Mock data - would need historical data to calculate
-          averageRating: 4.5, // Mock data - would need actual ratings
-          ratingChange: 0.2, // Mock data - would need historical data to calculate
-        }
-
-        if (isMounted) {
-          setStats(stats)
-
-          // Prepare data for charts
-          const salesData = {
-            labels: ["BR Cabildo", "BR Carranza", "BR Pacifico", "BR Lavalle", "BR Rivadavia"],
-            datasets: [
-              {
-                label: "Ventas Mensuales",
-                data: [150000, 120000, 180000, 90000, 160000],
-                backgroundColor: "rgba(59, 130, 246, 0.5)",
-                borderColor: "rgb(59, 130, 246)",
-                borderWidth: 1,
-              },
-            ],
-          }
-
-          setSalesData(salesData)
-
-          // Delivery data
-          const deliveryData = {
-            labels: ["PedidosYa", "Rappi", "MercadoPago"],
-            datasets: [
-              {
-                data: [35, 40, 25],
-                backgroundColor: ["rgba(255, 99, 132, 0.5)", "rgba(54, 162, 235, 0.5)", "rgba(255, 206, 86, 0.5)"],
-                borderColor: ["rgba(255, 99, 132, 1)", "rgba(54, 162, 235, 1)", "rgba(255, 206, 86, 1)"],
-                borderWidth: 1,
-              },
-            ],
-          }
-
-          setDeliveryData(deliveryData)
-
-          // Attendance data
-          const attendanceLabels = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
-          const attendanceValues = [95, 92, 88, 90, 85, 70, 60]
-
-          setAttendanceData({
-            labels: attendanceLabels,
-            datasets: [
-              {
-                label: "Asistencia (%)",
-                data: attendanceValues,
-                backgroundColor: "rgba(59, 130, 246, 0.5)",
-                borderColor: "rgb(59, 130, 246)",
-                borderWidth: 1,
-              },
-            ],
-          })
-        }
-      } catch (error) {
-        console.error("Error fetching dashboard stats:", error)
-      } finally {
-        if (isMounted) {
-          setIsLoading(false)
-        }
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Error al cargar los datos del dashboard")
       }
+
+      const data = await response.json()
+      setDashboardData(data)
+    } catch (err) {
+      console.error("Error al obtener datos del dashboard:", err)
+      setError(err instanceof Error ? err.message : "Error desconocido al cargar los datos")
+    } finally {
+      setIsLoading(false)
     }
+  }, [])
 
-    fetchStats()
+  // Efecto para cargar los datos al montar el componente
+  useEffect(() => {
+    fetchDashboardData()
+  }, [fetchDashboardData])
 
-    return () => {
-      isMounted = false
-    }
-  }, [supabase]) // Add supabase as a dependency
-
-  const handleExport = () => {
+  // Función para exportar datos
+  const handleExport = useCallback(() => {
     alert("Exportando datos del dashboard...")
-  }
+  }, [])
+
+  // Memoizar los stats para evitar re-renderizados innecesarios
+  const stats = useMemo(
+    () =>
+      dashboardData?.stats || {
+        activeEmployees: 0,
+        activeEmployeesChange: 0,
+        totalDeliveryOrders: 0,
+        deliveryOrdersChange: 0,
+        totalRevenue: 0,
+        revenueChange: 0,
+        averageRating: 0,
+        ratingChange: 0,
+      },
+    [dashboardData],
+  )
+
+  // Componente para mostrar tendencias
+  const TrendIndicator = ({ value }: { value: number }) =>
+    value > 0 ? (
+      <>
+        <TrendingUp className="mr-1 h-3 w-3 text-green-500" />
+        <span className="text-green-500">+{value.toFixed(1)}%</span>
+      </>
+    ) : (
+      <>
+        <TrendingDown className="mr-1 h-3 w-3 text-red-500" />
+        <span className="text-red-500">{value.toFixed(1)}%</span>
+      </>
+    )
 
   return (
-    <DashboardLayout>
+    <DashboardLayout isLoading={isLoading}>
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
         <div className="flex items-center justify-between space-y-2">
           <div>
@@ -163,6 +143,20 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Mostrar error si existe */}
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>
+              {error}
+              <Button variant="outline" size="sm" className="ml-2" onClick={fetchDashboardData}>
+                Reintentar
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Tarjetas de resumen */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
@@ -173,18 +167,7 @@ export default function Dashboard() {
             <CardContent>
               <div className="text-2xl font-bold">{stats.activeEmployees}</div>
               <div className="flex items-center text-xs text-muted-foreground">
-                {stats.activeEmployeesChange > 0 ? (
-                  <>
-                    <TrendingUp className="mr-1 h-3 w-3 text-green-500" />
-                    <span className="text-green-500">+{stats.activeEmployeesChange}%</span>
-                  </>
-                ) : (
-                  <>
-                    <TrendingDown className="mr-1 h-3 w-3 text-red-500" />
-                    <span className="text-red-500">{stats.activeEmployeesChange}%</span>
-                  </>
-                )}{" "}
-                respecto al mes anterior
+                <TrendIndicator value={stats.activeEmployeesChange} /> respecto al mes anterior
               </div>
             </CardContent>
           </Card>
@@ -196,18 +179,7 @@ export default function Dashboard() {
             <CardContent>
               <div className="text-2xl font-bold">{stats.totalDeliveryOrders}</div>
               <div className="flex items-center text-xs text-muted-foreground">
-                {stats.deliveryOrdersChange > 0 ? (
-                  <>
-                    <TrendingUp className="mr-1 h-3 w-3 text-green-500" />
-                    <span className="text-green-500">+{stats.deliveryOrdersChange}%</span>
-                  </>
-                ) : (
-                  <>
-                    <TrendingDown className="mr-1 h-3 w-3 text-red-500" />
-                    <span className="text-red-500">{stats.deliveryOrdersChange}%</span>
-                  </>
-                )}{" "}
-                respecto a la semana anterior
+                <TrendIndicator value={stats.deliveryOrdersChange} /> respecto a la semana anterior
               </div>
             </CardContent>
           </Card>
@@ -219,18 +191,7 @@ export default function Dashboard() {
             <CardContent>
               <div className="text-2xl font-bold">{formatCurrency(stats.totalRevenue)}</div>
               <div className="flex items-center text-xs text-muted-foreground">
-                {stats.revenueChange > 0 ? (
-                  <>
-                    <TrendingUp className="mr-1 h-3 w-3 text-green-500" />
-                    <span className="text-green-500">+{stats.revenueChange}%</span>
-                  </>
-                ) : (
-                  <>
-                    <TrendingDown className="mr-1 h-3 w-3 text-red-500" />
-                    <span className="text-red-500">{stats.revenueChange}%</span>
-                  </>
-                )}{" "}
-                respecto a la semana anterior
+                <TrendIndicator value={stats.revenueChange} /> respecto a la semana anterior
               </div>
             </CardContent>
           </Card>
@@ -242,18 +203,7 @@ export default function Dashboard() {
             <CardContent>
               <div className="text-2xl font-bold">{stats.averageRating.toFixed(1)}</div>
               <div className="flex items-center text-xs text-muted-foreground">
-                {stats.ratingChange > 0 ? (
-                  <>
-                    <TrendingUp className="mr-1 h-3 w-3 text-green-500" />
-                    <span className="text-green-500">+{stats.ratingChange.toFixed(1)}</span>
-                  </>
-                ) : (
-                  <>
-                    <TrendingDown className="mr-1 h-3 w-3 text-red-500" />
-                    <span className="text-red-500">{stats.ratingChange.toFixed(1)}</span>
-                  </>
-                )}{" "}
-                respecto a la semana anterior
+                <TrendIndicator value={stats.ratingChange} /> respecto a la semana anterior
               </div>
             </CardContent>
           </Card>
@@ -267,11 +217,13 @@ export default function Dashboard() {
               <CardDescription>Ventas mensuales del último año</CardDescription>
             </CardHeader>
             <CardContent className="h-80">
-              {salesData ? (
-                <BarChart data={salesData} />
+              {dashboardData?.charts?.salesData ? (
+                <BarChart data={dashboardData.charts.salesData} />
               ) : (
                 <div className="h-full w-full flex items-center justify-center">
-                  <p className="text-muted-foreground">Cargando datos...</p>
+                  <p className="text-muted-foreground">
+                    {isLoading ? "Cargando datos..." : "No hay datos disponibles"}
+                  </p>
                 </div>
               )}
             </CardContent>
@@ -282,27 +234,13 @@ export default function Dashboard() {
               <CardDescription>Por plataforma de delivery</CardDescription>
             </CardHeader>
             <CardContent className="h-80">
-              {deliveryData ? (
-                <PieChart
-                  data={{
-                    labels: ["PedidosYa", "Rappi", "MercadoPago"],
-                    datasets: [
-                      {
-                        data: [35, 40, 25],
-                        backgroundColor: [
-                          "rgba(255, 99, 132, 0.5)",
-                          "rgba(54, 162, 235, 0.5)",
-                          "rgba(255, 206, 86, 0.5)",
-                        ],
-                        borderColor: ["rgba(255, 99, 132, 1)", "rgba(54, 162, 235, 1)", "rgba(255, 206, 86, 1)"],
-                        borderWidth: 1,
-                      },
-                    ],
-                  }}
-                />
+              {dashboardData?.charts?.deliveryData ? (
+                <PieChart data={dashboardData.charts.deliveryData} />
               ) : (
                 <div className="h-full w-full flex items-center justify-center">
-                  <p className="text-muted-foreground">Cargando datos...</p>
+                  <p className="text-muted-foreground">
+                    {isLoading ? "Cargando datos..." : "No hay datos disponibles"}
+                  </p>
                 </div>
               )}
             </CardContent>
@@ -313,11 +251,13 @@ export default function Dashboard() {
               <CardDescription>Últimos 30 días</CardDescription>
             </CardHeader>
             <CardContent className="h-80">
-              {attendanceData ? (
-                <LineChart data={attendanceData} />
+              {dashboardData?.charts?.attendanceData ? (
+                <LineChart data={dashboardData.charts.attendanceData} />
               ) : (
                 <div className="h-full w-full flex items-center justify-center">
-                  <p className="text-muted-foreground">Cargando datos...</p>
+                  <p className="text-muted-foreground">
+                    {isLoading ? "Cargando datos..." : "No hay datos disponibles"}
+                  </p>
                 </div>
               )}
             </CardContent>
@@ -365,4 +305,6 @@ export default function Dashboard() {
     </DashboardLayout>
   )
 }
+
+
 
