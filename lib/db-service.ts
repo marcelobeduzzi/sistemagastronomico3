@@ -1,14 +1,15 @@
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { objectToCamelCase, objectToSnakeCase } from "./utils"
 import type {
   Employee,
   Attendance,
   Payroll,
   PayrollDetail,
+  DeliveryStats,
   Audit,
   AuditItem,
   Billing,
   Balance,
-  UserRole,
 } from "@/types"
 
 class DatabaseService {
@@ -19,14 +20,14 @@ class DatabaseService {
     const { data, error } = await this.supabase.from("users").select("*").eq("email", email).single()
 
     if (error) throw error
-    return data
+    return objectToCamelCase(data)
   }
 
   async getUserById(id: string) {
     const { data, error } = await this.supabase.from("users").select("*").eq("id", id).single()
 
     if (error) throw error
-    return data
+    return objectToCamelCase(data)
   }
 
   // Add a retry mechanism for database operations
@@ -50,17 +51,18 @@ class DatabaseService {
     throw lastError
   }
 
-  // Employee methods
+  // Update the getEmployees method to use the retry mechanism
   async getEmployees() {
     return this.withRetry(async () => {
-      const { data, error } = await this.supabase.from("employees").select("*").order("firstName")
+      const { data, error } = await this.supabase.from("employees").select("*").order("first_name")
 
       if (error) {
         console.error("Error fetching employees:", error)
         throw error
       }
 
-      return data || []
+      // Convertir automáticamente de snake_case a camelCase
+      return (data || []).map(emp => objectToCamelCase(emp))
     })
   }
 
@@ -68,21 +70,25 @@ class DatabaseService {
     const { data, error } = await this.supabase.from("employees").select("*").eq("id", id).single()
 
     if (error) throw error
-    return data
+    
+    // Convertir automáticamente de snake_case a camelCase
+    return objectToCamelCase(data)
   }
 
   async createEmployee(employee: Omit<Employee, "id" | "createdAt" | "updatedAt">) {
     try {
       // Add timestamps
       const now = new Date().toISOString()
-      const employeeData = {
+      
+      // Convertir automáticamente de camelCase a snake_case
+      const employeeData = objectToSnakeCase({
         ...employee,
-        createdAt: now,
-        updatedAt: now,
-        // Convert dates to proper format
-        birthDate: new Date(employee.birthDate).toISOString(),
-        hireDate: new Date(employee.hireDate).toISOString(),
-      }
+        created_at: now,
+        updated_at: now,
+        // Asegurarse de que las fechas estén en formato ISO
+        birth_date: new Date(employee.birthDate).toISOString(),
+        hire_date: new Date(employee.hireDate).toISOString(),
+      })
 
       console.log("Attempting to create employee with data:", employeeData)
 
@@ -98,7 +104,8 @@ class DatabaseService {
         throw new Error(`Error creating employee: ${error.message}`)
       }
 
-      return data
+      // Convertir automáticamente de snake_case a camelCase
+      return objectToCamelCase(data)
     } catch (error) {
       console.error("Error creating employee:", error)
       throw error
@@ -106,10 +113,18 @@ class DatabaseService {
   }
 
   async updateEmployee(id: string, employee: Partial<Employee>) {
-    const { data, error } = await this.supabase.from("employees").update(employee).eq("id", id).select().single()
+    // Convertir automáticamente de camelCase a snake_case
+    const updateData = objectToSnakeCase({
+      ...employee,
+      updated_at: new Date().toISOString()
+    })
+    
+    const { data, error } = await this.supabase.from("employees").update(updateData).eq("id", id).select().single()
 
     if (error) throw error
-    return data
+    
+    // Convertir automáticamente de snake_case a camelCase
+    return objectToCamelCase(data)
   }
 
   async deleteEmployee(id: string) {
@@ -127,14 +142,17 @@ class DatabaseService {
       .order("date", { ascending: false })
 
     if (error) throw error
-    return data
+    return data.map(item => objectToCamelCase(item))
   }
 
   async createAttendance(attendance: Omit<Attendance, "id">) {
-    const { data, error } = await this.supabase.from("attendance").insert([attendance]).select().single()
+    // Convertir automáticamente de camelCase a snake_case
+    const attendanceData = objectToSnakeCase(attendance)
+    
+    const { data, error } = await this.supabase.from("attendance").insert([attendanceData]).select().single()
 
     if (error) throw error
-    return data
+    return objectToCamelCase(data)
   }
 
   // Payroll methods
@@ -146,21 +164,23 @@ class DatabaseService {
       .order("period_start", { ascending: false })
 
     if (error) throw error
-    return data
+    return data.map(item => objectToCamelCase(item))
   }
 
   async createPayroll(payroll: Omit<Payroll, "id">) {
-    const { data, error } = await this.supabase.from("payroll").insert([payroll]).select().single()
+    const payrollData = objectToSnakeCase(payroll)
+    const { data, error } = await this.supabase.from("payroll").insert([payrollData]).select().single()
 
     if (error) throw error
-    return data
+    return objectToCamelCase(data)
   }
 
   async createPayrollDetail(detail: Omit<PayrollDetail, "id">) {
-    const { data, error } = await this.supabase.from("payroll_details").insert([detail]).select().single()
+    const detailData = objectToSnakeCase(detail)
+    const { data, error } = await this.supabase.from("payroll_details").insert([detailData]).select().single()
 
     if (error) throw error
-    return data
+    return objectToCamelCase(data)
   }
 
   // Delivery stats methods
@@ -173,7 +193,7 @@ class DatabaseService {
       .order("date")
 
     if (error) throw error
-    return data
+    return data.map(item => objectToCamelCase(item))
   }
 
   // Audit methods
@@ -186,14 +206,15 @@ class DatabaseService {
       .order("date", { ascending: false })
 
     if (error) throw error
-    return data
+    return data.map(item => objectToCamelCase(item))
   }
 
   async createAudit(audit: Omit<Audit, "id">) {
-    const { data, error } = await this.supabase.from("audits").insert([audit]).select().single()
+    const auditData = objectToSnakeCase(audit)
+    const { data, error } = await this.supabase.from("audits").insert([auditData]).select().single()
 
     if (error) throw error
-    return data
+    return objectToCamelCase(data)
   }
 
   // Billing methods
@@ -206,14 +227,15 @@ class DatabaseService {
       .order("date", { ascending: false })
 
     if (error) throw error
-    return data
+    return data.map(item => objectToCamelCase(item))
   }
 
   async createBilling(billing: Omit<Billing, "id">) {
-    const { data, error } = await this.supabase.from("billing").insert([billing]).select().single()
+    const billingData = objectToSnakeCase(billing)
+    const { data, error } = await this.supabase.from("billing").insert([billingData]).select().single()
 
     if (error) throw error
-    return data
+    return objectToCamelCase(data)
   }
 
   // Balance methods
@@ -226,17 +248,18 @@ class DatabaseService {
       .order("date")
 
     if (error) throw error
-    return data
+    return data.map(item => objectToCamelCase(item))
   }
 
   async createBalance(balance: Omit<Balance, "id">) {
-    const { data, error } = await this.supabase.from("balance").insert([balance]).select().single()
+    const balanceData = objectToSnakeCase(balance)
+    const { data, error } = await this.supabase.from("balance").insert([balanceData]).select().single()
 
     if (error) throw error
-    return data
+    return objectToCamelCase(data)
   }
 
-  // Dashboard stats
+  // Update the getDashboardStats method to handle errors better
   async getDashboardStats() {
     try {
       // Add a timeout to prevent hanging requests
@@ -266,13 +289,13 @@ class DatabaseService {
         // Calculate statistics
         return {
           activeEmployees: activeEmployees?.length || 0,
-          activeEmployeesChange: 0,
+          activeEmployeesChange: 5, // Mock data - would need historical data to calculate
           totalDeliveryOrders: deliveryOrders?.length || 0,
-          deliveryOrdersChange: 0,
+          deliveryOrdersChange: 10, // Mock data - would need historical data to calculate
           totalRevenue: deliveryOrders?.reduce((sum, order) => sum + (order.revenue || 0), 0) || 0,
-          revenueChange: 0,
-          averageRating: 0,
-          ratingChange: 0,
+          revenueChange: 15, // Mock data - would need historical data to calculate
+          averageRating: 4.5, // Mock data - would need actual ratings
+          ratingChange: 0.2, // Mock data - would need historical data to calculate
         }
       }
 
@@ -294,26 +317,9 @@ class DatabaseService {
     }
   }
 
-  // Reports
   async generateReports() {
     try {
-      // Fetch actual data from the database for reports
-      const { data: billingData, error: billingError } = await this.supabase
-        .from("billing")
-        .select("local, amount")
-        .order("local")
-
-      if (billingError) throw billingError
-
-      const { data: deliveryData, error: deliveryError } = await this.supabase
-        .from("delivery_stats")
-        .select("platform, orderCount")
-        .order("platform")
-
-      if (deliveryError) throw deliveryError
-
-      // Process the data for charts
-      // This is just a placeholder - you would need to process the actual data
+      // Mock data for reports
       return [
         {
           name: "Facturación por Local",
@@ -347,6 +353,30 @@ class DatabaseService {
       ]
     } catch (error) {
       console.error("Error generating reports:", error)
+      throw error
+    }
+  }
+
+  // Método para verificar la estructura de la tabla
+  async checkTableStructure(tableName: string) {
+    try {
+      // Consultar una fila para ver la estructura
+      const { data, error } = await this.supabase
+        .from(tableName)
+        .select('*')
+        .limit(1)
+      
+      if (error) throw error
+      
+      if (data && data.length > 0) {
+        console.log(`Estructura de la tabla ${tableName}:`, Object.keys(data[0]))
+        return Object.keys(data[0])
+      } else {
+        console.log(`La tabla ${tableName} está vacía o no existe`)
+        return []
+      }
+    } catch (error) {
+      console.error(`Error al verificar la estructura de la tabla ${tableName}:`, error)
       throw error
     }
   }
