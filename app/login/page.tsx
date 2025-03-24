@@ -9,15 +9,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Eye, EyeOff, AlertCircle } from "lucide-react"
+import { Eye, EyeOff, AlertCircle } from 'lucide-react'
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
-  const { login, error: authError, isLoading: authIsLoading, setError, setIsLoading } = useAuth()
-  const [error, setLocalError] = useState<string | null>(null)
-  const [isLoading, setLocalIsLoading] = useState(false)
+  const { login, error, isLoading, setError } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -39,33 +37,14 @@ export default function LoginPage() {
     }
 
     try {
-      setIsLoading(true)
       setError(null)
 
-      // Add timeout to prevent hanging requests
-      const loginPromise = login({ email, password })
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Login timeout - el servidor no responde")), 10000),
-      )
-
-      await Promise.race([loginPromise, timeoutPromise])
-
-      router.push("/")
+      await login({ email, password })
+      
+      // No need to manually redirect, the login function already does this
     } catch (error: any) {
       console.error("Login error:", error)
-
-      // Provide more user-friendly error messages
-      if (error.message.includes("timeout")) {
-        setError("El servidor no responde. Por favor intente más tarde.")
-      } else if (error.message.includes("Invalid login")) {
-        setError("Email o contraseña incorrectos")
-      } else if (error.message.includes("network")) {
-        setError("Error de conexión. Verifique su conexión a internet.")
-      } else {
-        setError(error.message || "Error al iniciar sesión")
-      }
-    } finally {
-      setIsLoading(false)
+      // Error handling is done in the auth context
     }
   }
 
@@ -82,10 +61,10 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {(error || authError) && (
+              {error && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error || authError}</AlertDescription>
+                  <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
               <div className="space-y-2">
@@ -123,8 +102,8 @@ export default function LoginPage() {
             </form>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
-            <Button className="w-full" onClick={handleSubmit} disabled={isLoading || authIsLoading}>
-              {isLoading || authIsLoading ? "Iniciando sesión..." : "Iniciar Sesión"}
+            <Button className="w-full" onClick={handleSubmit} disabled={isLoading}>
+              {isLoading ? "Iniciando sesión..." : "Iniciar Sesión"}
             </Button>
             <Button variant="link" className="w-full" onClick={() => router.push("/forgot-password")}>
               ¿Olvidó su contraseña?
@@ -142,4 +121,3 @@ export default function LoginPage() {
     </div>
   )
 }
-

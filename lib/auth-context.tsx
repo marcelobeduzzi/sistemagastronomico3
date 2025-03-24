@@ -9,6 +9,8 @@ interface AuthContextType extends AuthState {
   login: (credentials: LoginCredentials) => Promise<void>
   logout: () => Promise<void>
   hasPermission: (permission: string) => boolean
+  setError: (error: string | null) => void
+  setIsLoading: (isLoading: boolean) => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -60,34 +62,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       subscription.unsubscribe()
     }
-  }, [router, supabase.auth])
+  }, [])
 
-  // Update the validateSession function to include timeout and better error handling
+  // Fixed validateSession function
   const validateSession = async () => {
     try {
       setIsLoading(true)
 
-      // Add timeout to prevent hanging requests
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Session validation timeout")), 5000),
-      )
+      // Use a proper timeout approach
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 5000)
 
-      const sessionPromise = supabase.auth.getSession()
+      try {
+        const { data, error: sessionError } = await supabase.auth.getSession()
+        
+        clearTimeout(timeoutId)
+        
+        if (sessionError) throw sessionError
 
-      const result = await Promise.race([sessionPromise, timeoutPromise])
-
-      const {
-        data: { session },
-        error: sessionError,
-      } = result as any
-
-      if (sessionError) throw sessionError
-
-      if (session?.user) {
-        await fetchUserData(session.user.id)
-      } else {
-        // No active session
-        setUser(null)
+        if (data.session?.user) {
+          await fetchUserData(data.session.user.id)
+        } else {
+          // No active session
+          setUser(null)
+        }
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          throw new Error("Session validation timeout")
+        }
+        throw err
       }
     } catch (error: any) {
       console.error("Session validation error:", error)
@@ -126,18 +129,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(true)
       setError(null)
 
-      const {
-        data: { user: authUser },
-        error: authError,
-      } = await supabase.auth.signInWithPassword({
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
         email: credentials.email,
         password: credentials.password,
       })
 
       if (authError) throw authError
 
-      await fetchUserData(authUser?.id!)
-      router.push("/")
+      if (data.user) {
+        await fetchUserData(data.user.id)
+      } else {
+        throw new Error("No se pudo obtener información del usuario")
+      }
     } catch (error: any) {
       console.error("Login error:", error)
       setError(error.message || "Error al iniciar sesión")
@@ -179,6 +182,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         hasPermission,
+        setError,
+        setIsLoading
       }}
     >
       {children}
