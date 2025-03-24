@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { useAuth } from "@/lib/auth-context"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -14,8 +14,10 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
-  const { login, isLoading, error, setError } = useAuth()
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const router = useRouter()
+  const supabase = createClientComponentClient()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -26,11 +28,28 @@ export default function LoginPage() {
     }
 
     try {
-      await login(email, password)
+      setIsLoading(true)
+      setError(null)
+
+      console.log("Intentando iniciar sesión con:", email)
+
+      // Iniciar sesión directamente sin usar el contexto
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      })
+      
+      if (signInError) throw signInError
+      
+      console.log("Login exitoso:", data)
+      
       // Redirigir después de login exitoso
       router.push("/")
-    } catch (err) {
-      // El error ya se maneja en el contexto
+    } catch (err: any) {
+      console.error("Login error:", err)
+      setError(err.message || "Error al iniciar sesión")
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -96,13 +115,6 @@ export default function LoginPage() {
             </Button>
           </CardFooter>
         </Card>
-
-        <div className="mt-6 text-center text-sm text-gray-500">
-          <p>Usuarios de prueba:</p>
-          <p>admin@quadrifoglio.com / admin123</p>
-          <p>gerente@quadrifoglio.com / gerente123</p>
-          <p>empleado@quadrifoglio.com / empleado123</p>
-        </div>
       </div>
     </div>
   )
