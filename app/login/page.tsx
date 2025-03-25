@@ -1,8 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { useAuth } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -14,10 +13,8 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const router = useRouter()
-  const supabase = createClientComponentClient()
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const { login, error, setError, isLoading } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -28,30 +25,20 @@ export default function LoginPage() {
     }
 
     try {
-      setIsLoading(true)
-      setError(null)
-
-      console.log("Intentando iniciar sesión con:", email)
-
-      // Iniciar sesión directamente sin usar el contexto
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      })
-      
-      if (signInError) throw signInError
-      
-      console.log("Login exitoso:", data)
-      
-      // Redirigir después de login exitoso
-      router.push("/")
+      setIsSubmitting(true)
+      console.log("Intentando iniciar sesión usando el contexto")
+      await login(email, password)
+      // No es necesario redirigir aquí, el contexto lo hará
     } catch (err: any) {
-      console.error("Login error:", err)
-      setError(err.message || "Error al iniciar sesión")
+      console.error("Error en el componente de login:", err)
+      // El error ya se maneja en el contexto
     } finally {
-      setIsLoading(false)
+      setIsSubmitting(false)
     }
   }
+
+  // Determinar si estamos en estado de carga
+  const loading = isLoading || isSubmitting
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
@@ -80,6 +67,7 @@ export default function LoginPage() {
                   placeholder="ejemplo@quadrifoglio.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  disabled={loading}
                   required
                 />
               </div>
@@ -91,6 +79,7 @@ export default function LoginPage() {
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    disabled={loading}
                     required
                   />
                   <Button
@@ -99,6 +88,7 @@ export default function LoginPage() {
                     size="sm"
                     className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                     onClick={() => setShowPassword(!showPassword)}
+                    disabled={loading}
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
@@ -107,11 +97,12 @@ export default function LoginPage() {
             </form>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
-            <Button className="w-full" onClick={handleSubmit} disabled={isLoading}>
-              {isLoading ? "Iniciando sesión..." : "Iniciar Sesión"}
-            </Button>
-            <Button variant="link" className="w-full" onClick={() => router.push("/forgot-password")}>
-              ¿Olvidó su contraseña?
+            <Button 
+              className="w-full" 
+              onClick={handleSubmit} 
+              disabled={loading}
+            >
+              {loading ? "Iniciando sesión..." : "Iniciar Sesión"}
             </Button>
           </CardFooter>
         </Card>
