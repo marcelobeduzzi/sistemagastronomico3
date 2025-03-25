@@ -1,11 +1,10 @@
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
-import { cookies } from "next/headers"
 import type { Employee } from "@/types"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
-// Función para obtener todos los empleados
+// Función para obtener todos los empleados (cliente)
 export async function getEmpleados() {
   try {
-    const supabase = createServerComponentClient({ cookies })
+    const supabase = createClientComponentClient()
     
     const { data, error } = await supabase
       .from("employees")
@@ -21,10 +20,10 @@ export async function getEmpleados() {
   }
 }
 
-// Función para obtener un empleado por ID
+// Función para obtener un empleado por ID (cliente)
 export async function getEmpleadoById(id: string): Promise<Employee | null> {
   try {
-    const supabase = createServerComponentClient({ cookies })
+    const supabase = createClientComponentClient()
     
     const { data, error } = await supabase
       .from("employees")
@@ -44,7 +43,7 @@ export async function getEmpleadoById(id: string): Promise<Employee | null> {
 // Función para crear un nuevo empleado
 export async function crearEmpleado(data: Omit<Employee, "id" | "createdAt" | "updatedAt">) {
   try {
-    const supabase = createServerComponentClient({ cookies })
+    const supabase = createClientComponentClient()
     
     const now = new Date().toISOString()
     const empleadoData = {
@@ -71,7 +70,7 @@ export async function crearEmpleado(data: Omit<Employee, "id" | "createdAt" | "u
 // Función para actualizar un empleado
 export async function actualizarEmpleado(id: string, data: Partial<Employee>) {
   try {
-    const supabase = createServerComponentClient({ cookies })
+    const supabase = createClientComponentClient()
     
     const updateData = {
       ...data,
@@ -95,7 +94,7 @@ export async function actualizarEmpleado(id: string, data: Partial<Employee>) {
 // Función para eliminar un empleado
 export async function eliminarEmpleado(id: string) {
   try {
-    const supabase = createServerComponentClient({ cookies })
+    const supabase = createClientComponentClient()
     
     const { error } = await supabase
       .from("employees")
@@ -110,6 +109,3 @@ export async function eliminarEmpleado(id: string) {
     throw new Error("No se pudo eliminar el empleado")
   }
 }
-
-
-

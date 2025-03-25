@@ -1,16 +1,63 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import { EditarEmpleadoForm } from "@/components/empleados/editar-empleado-form"
 import { getEmpleadoById } from "@/lib/empleados"
-import { notFound } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
+import type { Employee } from "@/types"
 
-export default async function EditarEmpleadoPage({ params }: { params: { id: string } }) {
-  const id = params.id
+export default function EditarEmpleadoPage() {
+  const params = useParams()
+  const router = useRouter()
+  const [empleado, setEmpleado] = useState<Employee | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  
+  const id = params.id as string
 
-  // Obtener los datos del empleado
-  const empleado = await getEmpleadoById(id)
+  useEffect(() => {
+    async function fetchEmpleado() {
+      try {
+        setIsLoading(true)
+        const data = await getEmpleadoById(id)
+        
+        if (!data) {
+          setError("Empleado no encontrado")
+          return
+        }
+        
+        setEmpleado(data)
+      } catch (err) {
+        console.error("Error al cargar empleado:", err)
+        setError("Error al cargar empleado")
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    
+    fetchEmpleado()
+  }, [id])
 
-  // Si no se encuentra el empleado, mostrar la página 404
+  if (isLoading) {
+    return <div className="container mx-auto py-6">Cargando...</div>
+  }
+  
+  if (error) {
+    return (
+      <div className="container mx-auto py-6">
+        <p className="text-red-500">{error}</p>
+        <button 
+          className="mt-4 px-4 py-2 bg-blue-500 text-white rounded"
+          onClick={() => router.push("/dashboard/empleados")}
+        >
+          Volver a la lista
+        </button>
+      </div>
+    )
+  }
+
   if (!empleado) {
-    notFound()
+    return <div className="container mx-auto py-6">Empleado no encontrado</div>
   }
 
   return (
@@ -20,6 +67,3 @@ export default async function EditarEmpleadoPage({ params }: { params: { id: str
     </div>
   )
 }
-
-
-
