@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { dbService } from "@/lib/db-service"
 import type { Employee, Local, WorkShift, EmployeeStatus, UserRole } from "@/types"
-import { ArrowLeft, Save } from "lucide-react"
+import { ArrowLeft, Save } from 'lucide-react'
 import Link from "next/link"
 import { useToast } from "@/components/ui/use-toast"
 
@@ -312,9 +312,14 @@ export default function EditarEmpleadoPage({ params }: { params: { id: string } 
                           <SelectValue placeholder="Seleccionar local" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="Centro">Centro</SelectItem>
-                          <SelectItem value="Norte">Norte</SelectItem>
-                          <SelectItem value="Sur">Sur</SelectItem>
+                          <SelectItem value="BR Cabildo">BR Cabildo</SelectItem>
+                          <SelectItem value="BR Carranza">BR Carranza</SelectItem>
+                          <SelectItem value="BR Pacifico">BR Pacifico</SelectItem>
+                          <SelectItem value="BR Lavalle">BR Lavalle</SelectItem>
+                          <SelectItem value="BR Rivadavia">BR Rivadavia</SelectItem>
+                          <SelectItem value="BR Aguero">BR Aguero</SelectItem>
+                          <SelectItem value="BR Dorrego">BR Dorrego</SelectItem>
+                          <SelectItem value="Dean & Dennys">Dean & Dennys</SelectItem>
                           <SelectItem value="Administración">Administración</SelectItem>
                         </SelectContent>
                       </Select>
