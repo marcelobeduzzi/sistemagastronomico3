@@ -19,12 +19,7 @@ export const metadata: Metadata = {
     apple: [
       { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
     ],
-    other: [
-      {
-        rel: "manifest",
-        url: "/site.webmanifest",
-      },
-    ],
+    // Se eliminó la referencia al site.webmanifest que causaba el error 401
   },
 }
 
