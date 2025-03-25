@@ -195,6 +195,86 @@ export default function ChatPage() {
     setActiveTab("chats");
   };
 
+  // Renderizar contenido de la pestaña de chats
+  const renderChatsContent = () => (
+    <ScrollArea className="h-[calc(100vh-320px)]">
+      <div className="px-4 py-2 space-y-2">
+        {chats.map((chat) => {
+          const usuario = usuarios.find((u) => u.id === chat.usuario);
+          const ultimoMensaje = chat.mensajes[chat.mensajes.length - 1];
+          const mensajesNoLeidos = chat.mensajes.filter(
+            (m) => m.emisor !== "current" && !m.leido
+          ).length;
+
+          return (
+            <div
+              key={chat.id}
+              className={`flex items-center p-2 rounded-md cursor-pointer ${
+                chatActivo === chat.id ? "bg-accent" : "hover:bg-accent/50"
+              }`}
+              onClick={() => setChatActivo(chat.id)}
+            >
+              <Avatar className="h-10 w-10 mr-3">
+                <AvatarImage src={usuario?.avatar} />
+                <AvatarFallback>{usuario?.nombre.charAt(0)}</AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium truncate">{usuario?.nombre}</p>
+                  <p className="text-xs text-muted-foreground">{ultimoMensaje?.fecha}</p>
+                </div>
+                <p className="text-xs truncate text-muted-foreground">
+                  {ultimoMensaje?.texto || "Iniciar conversación"}
+                </p>
+              </div>
+              {mensajesNoLeidos > 0 && (
+                <div className="ml-2 bg-primary text-primary-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs">
+                  {mensajesNoLeidos}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </ScrollArea>
+  );
+
+  // Renderizar contenido de la pestaña de usuarios
+  const renderUsuariosContent = () => (
+    <ScrollArea className="h-[calc(100vh-320px)]">
+      <div className="px-4 py-2 space-y-2">
+        {filteredUsuarios.map((usuario) => (
+          <div
+            key={usuario.id}
+            className="flex items-center p-2 rounded-md cursor-pointer hover:bg-accent/50"
+            onClick={() => handleIniciarChat(usuario.id)}
+          >
+            <Avatar className="h-10 w-10 mr-3">
+              <AvatarImage src={usuario.avatar} />
+              <AvatarFallback>{usuario.nombre.charAt(0)}</AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium truncate">{usuario.nombre}</p>
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    usuario.online ? "bg-green-500" : "bg-gray-300"
+                  }`}
+                ></div>
+              </div>
+              <p className="text-xs truncate text-muted-foreground">
+                {usuario.online ? "En línea" : usuario.ultimaConexion}
+              </p>
+            </div>
+            <Button variant="ghost" size="icon" className="ml-2">
+              <PlusCircle className="h-4 w-4" />
+            </Button>
+          </div>
+        ))}
+      </div>
+    </ScrollArea>
+  );
+
   return (
     <DashboardLayout>
       <div className="flex-1 p-4 md:p-8 pt-6">
@@ -224,6 +304,14 @@ export default function ChatPage() {
                     </div>
                   </TabsTrigger>
                 </TabsList>
+
+                <TabsContent value="chats" className="m-0">
+                  {renderChatsContent()}
+                </TabsContent>
+
+                <TabsContent value="usuarios" className="m-0">
+                  {renderUsuariosContent()}
+                </TabsContent>
               </Tabs>
             </CardHeader>
             <CardContent className="p-0">
@@ -239,84 +327,6 @@ export default function ChatPage() {
                   />
                 </div>
               </div>
-
-              <TabsContent value="chats" className="m-0">
-                <ScrollArea className="h-[calc(100vh-320px)]">
-                  <div className="px-4 py-2 space-y-2">
-                    {chats.map((chat) => {
-                      const usuario = usuarios.find((u) => u.id === chat.usuario);
-                      const ultimoMensaje = chat.mensajes[chat.mensajes.length - 1];
-                      const mensajesNoLeidos = chat.mensajes.filter(
-                        (m) => m.emisor !== "current" && !m.leido
-                      ).length;
-
-                      return (
-                        <div
-                          key={chat.id}
-                          className={`flex items-center p-2 rounded-md cursor-pointer ${
-                            chatActivo === chat.id ? "bg-accent" : "hover:bg-accent/50"
-                          }`}
-                          onClick={() => setChatActivo(chat.id)}
-                        >
-                          <Avatar className="h-10 w-10 mr-3">
-                            <AvatarImage src={usuario?.avatar} />
-                            <AvatarFallback>{usuario?.nombre.charAt(0)}</AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between">
-                              <p className="text-sm font-medium truncate">{usuario?.nombre}</p>
-                              <p className="text-xs text-muted-foreground">{ultimoMensaje?.fecha}</p>
-                            </div>
-                            <p className="text-xs truncate text-muted-foreground">
-                              {ultimoMensaje?.texto || "Iniciar conversación"}
-                            </p>
-                          </div>
-                          {mensajesNoLeidos > 0 && (
-                            <div className="ml-2 bg-primary text-primary-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs">
-                              {mensajesNoLeidos}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </ScrollArea>
-              </TabsContent>
-
-              <TabsContent value="usuarios" className="m-0">
-                <ScrollArea className="h-[calc(100vh-320px)]">
-                  <div className="px-4 py-2 space-y-2">
-                    {filteredUsuarios.map((usuario) => (
-                      <div
-                        key={usuario.id}
-                        className="flex items-center p-2 rounded-md cursor-pointer hover:bg-accent/50"
-                        onClick={() => handleIniciarChat(usuario.id)}
-                      >
-                        <Avatar className="h-10 w-10 mr-3">
-                          <AvatarImage src={usuario.avatar} />
-                          <AvatarFallback>{usuario.nombre.charAt(0)}</AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-medium truncate">{usuario.nombre}</p>
-                            <div
-                              className={`w-2 h-2 rounded-full ${
-                                usuario.online ? "bg-green-500" : "bg-gray-300"
-                              }`}
-                            ></div>
-                          </div>
-                          <p className="text-xs truncate text-muted-foreground">
-                            {usuario.online ? "En línea" : usuario.ultimaConexion}
-                          </p>
-                        </div>
-                        <Button variant="ghost" size="icon" className="ml-2">
-                          <PlusCircle className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </TabsContent>
             </CardContent>
           </Card>
 
