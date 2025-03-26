@@ -192,44 +192,55 @@ class DatabaseService {
       let totalMinutesWorked = 0
       let totalMinutesBalance = 0
 
-      if (attendance.expectedCheckIn && attendance.checkIn) {
-        const expectedCheckIn = new Date(`2000-01-01T${attendance.expectedCheckIn}`)
-        const actualCheckIn = new Date(`2000-01-01T${attendance.checkIn}`)
-        
-        if (actualCheckIn > expectedCheckIn) {
-          lateMinutes = Math.floor((actualCheckIn.getTime() - expectedCheckIn.getTime()) / 60000)
-        }
-      }
-
-      if (attendance.expectedCheckOut && attendance.checkOut) {
-        const expectedCheckOut = new Date(`2000-01-01T${attendance.expectedCheckOut}`)
-        const actualCheckOut = new Date(`2000-01-01T${attendance.checkOut}`)
-        
-        if (actualCheckOut < expectedCheckOut) {
-          earlyDepartureMinutes = Math.floor((expectedCheckOut.getTime() - actualCheckOut.getTime()) / 60000)
-        }
-      }
-
-      // Calcular minutos trabajados
-      if (attendance.checkIn && attendance.checkOut) {
-        const checkIn = new Date(`2000-01-01T${attendance.checkIn}`)
-        const checkOut = new Date(`2000-01-01T${attendance.checkOut}`)
-        totalMinutesWorked = Math.floor((checkOut.getTime() - checkIn.getTime()) / 60000)
-      }
-
-      // Aplicar reglas de negocio
+      // Si es ausente, establecer valores predeterminados
       if (attendance.isAbsent) {
         // Ausencia injustificada: descuento de una jornada completa (480 minutos)
         totalMinutesBalance = -480
         totalMinutesWorked = 0
         lateMinutes = 0
         earlyDepartureMinutes = 0
-      } else if (attendance.isHoliday) {
-        // Trabajo en día feriado: adición de una jornada completa (480 minutos)
-        totalMinutesBalance = 480 + totalMinutesWorked
+        
+        // Asegurarse de que checkIn y checkOut sean null para ausencias
+        attendance = {
+          ...attendance,
+          checkIn: null,
+          checkOut: null
+        }
       } else {
-        // Día normal: balance es minutos trabajados menos minutos tarde y salida anticipada
-        totalMinutesBalance = totalMinutesWorked - lateMinutes - earlyDepartureMinutes
+        // Solo calcular estos valores si no es ausente
+        if (attendance.expectedCheckIn && attendance.checkIn) {
+          const expectedCheckIn = new Date(`2000-01-01T${attendance.expectedCheckIn}`)
+          const actualCheckIn = new Date(`2000-01-01T${attendance.checkIn}`)
+          
+          if (actualCheckIn > expectedCheckIn) {
+            lateMinutes = Math.floor((actualCheckIn.getTime() - expectedCheckIn.getTime()) / 60000)
+          }
+        }
+
+        if (attendance.expectedCheckOut && attendance.checkOut) {
+          const expectedCheckOut = new Date(`2000-01-01T${attendance.expectedCheckOut}`)
+          const actualCheckOut = new Date(`2000-01-01T${attendance.checkOut}`)
+          
+          if (actualCheckOut < expectedCheckOut) {
+            earlyDepartureMinutes = Math.floor((expectedCheckOut.getTime() - actualCheckOut.getTime()) / 60000)
+          }
+        }
+
+        // Calcular minutos trabajados
+        if (attendance.checkIn && attendance.checkOut) {
+          const checkIn = new Date(`2000-01-01T${attendance.checkIn}`)
+          const checkOut = new Date(`2000-01-01T${attendance.checkOut}`)
+          totalMinutesWorked = Math.floor((checkOut.getTime() - checkIn.getTime()) / 60000)
+        }
+
+        // Aplicar reglas para días feriados o normales
+        if (attendance.isHoliday) {
+          // Trabajo en día feriado: adición de una jornada completa (480 minutos)
+          totalMinutesBalance = 480 + totalMinutesWorked
+        } else {
+          // Día normal: balance es minutos trabajados menos minutos tarde y salida anticipada
+          totalMinutesBalance = totalMinutesWorked - lateMinutes - earlyDepartureMinutes
+        }
       }
 
       // Añadir los cálculos y timestamps a los datos
@@ -247,9 +258,21 @@ class DatabaseService {
       // Convertir automáticamente de camelCase a snake_case
       const attendanceData = objectToSnakeCase(attendanceWithCalculations)
       
+      // Registrar los datos exactos que se están enviando
+      console.log("Datos enviados a Supabase:", attendanceData)
+      
       const { data, error } = await this.supabase.from("attendance").insert([attendanceData]).select().single()
 
-      if (error) throw error
+      if (error) {
+        console.error("Error detallado de Supabase:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        })
+        throw error
+      }
+      
       return objectToCamelCase(data)
     } catch (error) {
       console.error("Error al crear asistencia:", error)
@@ -270,70 +293,82 @@ class DatabaseService {
       if (fetchError) throw fetchError
       
       // Combinar los datos actuales con las actualizaciones
-      const updatedAttendance = { ...objectToCamelCase(currentAttendance), ...attendance }
+      let updatedAttendance = { ...objectToCamelCase(currentAttendance), ...attendance }
       
-      // Realizar los cálculos
-      let lateMinutes = updatedAttendance.lateMinutes || 0
-      let earlyDepartureMinutes = updatedAttendance.earlyDepartureMinutes || 0
-      let totalMinutesWorked = 0
-      let totalMinutesBalance = 0
-      
-      if (updatedAttendance.expectedCheckIn && updatedAttendance.checkIn) {
-        const expectedCheckIn = new Date(`2000-01-01T${updatedAttendance.expectedCheckIn}`)
-        const actualCheckIn = new Date(`2000-01-01T${updatedAttendance.checkIn}`)
-        
-        if (actualCheckIn > expectedCheckIn) {
-          lateMinutes = Math.floor((actualCheckIn.getTime() - expectedCheckIn.getTime()) / 60000)
-        } else {
-          lateMinutes = 0
-        }
-      }
-
-      if (updatedAttendance.expectedCheckOut && updatedAttendance.checkOut) {
-        const expectedCheckOut = new Date(`2000-01-01T${updatedAttendance.expectedCheckOut}`)
-        const actualCheckOut = new Date(`2000-01-01T${updatedAttendance.checkOut}`)
-        
-        if (actualCheckOut < expectedCheckOut) {
-          earlyDepartureMinutes = Math.floor((expectedCheckOut.getTime() - actualCheckOut.getTime()) / 60000)
-        } else {
-          earlyDepartureMinutes = 0
-        }
-      }
-
-      // Calcular minutos trabajados
-      if (updatedAttendance.checkIn && updatedAttendance.checkOut) {
-        const checkIn = new Date(`2000-01-01T${updatedAttendance.checkIn}`)
-        const checkOut = new Date(`2000-01-01T${updatedAttendance.checkOut}`)
-        totalMinutesWorked = Math.floor((checkOut.getTime() - checkIn.getTime()) / 60000)
-      }
-
-      // Aplicar reglas de negocio
+      // Si es ausente, establecer valores predeterminados
       if (updatedAttendance.isAbsent) {
-        // Ausencia injustificada: descuento de una jornada completa (480 minutos)
-        totalMinutesBalance = -480
-        totalMinutesWorked = 0
-        lateMinutes = 0
-        earlyDepartureMinutes = 0
-      } else if (updatedAttendance.isHoliday) {
-        // Trabajo en día feriado: adición de una jornada completa (480 minutos)
-        totalMinutesBalance = 480 + totalMinutesWorked
+        updatedAttendance = {
+          ...updatedAttendance,
+          checkIn: null,
+          checkOut: null,
+          lateMinutes: 0,
+          earlyDepartureMinutes: 0,
+          totalMinutesWorked: 0,
+          totalMinutesBalance: -480
+        }
       } else {
-        // Día normal: balance es minutos trabajados menos minutos tarde y salida anticipada
-        totalMinutesBalance = totalMinutesWorked - lateMinutes - earlyDepartureMinutes
+        // Realizar los cálculos solo si no es ausente
+        let lateMinutes = updatedAttendance.lateMinutes || 0
+        let earlyDepartureMinutes = updatedAttendance.earlyDepartureMinutes || 0
+        let totalMinutesWorked = 0
+        let totalMinutesBalance = 0
+        
+        if (updatedAttendance.expectedCheckIn && updatedAttendance.checkIn) {
+          const expectedCheckIn = new Date(`2000-01-01T${updatedAttendance.expectedCheckIn}`)
+          const actualCheckIn = new Date(`2000-01-01T${updatedAttendance.checkIn}`)
+          
+          if (actualCheckIn > expectedCheckIn) {
+            lateMinutes = Math.floor((actualCheckIn.getTime() - expectedCheckIn.getTime()) / 60000)
+          } else {
+            lateMinutes = 0
+          }
+        }
+
+        if (updatedAttendance.expectedCheckOut && updatedAttendance.checkOut) {
+          const expectedCheckOut = new Date(`2000-01-01T${updatedAttendance.expectedCheckOut}`)
+          const actualCheckOut = new Date(`2000-01-01T${updatedAttendance.checkOut}`)
+          
+          if (actualCheckOut < expectedCheckOut) {
+            earlyDepartureMinutes = Math.floor((expectedCheckOut.getTime() - actualCheckOut.getTime()) / 60000)
+          } else {
+            earlyDepartureMinutes = 0
+          }
+        }
+
+        // Calcular minutos trabajados
+        if (updatedAttendance.checkIn && updatedAttendance.checkOut) {
+          const checkIn = new Date(`2000-01-01T${updatedAttendance.checkIn}`)
+          const checkOut = new Date(`2000-01-01T${updatedAttendance.checkOut}`)
+          totalMinutesWorked = Math.floor((checkOut.getTime() - checkIn.getTime()) / 60000)
+        }
+
+        // Aplicar reglas para días feriados o normales
+        if (updatedAttendance.isHoliday) {
+          // Trabajo en día feriado: adición de una jornada completa (480 minutos)
+          totalMinutesBalance = 480 + totalMinutesWorked
+        } else {
+          // Día normal: balance es minutos trabajados menos minutos tarde y salida anticipada
+          totalMinutesBalance = totalMinutesWorked - lateMinutes - earlyDepartureMinutes
+        }
+
+        // Actualizar los cálculos
+        updatedAttendance = {
+          ...updatedAttendance,
+          lateMinutes,
+          earlyDepartureMinutes,
+          totalMinutesWorked,
+          totalMinutesBalance
+        }
       }
 
-      // Actualizar los cálculos
-      const updateData = {
-        ...updatedAttendance,
-        lateMinutes,
-        earlyDepartureMinutes,
-        totalMinutesWorked,
-        totalMinutesBalance,
-        updatedAt: new Date().toISOString()
-      }
+      // Añadir timestamp de actualización
+      updatedAttendance.updatedAt = new Date().toISOString()
 
       // Convertir automáticamente de camelCase a snake_case
-      const snakeCaseData = objectToSnakeCase(updateData)
+      const snakeCaseData = objectToSnakeCase(updatedAttendance)
+      
+      // Registrar los datos exactos que se están enviando
+      console.log("Datos enviados a Supabase para actualización:", snakeCaseData)
       
       const { data, error } = await this.supabase
         .from("attendance")
@@ -342,7 +377,16 @@ class DatabaseService {
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error("Error detallado de Supabase:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        })
+        throw error
+      }
+      
       return objectToCamelCase(data)
     } catch (error) {
       console.error("Error al actualizar asistencia:", error)
