@@ -195,8 +195,15 @@ class DatabaseService {
 
       // Si es ausente, establecer valores predeterminados
       if (attendance.isAbsent) {
-        // Ausencia injustificada: descuento de una jornada completa (480 minutos)
-        totalMinutesBalance = -480
+        // Ausencia: solo descuento si no está justificada
+        if (!attendance.isJustified) {
+          // Ausencia injustificada: descuento de una jornada completa (480 minutos)
+          totalMinutesBalance = -480
+        } else {
+          // Ausencia justificada: no hay descuento
+          totalMinutesBalance = 0
+        }
+        
         totalMinutesWorked = 0
         lateMinutes = 0
         earlyDepartureMinutes = 0
@@ -308,6 +315,15 @@ class DatabaseService {
       
       // Si es ausente, establecer valores predeterminados
       if (updatedAttendance.isAbsent) {
+        // Ausencia: solo descuento si no está justificada
+        if (!updatedAttendance.isJustified) {
+          // Ausencia injustificada: descuento de una jornada completa (480 minutos)
+          updatedAttendance.totalMinutesBalance = -480
+        } else {
+          // Ausencia justificada: no hay descuento
+          updatedAttendance.totalMinutesBalance = 0
+        }
+        
         updatedAttendance = {
           ...updatedAttendance,
           checkIn: null,
@@ -315,8 +331,7 @@ class DatabaseService {
           lateMinutes: 0,
           earlyDepartureMinutes: 0,
           extraMinutes: 0,
-          totalMinutesWorked: 0,
-          totalMinutesBalance: -480
+          totalMinutesWorked: 0
         }
       } else {
         // Realizar los cálculos solo si no es ausente
