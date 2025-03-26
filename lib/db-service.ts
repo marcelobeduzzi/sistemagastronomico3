@@ -191,6 +191,7 @@ class DatabaseService {
       let earlyDepartureMinutes = attendance.earlyDepartureMinutes || 0
       let totalMinutesWorked = 0
       let totalMinutesBalance = 0
+      let extraMinutes = 0
 
       // Si es ausente, establecer valores predeterminados
       if (attendance.isAbsent) {
@@ -199,6 +200,7 @@ class DatabaseService {
         totalMinutesWorked = 0
         lateMinutes = 0
         earlyDepartureMinutes = 0
+        extraMinutes = 0
         
         // Asegurarse de que checkIn y checkOut sean null para ausencias
         attendance = {
@@ -223,6 +225,9 @@ class DatabaseService {
           
           if (actualCheckOut < expectedCheckOut) {
             earlyDepartureMinutes = Math.floor((expectedCheckOut.getTime() - actualCheckOut.getTime()) / 60000)
+          } else if (actualCheckOut > expectedCheckOut) {
+            // Si salió más tarde, calcular minutos extra
+            extraMinutes = Math.floor((actualCheckOut.getTime() - expectedCheckOut.getTime()) / 60000)
           }
         }
 
@@ -233,13 +238,18 @@ class DatabaseService {
           totalMinutesWorked = Math.floor((checkOut.getTime() - checkIn.getTime()) / 60000)
         }
 
+        // Calcular la jornada laboral esperada
+        const expectedWorkday = attendance.expectedCheckIn && attendance.expectedCheckOut 
+          ? calculateExpectedWorkday(attendance.expectedCheckIn, attendance.expectedCheckOut)
+          : 480; // 8 horas por defecto
+
         // Aplicar reglas para días feriados o normales
         if (attendance.isHoliday) {
-          // Trabajo en día feriado: adición de una jornada completa (480 minutos)
-          totalMinutesBalance = 480 + totalMinutesWorked
+          // Trabajo en día feriado: adición de una jornada completa (480 minutos) más los minutos trabajados
+          totalMinutesBalance = expectedWorkday + totalMinutesWorked
         } else {
-          // Día normal: balance es minutos trabajados menos minutos tarde y salida anticipada
-          totalMinutesBalance = totalMinutesWorked - lateMinutes - earlyDepartureMinutes
+          // Día normal: balance es minutos trabajados menos minutos tarde y salida anticipada, más minutos extra
+          totalMinutesBalance = totalMinutesWorked - lateMinutes - earlyDepartureMinutes + extraMinutes
         }
       }
 
@@ -251,6 +261,7 @@ class DatabaseService {
         earlyDepartureMinutes,
         totalMinutesWorked,
         totalMinutesBalance,
+        extraMinutes, // Nuevo campo para minutos extra
         createdAt: now,
         updatedAt: now
       }
@@ -303,6 +314,7 @@ class DatabaseService {
           checkOut: null,
           lateMinutes: 0,
           earlyDepartureMinutes: 0,
+          extraMinutes: 0,
           totalMinutesWorked: 0,
           totalMinutesBalance: -480
         }
@@ -312,6 +324,7 @@ class DatabaseService {
         let earlyDepartureMinutes = updatedAttendance.earlyDepartureMinutes || 0
         let totalMinutesWorked = 0
         let totalMinutesBalance = 0
+        let extraMinutes = 0
         
         if (updatedAttendance.expectedCheckIn && updatedAttendance.checkIn) {
           const expectedCheckIn = new Date(`2000-01-01T${updatedAttendance.expectedCheckIn}`)
@@ -330,8 +343,14 @@ class DatabaseService {
           
           if (actualCheckOut < expectedCheckOut) {
             earlyDepartureMinutes = Math.floor((expectedCheckOut.getTime() - actualCheckOut.getTime()) / 60000)
+            extraMinutes = 0
+          } else if (actualCheckOut > expectedCheckOut) {
+            // Si salió más tarde, calcular minutos extra
+            earlyDepartureMinutes = 0
+            extraMinutes = Math.floor((actualCheckOut.getTime() - expectedCheckOut.getTime()) / 60000)
           } else {
             earlyDepartureMinutes = 0
+            extraMinutes = 0
           }
         }
 
@@ -342,13 +361,18 @@ class DatabaseService {
           totalMinutesWorked = Math.floor((checkOut.getTime() - checkIn.getTime()) / 60000)
         }
 
+        // Calcular la jornada laboral esperada
+        const expectedWorkday = updatedAttendance.expectedCheckIn && updatedAttendance.expectedCheckOut 
+          ? calculateExpectedWorkday(updatedAttendance.expectedCheckIn, updatedAttendance.expectedCheckOut)
+          : 480; // 8 horas por defecto
+
         // Aplicar reglas para días feriados o normales
         if (updatedAttendance.isHoliday) {
-          // Trabajo en día feriado: adición de una jornada completa (480 minutos)
-          totalMinutesBalance = 480 + totalMinutesWorked
+          // Trabajo en día feriado: adición de una jornada completa más los minutos trabajados
+          totalMinutesBalance = expectedWorkday + totalMinutesWorked
         } else {
-          // Día normal: balance es minutos trabajados menos minutos tarde y salida anticipada
-          totalMinutesBalance = totalMinutesWorked - lateMinutes - earlyDepartureMinutes
+          // Día normal: balance es minutos trabajados menos minutos tarde y salida anticipada, más minutos extra
+          totalMinutesBalance = totalMinutesWorked - lateMinutes - earlyDepartureMinutes + extraMinutes
         }
 
         // Actualizar los cálculos
@@ -356,6 +380,7 @@ class DatabaseService {
           ...updatedAttendance,
           lateMinutes,
           earlyDepartureMinutes,
+          extraMinutes,
           totalMinutesWorked,
           totalMinutesBalance
         }
@@ -615,6 +640,13 @@ class DatabaseService {
       throw error
     }
   }
+}
+
+// Función auxiliar para calcular la jornada laboral esperada en minutos
+function calculateExpectedWorkday(expectedCheckIn: string, expectedCheckOut: string): number {
+  const checkIn = new Date(`2000-01-01T${expectedCheckIn}`)
+  const checkOut = new Date(`2000-01-01T${expectedCheckOut}`)
+  return Math.floor((checkOut.getTime() - checkIn.getTime()) / 60000)
 }
 
 export const dbService = new DatabaseService()
