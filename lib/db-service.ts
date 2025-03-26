@@ -134,6 +134,45 @@ class DatabaseService {
   }
 
   // Attendance methods
+  // NUEVO: Obtener todas las asistencias con información del empleado
+  async getAttendances() {
+    try {
+      const { data, error } = await this.supabase
+        .from("attendance")
+        .select(`
+          *,
+          employees (id, first_name, last_name)
+        `)
+        .order("date", { ascending: false })
+
+      if (error) throw error
+      return (data || []).map(item => objectToCamelCase(item))
+    } catch (error) {
+      console.error("Error al obtener asistencias:", error)
+      throw error
+    }
+  }
+
+  // NUEVO: Obtener una asistencia específica por ID
+  async getAttendanceById(id: string) {
+    try {
+      const { data, error } = await this.supabase
+        .from("attendance")
+        .select(`
+          *,
+          employees (id, first_name, last_name)
+        `)
+        .eq("id", id)
+        .single()
+
+      if (error) throw error
+      return objectToCamelCase(data)
+    } catch (error) {
+      console.error("Error al obtener asistencia por ID:", error)
+      throw error
+    }
+  }
+
   async getAttendanceByEmployeeId(employeeId: string) {
     const { data, error } = await this.supabase
       .from("attendance")
@@ -146,13 +185,182 @@ class DatabaseService {
   }
 
   async createAttendance(attendance: Omit<Attendance, "id">) {
-    // Convertir automáticamente de camelCase a snake_case
-    const attendanceData = objectToSnakeCase(attendance)
-    
-    const { data, error } = await this.supabase.from("attendance").insert([attendanceData]).select().single()
+    try {
+      // Calcular minutos tarde y salida anticipada
+      let lateMinutes = attendance.lateMinutes || 0
+      let earlyDepartureMinutes = attendance.earlyDepartureMinutes || 0
+      let totalMinutesWorked = 0
+      let totalMinutesBalance = 0
 
-    if (error) throw error
-    return objectToCamelCase(data)
+      if (attendance.expectedCheckIn && attendance.checkIn) {
+        const expectedCheckIn = new Date(`2000-01-01T${attendance.expectedCheckIn}`)
+        const actualCheckIn = new Date(`2000-01-01T${attendance.checkIn}`)
+        
+        if (actualCheckIn > expectedCheckIn) {
+          lateMinutes = Math.floor((actualCheckIn.getTime() - expectedCheckIn.getTime()) / 60000)
+        }
+      }
+
+      if (attendance.expectedCheckOut && attendance.checkOut) {
+        const expectedCheckOut = new Date(`2000-01-01T${attendance.expectedCheckOut}`)
+        const actualCheckOut = new Date(`2000-01-01T${attendance.checkOut}`)
+        
+        if (actualCheckOut < expectedCheckOut) {
+          earlyDepartureMinutes = Math.floor((expectedCheckOut.getTime() - actualCheckOut.getTime()) / 60000)
+        }
+      }
+
+      // Calcular minutos trabajados
+      if (attendance.checkIn && attendance.checkOut) {
+        const checkIn = new Date(`2000-01-01T${attendance.checkIn}`)
+        const checkOut = new Date(`2000-01-01T${attendance.checkOut}`)
+        totalMinutesWorked = Math.floor((checkOut.getTime() - checkIn.getTime()) / 60000)
+      }
+
+      // Aplicar reglas de negocio
+      if (attendance.isAbsent) {
+        // Ausencia injustificada: descuento de una jornada completa (480 minutos)
+        totalMinutesBalance = -480
+        totalMinutesWorked = 0
+        lateMinutes = 0
+        earlyDepartureMinutes = 0
+      } else if (attendance.isHoliday) {
+        // Trabajo en día feriado: adición de una jornada completa (480 minutos)
+        totalMinutesBalance = 480 + totalMinutesWorked
+      } else {
+        // Día normal: balance es minutos trabajados menos minutos tarde y salida anticipada
+        totalMinutesBalance = totalMinutesWorked - lateMinutes - earlyDepartureMinutes
+      }
+
+      // Añadir los cálculos y timestamps a los datos
+      const now = new Date().toISOString()
+      const attendanceWithCalculations = {
+        ...attendance,
+        lateMinutes,
+        earlyDepartureMinutes,
+        totalMinutesWorked,
+        totalMinutesBalance,
+        createdAt: now,
+        updatedAt: now
+      }
+
+      // Convertir automáticamente de camelCase a snake_case
+      const attendanceData = objectToSnakeCase(attendanceWithCalculations)
+      
+      const { data, error } = await this.supabase.from("attendance").insert([attendanceData]).select().single()
+
+      if (error) throw error
+      return objectToCamelCase(data)
+    } catch (error) {
+      console.error("Error al crear asistencia:", error)
+      throw error
+    }
+  }
+
+  // NUEVO: Actualizar una asistencia existente
+  async updateAttendance(id: string, attendance: Partial<Attendance>) {
+    try {
+      // Obtener la asistencia actual para tener todos los datos necesarios
+      const { data: currentAttendance, error: fetchError } = await this.supabase
+        .from("attendance")
+        .select("*")
+        .eq("id", id)
+        .single()
+      
+      if (fetchError) throw fetchError
+      
+      // Combinar los datos actuales con las actualizaciones
+      const updatedAttendance = { ...objectToCamelCase(currentAttendance), ...attendance }
+      
+      // Realizar los cálculos
+      let lateMinutes = updatedAttendance.lateMinutes || 0
+      let earlyDepartureMinutes = updatedAttendance.earlyDepartureMinutes || 0
+      let totalMinutesWorked = 0
+      let totalMinutesBalance = 0
+      
+      if (updatedAttendance.expectedCheckIn && updatedAttendance.checkIn) {
+        const expectedCheckIn = new Date(`2000-01-01T${updatedAttendance.expectedCheckIn}`)
+        const actualCheckIn = new Date(`2000-01-01T${updatedAttendance.checkIn}`)
+        
+        if (actualCheckIn > expectedCheckIn) {
+          lateMinutes = Math.floor((actualCheckIn.getTime() - expectedCheckIn.getTime()) / 60000)
+        } else {
+          lateMinutes = 0
+        }
+      }
+
+      if (updatedAttendance.expectedCheckOut && updatedAttendance.checkOut) {
+        const expectedCheckOut = new Date(`2000-01-01T${updatedAttendance.expectedCheckOut}`)
+        const actualCheckOut = new Date(`2000-01-01T${updatedAttendance.checkOut}`)
+        
+        if (actualCheckOut < expectedCheckOut) {
+          earlyDepartureMinutes = Math.floor((expectedCheckOut.getTime() - actualCheckOut.getTime()) / 60000)
+        } else {
+          earlyDepartureMinutes = 0
+        }
+      }
+
+      // Calcular minutos trabajados
+      if (updatedAttendance.checkIn && updatedAttendance.checkOut) {
+        const checkIn = new Date(`2000-01-01T${updatedAttendance.checkIn}`)
+        const checkOut = new Date(`2000-01-01T${updatedAttendance.checkOut}`)
+        totalMinutesWorked = Math.floor((checkOut.getTime() - checkIn.getTime()) / 60000)
+      }
+
+      // Aplicar reglas de negocio
+      if (updatedAttendance.isAbsent) {
+        // Ausencia injustificada: descuento de una jornada completa (480 minutos)
+        totalMinutesBalance = -480
+        totalMinutesWorked = 0
+        lateMinutes = 0
+        earlyDepartureMinutes = 0
+      } else if (updatedAttendance.isHoliday) {
+        // Trabajo en día feriado: adición de una jornada completa (480 minutos)
+        totalMinutesBalance = 480 + totalMinutesWorked
+      } else {
+        // Día normal: balance es minutos trabajados menos minutos tarde y salida anticipada
+        totalMinutesBalance = totalMinutesWorked - lateMinutes - earlyDepartureMinutes
+      }
+
+      // Actualizar los cálculos
+      const updateData = {
+        ...updatedAttendance,
+        lateMinutes,
+        earlyDepartureMinutes,
+        totalMinutesWorked,
+        totalMinutesBalance,
+        updatedAt: new Date().toISOString()
+      }
+
+      // Convertir automáticamente de camelCase a snake_case
+      const snakeCaseData = objectToSnakeCase(updateData)
+      
+      const { data, error } = await this.supabase
+        .from("attendance")
+        .update(snakeCaseData)
+        .eq("id", id)
+        .select()
+        .single()
+
+      if (error) throw error
+      return objectToCamelCase(data)
+    } catch (error) {
+      console.error("Error al actualizar asistencia:", error)
+      throw error
+    }
+  }
+
+  // NUEVO: Eliminar una asistencia
+  async deleteAttendance(id: string) {
+    try {
+      const { error } = await this.supabase.from("attendance").delete().eq("id", id)
+
+      if (error) throw error
+      return true
+    } catch (error) {
+      console.error("Error al eliminar asistencia:", error)
+      throw error
+    }
   }
 
   // Payroll methods
