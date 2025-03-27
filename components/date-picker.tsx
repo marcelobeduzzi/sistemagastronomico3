@@ -29,13 +29,18 @@ export function DatePicker({ date, setDate, className }: DatePickerProps) {
   // Función para manejar el cambio de fecha de manera segura
   const handleDateSelect = (newDate: Date | undefined) => {
     if (newDate) {
-      // Crear una nueva fecha con la hora fija a mediodía para evitar problemas de zona horaria
-      // Usamos el constructor de Date con año, mes, día específicos para evitar problemas de zona horaria
-      const correctedDate = new Date(newDate.getFullYear(), newDate.getMonth(), newDate.getDate(), 12, 0, 0)
+      // Importante: Crear una nueva fecha en UTC para evitar problemas de zona horaria
+      // Usamos UTC para asegurarnos de que la fecha sea exactamente la que el usuario seleccionó
+      const year = newDate.getUTCFullYear()
+      const month = newDate.getUTCMonth()
+      const day = newDate.getUTCDate()
 
-      // Importante: Asegurarnos de que la fecha seleccionada es la correcta
-      console.log("Fecha seleccionada:", newDate.toISOString())
-      console.log("Fecha corregida:", correctedDate.toISOString())
+      // Crear la fecha con la hora fija a mediodía en UTC
+      const correctedDate = new Date(Date.UTC(year, month, day, 12, 0, 0))
+
+      console.log("Fecha seleccionada (original):", newDate.toISOString())
+      console.log("Fecha corregida (UTC):", correctedDate.toISOString())
+      console.log("Fecha local:", new Date(correctedDate).toLocaleString())
 
       setSelectedDate(correctedDate)
       setDate(correctedDate)
@@ -118,6 +123,11 @@ export function DatePicker({ date, setDate, className }: DatePickerProps) {
             showOutsideDays={true}
             fixedWeeks={true}
             className="p-3"
+            // Importante: Usar UTC para evitar problemas de zona horaria
+            fromDate={new Date(Date.UTC(currentYear - 5, 0, 1))}
+            toDate={new Date(Date.UTC(currentYear + 5, 11, 31))}
+            // Deshabilitar la selección de días fuera del mes actual para evitar confusiones
+            disabled={{ before: undefined, after: undefined }}
             modifiersClassNames={{
               selected: "bg-primary text-primary-foreground",
               today: "bg-accent text-accent-foreground",
@@ -151,8 +161,9 @@ export function DatePicker({ date, setDate, className }: DatePickerProps) {
               className="w-full"
               onClick={() => {
                 const today = new Date()
-                handleDateSelect(today)
-                setMonth(today)
+                const utcToday = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0, 0))
+                handleDateSelect(utcToday)
+                setMonth(utcToday)
               }}
             >
               Hoy
@@ -163,6 +174,8 @@ export function DatePicker({ date, setDate, className }: DatePickerProps) {
     </div>
   )
 }
+
+
 
 
 

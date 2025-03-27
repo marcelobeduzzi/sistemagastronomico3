@@ -32,9 +32,9 @@ export default function AsistenciasPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
-    // Crear una fecha con la hora fija a mediodía para evitar problemas de zona horaria
+    // Crear una fecha con la hora fija a mediodía en UTC para evitar problemas de zona horaria
     const today = new Date()
-    return new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0, 0)
+    return new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0, 0))
   })
   const [selectedEmployee, setSelectedEmployee] = useState<string>("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -91,11 +91,15 @@ export default function AsistenciasPage() {
 
   // Función para manejar el cambio de fecha
   const handleDateChange = (date: Date) => {
-    // Crear una nueva fecha con la hora fija a mediodía para evitar problemas de zona horaria
-    const correctedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0)
+    // Crear una nueva fecha con la hora fija a mediodía en UTC para evitar problemas de zona horaria
+    const year = date.getUTCFullYear()
+    const month = date.getUTCMonth()
+    const day = date.getUTCDate()
 
-    console.log("Fecha seleccionada:", date.toISOString())
-    console.log("Fecha corregida:", correctedDate.toISOString())
+    const correctedDate = new Date(Date.UTC(year, month, day, 12, 0, 0))
+
+    console.log("Fecha seleccionada (original):", date.toISOString())
+    console.log("Fecha corregida (UTC):", correctedDate.toISOString())
     console.log("Fecha formateada:", correctedDate.toISOString().split("T")[0])
 
     setSelectedDate(correctedDate)
@@ -511,8 +515,12 @@ export default function AsistenciasPage() {
                     <DatePicker
                       date={new Date(newAttendance.date)}
                       setDate={(date) => {
-                        // Crear una nueva fecha con la hora fija a mediodía para evitar problemas de zona horaria
-                        const correctedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0)
+                        // Crear una nueva fecha con la hora fija a mediodía en UTC para evitar problemas de zona horaria
+                        const year = date.getUTCFullYear()
+                        const month = date.getUTCMonth()
+                        const day = date.getUTCDate()
+
+                        const correctedDate = new Date(Date.UTC(year, month, day, 12, 0, 0))
 
                         // Actualizar el estado con la fecha formateada
                         setNewAttendance((prev) => ({
@@ -951,6 +959,8 @@ export default function AsistenciasPage() {
     </DashboardLayout>
   )
 }
+
+
 
 
 
