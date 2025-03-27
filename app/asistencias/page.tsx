@@ -61,13 +61,6 @@ export default function AsistenciasPage() {
   // Estado para el formulario de edición de asistencia
   const [editAttendance, setEditAttendance] = useState<Attendance | null>(null)
 
-  // Función para manejar cambios de fecha de manera segura
-  const handleDateChange = (date: Date) => {
-    // Crear una nueva fecha con la hora fija a mediodía para evitar problemas de zona horaria
-    const correctedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0)
-    setSelectedDate(correctedDate)
-  }
-
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true)
@@ -503,11 +496,9 @@ export default function AsistenciasPage() {
                     <DatePicker
                       date={new Date(newAttendance.date)}
                       setDate={(date) => {
-                        // Corregir la fecha para evitar problemas de zona horaria
-                        const correctedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0)
                         setNewAttendance((prev) => ({
                           ...prev,
-                          date: correctedDate.toISOString().split("T")[0],
+                          date: date.toISOString().split("T")[0],
                         }))
                       }}
                     />
@@ -902,7 +893,7 @@ export default function AsistenciasPage() {
             <div className="flex items-center mb-4 space-x-4">
               <div className="flex items-center space-x-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
-                <DatePicker date={selectedDate} setDate={handleDateChange} />
+                <DatePicker date={selectedDate} setDate={setSelectedDate} />
               </div>
 
               <div className="flex-1 max-w-sm">
@@ -941,6 +932,10 @@ export default function AsistenciasPage() {
     </DashboardLayout>
   )
 }
+
+
+
+
 
 
 
