@@ -160,7 +160,18 @@ class DatabaseService {
       }
 
       console.log("Datos recibidos de asistencias:", data)
-      return (data || []).map((item) => objectToCamelCase(item))
+
+      // Asegurarse de que las fechas se mantengan como strings
+      const attendances = (data || []).map((item) => {
+        const attendance = objectToCamelCase(item)
+        // Asegurarse de que la fecha se mantenga como string
+        if (typeof attendance.date === "string") {
+          attendance.date = attendance.date.split("T")[0] // Eliminar la parte de tiempo si existe
+        }
+        return attendance
+      })
+
+      return attendances
     } catch (error) {
       console.error("Error al obtener asistencias:", error)
       throw error
@@ -713,6 +724,8 @@ function calculateExpectedWorkday(expectedCheckIn: string, expectedCheckOut: str
 }
 
 export const dbService = new DatabaseService()
+
+
 
 
 

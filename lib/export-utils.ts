@@ -93,16 +93,41 @@ export const exportToPDF = (
   }
 }
 
-// Función para formatear fecha
+// Función para formatear fecha - MODIFICADA para trabajar directamente con strings
 export const formatDate = (dateString: string | undefined): string => {
   if (!dateString) return "-"
 
-  const date = new Date(dateString)
-  return date.toLocaleDateString("es-AR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  })
+  // Si la fecha incluye tiempo (formato ISO), extraer solo la parte de la fecha
+  if (dateString.includes("T")) {
+    dateString = dateString.split("T")[0]
+  }
+
+  // Verificar si la fecha está en formato YYYY-MM-DD
+  const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/
+  if (isoDateRegex.test(dateString)) {
+    // Convertir de YYYY-MM-DD a DD/MM/YYYY
+    const parts = dateString.split("-")
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`
+    }
+  }
+
+  // Si no está en formato YYYY-MM-DD, intentar con el método anterior como fallback
+  try {
+    const date = new Date(dateString)
+    // Verificar si la fecha es válida
+    if (isNaN(date.getTime())) {
+      return dateString // Devolver el string original si no es una fecha válida
+    }
+    return date.toLocaleDateString("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    })
+  } catch (error) {
+    console.error("Error al formatear fecha:", error)
+    return dateString // Devolver el string original en caso de error
+  }
 }
 
 // Función para formatear moneda
@@ -414,4 +439,6 @@ export const generateBalanceReport = (balance: Balance) => {
     alert("Ocurrió un error al generar el reporte de balance. Por favor, intente nuevamente.")
   }
 }
+
+
 

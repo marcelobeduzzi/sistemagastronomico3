@@ -48,8 +48,22 @@ export function UltraSimpleDatePicker({ value, onChange, className }: UltraSimpl
     // Validar formato DD/MM/YYYY
     const regex = /^(\d{2})\/(\d{2})\/(\d{4})$/
     if (regex.test(inputValue)) {
-      const newValue = formatForStorage(inputValue)
-      onChange(newValue)
+      // Validar que sea una fecha válida
+      const parts = inputValue.split("/")
+      const day = Number.parseInt(parts[0], 10)
+      const month = Number.parseInt(parts[1], 10)
+      const year = Number.parseInt(parts[2], 10)
+
+      // Verificar que sea una fecha válida
+      const isValidDate = day > 0 && day <= 31 && month > 0 && month <= 12
+
+      if (isValidDate) {
+        const newValue = formatForStorage(inputValue)
+        onChange(newValue)
+      } else {
+        // Si la fecha es inválida, restaurar al valor anterior
+        setInputValue(formatForDisplay(value))
+      }
     } else {
       // Si el formato es inválido, restaurar al valor anterior
       setInputValue(formatForDisplay(value))
@@ -94,4 +108,6 @@ export function UltraSimpleDatePicker({ value, onChange, className }: UltraSimpl
     </div>
   )
 }
+
+
 
