@@ -9,7 +9,7 @@ import { dbService } from "@/lib/db-service"
 import { exportToCSV, formatDate } from "@/lib/export-utils"
 import type { Attendance, Employee } from "@/types"
 import type { ColumnDef } from "@tanstack/react-table"
-import { Download, Plus, Calendar } from "lucide-react"
+import { Download, Plus, Calendar, Edit, FileText } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -25,6 +25,7 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DatePicker } from "@/components/date-picker"
 import { StatusBadge } from "@/components/status-badge"
+import { useToast } from "@/components/ui/use-toast"
 
 export default function AsistenciasPage() {
   const [attendances, setAttendances] = useState<Attendance[]>([])
@@ -33,6 +34,9 @@ export default function AsistenciasPage() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [selectedEmployee, setSelectedEmployee] = useState<string>("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [selectedAttendance, setSelectedAttendance] = useState<Attendance | null>(null)
+  const { toast } = useToast()
 
   // Estado para el formulario de nueva asistencia
   const [newAttendance, setNewAttendance] = useState<Omit<Attendance, "id">>({
@@ -49,6 +53,9 @@ export default function AsistenciasPage() {
     isJustified: false,
     notes: "",
   })
+
+  // Estado para el formulario de edición de asistencia
+  const [editAttendance, setEditAttendance] = useState<Attendance | null>(null)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -213,9 +220,56 @@ export default function AsistenciasPage() {
         isJustified: false,
         notes: "",
       })
+
+      toast({
+        title: "Asistencia registrada",
+        description: "La asistencia ha sido registrada correctamente.",
+      })
     } catch (error) {
       console.error("Error al crear asistencia:", error)
-      alert("Error al registrar la asistencia. Por favor, intente nuevamente.")
+      toast({
+        title: "Error",
+        description: "Error al registrar la asistencia. Por favor, intente nuevamente.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Función para abrir el diálogo de edición
+  const handleEditAttendance = (attendance: Attendance) => {
+    setSelectedAttendance(attendance)
+    setEditAttendance(attendance)
+    setIsEditDialogOpen(true)
+  }
+
+  // Función para guardar los cambios de la edición
+  const handleSaveEdit = async () => {
+    if (!editAttendance) return
+
+    try {
+      // Actualizar la asistencia en la base de datos
+      const updatedAttendance = await dbService.updateAttendance(editAttendance.id, editAttendance)
+
+      // Actualizar la lista de asistencias
+      setAttendances((prev) =>
+        prev.map((attendance) => (attendance.id === updatedAttendance.id ? updatedAttendance : attendance)),
+      )
+
+      // Cerrar el diálogo de edición
+      setIsEditDialogOpen(false)
+      setEditAttendance(null)
+
+      toast({
+        title: "Asistencia actualizada",
+        description: "La asistencia ha sido actualizada correctamente.",
+      })
+    } catch (error) {
+      console.error("Error al actualizar asistencia:", error)
+      toast({
+        title: "Error",
+        description: "Error al actualizar la asistencia. Por favor, intente nuevamente.",
+        variant: "destructive",
+      })
     }
   }
 
@@ -280,106 +334,114 @@ export default function AsistenciasPage() {
       id: "actions",
       header: "Acciones",
       cell: ({ row }) => (
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button variant="ghost" size="sm">
-              Ver Detalles
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Detalles de Asistencia</DialogTitle>
-              <DialogDescription>{formatDate(row.original.date)}</DialogDescription>
-            </DialogHeader>
+        <div className="flex items-center space-x-2">
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="ghost" size="sm">
+                <FileText className="mr-1 h-4 w-4" />
+                Ver
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Detalles de Asistencia</DialogTitle>
+                <DialogDescription>{formatDate(row.original.date)}</DialogDescription>
+              </DialogHeader>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <h3 className="text-sm font-medium">Información del Empleado</h3>
-                <div className="mt-2 space-y-1 text-sm">
-                  {(() => {
-                    const employee = employees.find((e) => e.id === row.original.employeeId)
-                    return (
-                      <>
-                        <p>
-                          <span className="font-medium">Nombre:</span>{" "}
-                          {employee ? `${employee.firstName} ${employee.lastName}` : "Desconocido"}
-                        </p>
-                        <p>
-                          <span className="font-medium">Cargo:</span> {employee?.position || "-"}
-                        </p>
-                        <p>
-                          <span className="font-medium">Local:</span> {employee?.local || "-"}
-                        </p>
-                        <p>
-                          <span className="font-medium">Turno:</span>{" "}
-                          {employee?.workShift === "morning"
-                            ? "Mañana"
-                            : employee?.workShift === "afternoon"
-                              ? "Tarde"
-                              : employee?.workShift === "night"
-                                ? "Noche"
-                                : employee?.workShift === "full_time"
-                                  ? "Tiempo Completo"
-                                  : employee?.workShift === "part_time"
-                                    ? "Tiempo Parcial"
-                                    : "-"}
-                        </p>
-                      </>
-                    )
-                  })()}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <h3 className="text-sm font-medium">Información del Empleado</h3>
+                  <div className="mt-2 space-y-1 text-sm">
+                    {(() => {
+                      const employee = employees.find((e) => e.id === row.original.employeeId)
+                      return (
+                        <>
+                          <p>
+                            <span className="font-medium">Nombre:</span>{" "}
+                            {employee ? `${employee.firstName} ${employee.lastName}` : "Desconocido"}
+                          </p>
+                          <p>
+                            <span className="font-medium">Cargo:</span> {employee?.position || "-"}
+                          </p>
+                          <p>
+                            <span className="font-medium">Local:</span> {employee?.local || "-"}
+                          </p>
+                          <p>
+                            <span className="font-medium">Turno:</span>{" "}
+                            {employee?.workShift === "morning"
+                              ? "Mañana"
+                              : employee?.workShift === "afternoon"
+                                ? "Tarde"
+                                : employee?.workShift === "night"
+                                  ? "Noche"
+                                  : employee?.workShift === "full_time"
+                                    ? "Tiempo Completo"
+                                    : employee?.workShift === "part_time"
+                                      ? "Tiempo Parcial"
+                                      : "-"}
+                          </p>
+                        </>
+                      )
+                    })()}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-medium">Información de Asistencia</h3>
+                  <div className="mt-2 space-y-1 text-sm">
+                    <p>
+                      <span className="font-medium">Hora Entrada Esperada:</span> {row.original.expectedCheckIn}
+                    </p>
+                    <p>
+                      <span className="font-medium">Hora Salida Esperada:</span> {row.original.expectedCheckOut}
+                    </p>
+                    <p>
+                      <span className="font-medium">Hora Entrada Real:</span>{" "}
+                      {row.original.isAbsent ? "-" : row.original.checkIn}
+                    </p>
+                    <p>
+                      <span className="font-medium">Hora Salida Real:</span>{" "}
+                      {row.original.isAbsent ? "-" : row.original.checkOut}
+                    </p>
+                    <p>
+                      <span className="font-medium">Minutos Tarde:</span>{" "}
+                      {row.original.isAbsent ? "-" : row.original.lateMinutes}
+                    </p>
+                    <p>
+                      <span className="font-medium">Minutos Salida Anticipada:</span>{" "}
+                      {row.original.isAbsent ? "-" : row.original.earlyDepartureMinutes}
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <h3 className="text-sm font-medium">Información de Asistencia</h3>
+              <div className="mt-4">
+                <h3 className="text-sm font-medium">Estado</h3>
                 <div className="mt-2 space-y-1 text-sm">
                   <p>
-                    <span className="font-medium">Hora Entrada Esperada:</span> {row.original.expectedCheckIn}
+                    <span className="font-medium">Feriado:</span> {row.original.isHoliday ? "Sí" : "No"}
                   </p>
                   <p>
-                    <span className="font-medium">Hora Salida Esperada:</span> {row.original.expectedCheckOut}
+                    <span className="font-medium">Ausente:</span> {row.original.isAbsent ? "Sí" : "No"}
                   </p>
                   <p>
-                    <span className="font-medium">Hora Entrada Real:</span>{" "}
-                    {row.original.isAbsent ? "-" : row.original.checkIn}
+                    <span className="font-medium">Justificado:</span> {row.original.isJustified ? "Sí" : "No"}
                   </p>
-                  <p>
-                    <span className="font-medium">Hora Salida Real:</span>{" "}
-                    {row.original.isAbsent ? "-" : row.original.checkOut}
-                  </p>
-                  <p>
-                    <span className="font-medium">Minutos Tarde:</span>{" "}
-                    {row.original.isAbsent ? "-" : row.original.lateMinutes}
-                  </p>
-                  <p>
-                    <span className="font-medium">Minutos Salida Anticipada:</span>{" "}
-                    {row.original.isAbsent ? "-" : row.original.earlyDepartureMinutes}
-                  </p>
+                  {row.original.notes && (
+                    <p>
+                      <span className="font-medium">Notas:</span> {row.original.notes}
+                    </p>
+                  )}
                 </div>
               </div>
-            </div>
+            </DialogContent>
+          </Dialog>
 
-            <div className="mt-4">
-              <h3 className="text-sm font-medium">Estado</h3>
-              <div className="mt-2 space-y-1 text-sm">
-                <p>
-                  <span className="font-medium">Feriado:</span> {row.original.isHoliday ? "Sí" : "No"}
-                </p>
-                <p>
-                  <span className="font-medium">Ausente:</span> {row.original.isAbsent ? "Sí" : "No"}
-                </p>
-                <p>
-                  <span className="font-medium">Justificado:</span> {row.original.isJustified ? "Sí" : "No"}
-                </p>
-                {row.original.notes && (
-                  <p>
-                    <span className="font-medium">Notas:</span> {row.original.notes}
-                  </p>
-                )}
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+          <Button variant="ghost" size="sm" onClick={() => handleEditAttendance(row.original)}>
+            <Edit className="mr-1 h-4 w-4" />
+            Editar
+          </Button>
+        </div>
       ),
     },
   ]
@@ -595,6 +657,226 @@ export default function AsistenciasPage() {
           </Dialog>
         </div>
 
+        {/* Diálogo de edición de asistencia */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Editar Asistencia</DialogTitle>
+              <DialogDescription>{editAttendance && formatDate(editAttendance.date)}</DialogDescription>
+            </DialogHeader>
+
+            {editAttendance && (
+              <div className="grid gap-4 py-4">
+                <div className="space-y-2">
+                  <Label>Empleado</Label>
+                  <div className="font-medium">
+                    {(() => {
+                      const employee = employees.find((e) => e.id === editAttendance.employeeId)
+                      return employee ? `${employee.firstName} ${employee.lastName}` : "Desconocido"
+                    })()}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="editIsAbsent"
+                      checked={editAttendance.isAbsent}
+                      onCheckedChange={(checked) => {
+                        const isAbsent = checked === true
+                        setEditAttendance((prev) => {
+                          if (!prev) return prev
+                          return {
+                            ...prev,
+                            isAbsent,
+                            checkIn: isAbsent ? "" : prev.checkIn,
+                            checkOut: isAbsent ? "" : prev.checkOut,
+                            lateMinutes: isAbsent ? 0 : prev.lateMinutes,
+                            earlyDepartureMinutes: isAbsent ? 0 : prev.earlyDepartureMinutes,
+                          }
+                        })
+                      }}
+                    />
+                    <Label htmlFor="editIsAbsent">Ausente</Label>
+                  </div>
+                </div>
+
+                {editAttendance.isAbsent && (
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="editIsJustified"
+                        checked={editAttendance.isJustified}
+                        onCheckedChange={(checked) => {
+                          setEditAttendance((prev) => {
+                            if (!prev) return prev
+                            return {
+                              ...prev,
+                              isJustified: checked === true,
+                            }
+                          })
+                        }}
+                      />
+                      <Label htmlFor="editIsJustified">Justificado</Label>
+                    </div>
+                    {editAttendance.isJustified && (
+                      <div className="mt-2 p-3 bg-yellow-50 rounded-md text-sm">
+                        <p className="font-medium text-yellow-800">Información importante:</p>
+                        <p className="text-yellow-700 mt-1">
+                          Al justificar una falta, se devolverán los 480 minutos que fueron descontados automáticamente.
+                          Asegúrese de adjuntar el certificado médico correspondiente.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="editIsHoliday"
+                      checked={editAttendance.isHoliday}
+                      onCheckedChange={(checked) => {
+                        setEditAttendance((prev) => {
+                          if (!prev) return prev
+                          return {
+                            ...prev,
+                            isHoliday: checked === true,
+                          }
+                        })
+                      }}
+                    />
+                    <Label htmlFor="editIsHoliday">Feriado</Label>
+                  </div>
+                </div>
+
+                {!editAttendance.isAbsent && (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="editExpectedCheckIn">Hora Entrada Esperada</Label>
+                        <Input
+                          id="editExpectedCheckIn"
+                          type="time"
+                          value={editAttendance.expectedCheckIn}
+                          onChange={(e) =>
+                            setEditAttendance((prev) => {
+                              if (!prev) return prev
+                              return { ...prev, expectedCheckIn: e.target.value }
+                            })
+                          }
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="editExpectedCheckOut">Hora Salida Esperada</Label>
+                        <Input
+                          id="editExpectedCheckOut"
+                          type="time"
+                          value={editAttendance.expectedCheckOut}
+                          onChange={(e) =>
+                            setEditAttendance((prev) => {
+                              if (!prev) return prev
+                              return { ...prev, expectedCheckOut: e.target.value }
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="editCheckIn">Hora Entrada Real</Label>
+                        <Input
+                          id="editCheckIn"
+                          type="time"
+                          value={editAttendance.checkIn}
+                          onChange={(e) =>
+                            setEditAttendance((prev) => {
+                              if (!prev) return prev
+                              return { ...prev, checkIn: e.target.value }
+                            })
+                          }
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="editCheckOut">Hora Salida Real</Label>
+                        <Input
+                          id="editCheckOut"
+                          type="time"
+                          value={editAttendance.checkOut}
+                          onChange={(e) =>
+                            setEditAttendance((prev) => {
+                              if (!prev) return prev
+                              return { ...prev, checkOut: e.target.value }
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="editLateMinutes">Minutos Tarde</Label>
+                        <Input
+                          id="editLateMinutes"
+                          type="number"
+                          value={editAttendance.lateMinutes}
+                          onChange={(e) =>
+                            setEditAttendance((prev) => {
+                              if (!prev) return prev
+                              return { ...prev, lateMinutes: Number.parseInt(e.target.value) || 0 }
+                            })
+                          }
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="editEarlyDepartureMinutes">Minutos Salida Anticipada</Label>
+                        <Input
+                          id="editEarlyDepartureMinutes"
+                          type="number"
+                          value={editAttendance.earlyDepartureMinutes}
+                          onChange={(e) =>
+                            setEditAttendance((prev) => {
+                              if (!prev) return prev
+                              return { ...prev, earlyDepartureMinutes: Number.parseInt(e.target.value) || 0 }
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="editNotes">Notas</Label>
+                  <Input
+                    id="editNotes"
+                    value={editAttendance.notes}
+                    onChange={(e) =>
+                      setEditAttendance((prev) => {
+                        if (!prev) return prev
+                        return { ...prev, notes: e.target.value }
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" onClick={handleSaveEdit}>
+                Guardar Cambios
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         <Card>
           <CardHeader className="pb-3">
             <CardTitle>Registro de Asistencias</CardTitle>
@@ -643,4 +925,3 @@ export default function AsistenciasPage() {
     </DashboardLayout>
   )
 }
-
