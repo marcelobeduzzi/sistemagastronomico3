@@ -1,14 +1,12 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
-import DatePicker, { registerLocale } from "react-datepicker"
-import { es } from "date-fns/locale"
 import { CalendarIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
-
-// Registrar el idioma español
-registerLocale("es", es)
 
 interface SimpleDatePickerProps {
   date: Date
@@ -17,70 +15,97 @@ interface SimpleDatePickerProps {
 }
 
 export function SimpleDatePicker({ date, setDate, className }: SimpleDatePickerProps) {
-  // Estado local para manejar la fecha
-  const [selectedDate, setSelectedDate] = useState<Date>(date)
+  // Función para formatear la fecha en formato local DD/MM/YYYY
+  const formatLocalDate = (date: Date): string => {
+    const day = date.getDate().toString().padStart(2, "0")
+    const month = (date.getMonth() + 1).toString().padStart(2, "0")
+    const year = date.getFullYear()
+    return `${day}/${month}/${year}`
+  }
 
-  // Actualizar el estado local cuando cambia la prop date
+  // Función para parsear una fecha en formato DD/MM/YYYY
+  const parseLocalDate = (dateStr: string): Date | null => {
+    const parts = dateStr.split("/")
+    if (parts.length !== 3) return null
+
+    const day = Number.parseInt(parts[0], 10)
+    const month = Number.parseInt(parts[1], 10) - 1 // Meses en JS son 0-11
+    const year = Number.parseInt(parts[2], 10)
+
+    if (isNaN(day) || isNaN(month) || isNaN(year)) return null
+
+    // Crear fecha local sin manipulación de zona horaria
+    const newDate = new Date(year, month, day)
+
+    // Verificar que la fecha es válida
+    if (newDate.getDate() !== day || newDate.getMonth() !== month || newDate.getFullYear() !== year) {
+      return null // Fecha inválida (como 31 de febrero)
+    }
+
+    return newDate
+  }
+
+  // Estado para el valor del input
+  const [inputValue, setInputValue] = useState(formatLocalDate(date))
+
+  // Actualizar el input cuando cambia la fecha externa
   useEffect(() => {
-    setSelectedDate(date)
+    setInputValue(formatLocalDate(date))
   }, [date])
 
-  // Función para manejar el cambio de fecha
-  const handleDateChange = (date: Date | null) => {
-    if (date) {
-      // Crear una nueva fecha con solo año, mes y día (sin hora)
-      const newDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  // Manejar cambio en el input
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputValue(e.target.value)
+  }
 
-      // Imprimir información de depuración
-      console.log("Fecha seleccionada:", newDate.toLocaleString())
-      console.log("Día:", newDate.getDate())
-      console.log("Mes:", newDate.getMonth() + 1)
-      console.log("Año:", newDate.getFullYear())
-
-      setSelectedDate(newDate)
+  // Manejar cuando el input pierde el foco
+  const handleBlur = () => {
+    const newDate = parseLocalDate(inputValue)
+    if (newDate) {
       setDate(newDate)
+    } else {
+      // Si la fecha es inválida, restaurar al valor anterior
+      setInputValue(formatLocalDate(date))
     }
   }
 
+  // Manejar cuando se presiona Enter
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      handleBlur()
+    }
+  }
+
+  // Establecer fecha a hoy
+  const setToday = () => {
+    const today = new Date()
+    const localToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    setDate(localToday)
+    setInputValue(formatLocalDate(localToday))
+  }
+
   return (
-    <div className={cn("relative", className)}>
-      <DatePicker
-        selected={selectedDate}
-        onChange={handleDateChange}
-        locale="es"
-        dateFormat="dd/MM/yyyy"
-        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-        customInput={
-          <Button variant="outline" className="w-full justify-start text-left font-normal">
-            <CalendarIcon className="mr-2 h-4 w-4" />
-            {selectedDate ? selectedDate.toLocaleDateString("es-ES") : "Seleccionar fecha"}
-          </Button>
-        }
-        showMonthDropdown
-        showYearDropdown
-        dropdownMode="select"
-        todayButton="Hoy"
-        isClearable={false}
-        popperClassName="z-50"
-        popperPlacement="bottom-start"
-        popperModifiers={[
-          {
-            name: "offset",
-            options: {
-              offset: [0, 8],
-            },
-          },
-          {
-            name: "preventOverflow",
-            options: {
-              boundary: "viewport",
-            },
-          },
-        ]}
-      />
+    <div className={cn("flex items-center space-x-2", className)}>
+      <div className="relative w-[140px]">
+        <CalendarIcon className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          type="text"
+          value={inputValue}
+          onChange={handleInputChange}
+          onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
+          placeholder="DD/MM/AAAA"
+          className="pl-8"
+        />
+      </div>
+      <Button type="button" variant="outline" size="sm" onClick={setToday}>
+        Hoy
+      </Button>
     </div>
   )
 }
+
+
 
 
 

@@ -32,7 +32,7 @@ export default function AsistenciasPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
-    // Crear una fecha con la hora fija a mediodía para evitar problemas de zona horaria
+    // Crear una fecha con solo año, mes y día (sin hora)
     const today = new Date()
     return new Date(today.getFullYear(), today.getMonth(), today.getDate())
   })
@@ -80,8 +80,10 @@ export default function AsistenciasPage() {
 
         const attendanceData = await dbService.getAttendances({
           date: formattedDate,
-          ...(selectedEmployee ? { employeeId: selectedEmployee } : {}),
+          ...(selectedEmployee && selectedEmployee !== "all" ? { employeeId: selectedEmployee } : {}),
         })
+
+        console.log("Datos de asistencias recibidos:", attendanceData)
         setAttendances(attendanceData)
       } catch (error) {
         console.error("Error al cargar datos de asistencias:", error)
@@ -96,7 +98,7 @@ export default function AsistenciasPage() {
   // Función para manejar el cambio de fecha
   const handleDateChange = (date: Date) => {
     // Crear una copia de la fecha para evitar referencias
-    const newDate = new Date(date)
+    const newDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
 
     // Imprimir información de depuración
     console.log("Fecha seleccionada (local):", newDate.toLocaleString())
@@ -141,7 +143,7 @@ export default function AsistenciasPage() {
     setSelectedEmployee(employeeId)
 
     // Si se selecciona un empleado, actualizar los horarios esperados
-    if (employeeId) {
+    if (employeeId && employeeId !== "all") {
       const employee = employees.find((e) => e.id === employeeId)
       if (employee) {
         let expectedCheckIn = ""
@@ -230,8 +232,21 @@ export default function AsistenciasPage() {
 
   const handleSubmit = async () => {
     try {
-      // Crear nueva asistencia
-      const createdAttendance = await dbService.createAttendance(newAttendance)
+      // Formatear la fecha correctamente para la base de datos
+      const dateObj = new Date(newAttendance.date)
+      const year = dateObj.getFullYear()
+      const month = String(dateObj.getMonth() + 1).padStart(2, "0")
+      const day = String(dateObj.getDate()).padStart(2, "0")
+      const formattedDate = `${year}-${month}-${day}`
+
+      // Crear nueva asistencia con la fecha formateada
+      const attendanceToCreate = {
+        ...newAttendance,
+        date: formattedDate,
+      }
+
+      console.log("Creando asistencia con fecha:", formattedDate)
+      const createdAttendance = await dbService.createAttendance(attendanceToCreate)
 
       // Actualizar la lista de asistencias
       setAttendances((prev) => [...prev, createdAttendance])
@@ -968,6 +983,8 @@ export default function AsistenciasPage() {
     </DashboardLayout>
   )
 }
+
+
 
 
 

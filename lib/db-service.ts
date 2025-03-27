@@ -135,9 +135,9 @@ class DatabaseService {
 
       // Construir la consulta base
       let query = this.supabase.from("attendance").select(`
-        *,
-        employees (id, first_name, last_name)
-      `)
+          *,
+          employees (id, first_name, last_name)
+        `)
 
       // Filtrar por fecha
       if (date) {
@@ -145,7 +145,7 @@ class DatabaseService {
       }
 
       // Filtrar por empleado si se proporciona
-      if (employeeId) {
+      if (employeeId && employeeId !== "all") {
         query = query.eq("employee_id", employeeId)
       }
 
@@ -154,7 +154,12 @@ class DatabaseService {
 
       const { data, error } = await query
 
-      if (error) throw error
+      if (error) {
+        console.error("Error en consulta de asistencias:", error)
+        throw error
+      }
+
+      console.log("Datos recibidos de asistencias:", data)
       return (data || []).map((item) => objectToCamelCase(item))
     } catch (error) {
       console.error("Error al obtener asistencias:", error)
@@ -708,6 +713,8 @@ function calculateExpectedWorkday(expectedCheckIn: string, expectedCheckOut: str
 }
 
 export const dbService = new DatabaseService()
+
+
 
 
 
