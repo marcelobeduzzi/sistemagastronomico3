@@ -91,11 +91,8 @@ export default function AsistenciasPage() {
 
   // Función para manejar el cambio de fecha
   const handleDateChange = (date: Date) => {
-    console.log("Fecha seleccionada del selector:", date.toISOString())
-    console.log("Fecha local:", date.toLocaleString())
-    console.log("getDate():", date.getDate())
-
-    // Usar directamente la fecha del selector sin ajustes adicionales
+    // Usar la fecha tal como viene, sin manipulaciones adicionales
+    console.log("Fecha seleccionada:", date.toISOString())
     setSelectedDate(date)
   }
 
@@ -949,6 +946,8 @@ export default function AsistenciasPage() {
     </DashboardLayout>
   )
 }
+
+
 
 
 
