@@ -92,7 +92,11 @@ export default function AsistenciasPage() {
   // Función para manejar el cambio de fecha
   const handleDateChange = (date: Date) => {
     // Crear una nueva fecha con la hora fija a mediodía para evitar problemas de zona horaria
-    const correctedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0)
+    const year = date.getFullYear()
+    const month = date.getMonth()
+    const day = date.getDate()
+
+    const correctedDate = new Date(year, month, day, 12, 0, 0)
 
     console.log("Fecha seleccionada (original):", date.toISOString())
     console.log("Fecha corregida:", correctedDate.toISOString())
@@ -512,12 +516,16 @@ export default function AsistenciasPage() {
                       date={new Date(newAttendance.date)}
                       setDate={(date) => {
                         // Crear una nueva fecha con la hora fija a mediodía para evitar problemas de zona horaria
-                        const correctedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0)
-
+                        const year = date.getFullYear()
+                        const month = date.getMonth()
+                        const day = date.getDate()
+                        
+                        const correctedDate = new Date(year, month, day, 12, 0, 0)
+                        
                         // Actualizar el estado con la fecha formateada
                         setNewAttendance((prev) => ({
                           ...prev,
-                          date: correctedDate.toISOString().split("T")[0],
+                          date: correctedDate.toISOString().split('T')[0],
                         }))
                       }}
                     />
@@ -631,7 +639,13 @@ export default function AsistenciasPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="gri  100)
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">\
                       <div className="space-y-2">
                         <Label htmlFor="lateMinutes">Minutos Tarde</Label>
                         <Input
@@ -948,9 +962,11 @@ export default function AsistenciasPage() {
           </CardContent>
         </Card>
       </div>
-    </DashboardLayout>
+  </DashboardLayout>
   )
 }
+
+
 
 
 
