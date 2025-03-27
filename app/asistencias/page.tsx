@@ -23,7 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { SimpleDatePicker } from "@/components/simple-date-picker"
+import { StringDateSelector } from "@/components/string-date-selector"
 import { StatusBadge } from "@/components/status-badge"
 import { useToast } from "@/components/ui/use-toast"
 
@@ -31,12 +31,13 @@ export default function AsistenciasPage() {
   const [attendances, setAttendances] = useState<Attendance[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [selectedDate, setSelectedDate] = useState<Date>(() => {
-    // Crear una fecha con solo año, mes y día (sin hora)
-    const today = new Date()
-    return new Date(today.getFullYear(), today.getMonth(), today.getDate())
-  })
-  const [selectedEmployee, setSelectedEmployee] = useState<string>("")
+
+  // Usar string para la fecha en formato YYYY-MM-DD
+  const today = new Date()
+  const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`
+  const [selectedDateString, setSelectedDateString] = useState<string>(todayString)
+
+  const [selectedEmployee, setSelectedEmployee] = useState<string>("all")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [selectedAttendance, setSelectedAttendance] = useState<Attendance | null>(null)
@@ -45,7 +46,7 @@ export default function AsistenciasPage() {
   // Estado para el formulario de nueva asistencia
   const [newAttendance, setNewAttendance] = useState<Omit<Attendance, "id">>({
     employeeId: "",
-    date: new Date().toISOString().split("T")[0],
+    date: todayString,
     checkIn: "",
     checkOut: "",
     expectedCheckIn: "",
@@ -69,46 +70,30 @@ export default function AsistenciasPage() {
         const employeeData = await dbService.getEmployees()
         setEmployees(employeeData)
 
-        // Obtener asistencias
-        // Formatear la fecha manualmente para evitar problemas de zona horaria
-        const year = selectedDate.getFullYear()
-        const month = String(selectedDate.getMonth() + 1).padStart(2, "0")
-        const day = String(selectedDate.getDate()).padStart(2, "0")
-        const formattedDate = `${year}-${month}-${day}`
-
-        console.log("Fecha formateada para consulta:", formattedDate)
+        // Obtener asistencias usando directamente el string de fecha
+        console.log("Consultando asistencias para fecha:", selectedDateString)
 
         const attendanceData = await dbService.getAttendances({
-          date: formattedDate,
-          ...(selectedEmployee && selectedEmployee !== "all" ? { employeeId: selectedEmployee } : {}),
+          date: selectedDateString,
+          employeeId: selectedEmployee !== "all" ? selectedEmployee : undefined,
         })
 
         console.log("Datos de asistencias recibidos:", attendanceData)
         setAttendances(attendanceData)
       } catch (error) {
         console.error("Error al cargar datos de asistencias:", error)
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar los datos. Intente nuevamente.",
+          variant: "destructive",
+        })
       } finally {
         setIsLoading(false)
       }
     }
 
     fetchData()
-  }, [selectedDate, selectedEmployee])
-
-  // Función para manejar el cambio de fecha
-  const handleDateChange = (date: Date) => {
-    // Crear una copia de la fecha para evitar referencias
-    const newDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-
-    // Imprimir información de depuración
-    console.log("Fecha seleccionada (local):", newDate.toLocaleString())
-    console.log("Día:", newDate.getDate())
-    console.log("Mes:", newDate.getMonth() + 1)
-    console.log("Año:", newDate.getFullYear())
-
-    // Actualizar el estado con la nueva fecha
-    setSelectedDate(newDate)
-  }
+  }, [selectedDateString, selectedEmployee, toast])
 
   const handleExportCSV = () => {
     // Preparar datos para exportar
@@ -117,12 +102,12 @@ export default function AsistenciasPage() {
       return {
         Empleado: employee ? `${employee.firstName} ${employee.lastName}` : "Desconocido",
         Fecha: formatDate(attendance.date),
-        "Hora Entrada": attendance.checkIn,
-        "Hora Salida": attendance.checkOut,
-        "Hora Entrada Esperada": attendance.expectedCheckIn,
-        "Hora Salida Esperada": attendance.expectedCheckOut,
-        "Minutos Tarde": attendance.lateMinutes,
-        "Minutos Salida Anticipada": attendance.earlyDepartureMinutes,
+        "Hora Entrada": attendance.checkIn || "-",
+        "Hora Salida": attendance.checkOut || "-",
+        "Hora Entrada Esperada": attendance.expectedCheckIn || "-",
+        "Hora Salida Esperada": attendance.expectedCheckOut || "-",
+        "Minutos Tarde": attendance.lateMinutes || 0,
+        "Minutos Salida Anticipada": attendance.earlyDepartureMinutes || 0,
         "Es Feriado": attendance.isHoliday ? "Sí" : "No",
         Ausente: attendance.isAbsent ? "Sí" : "No",
         Justificado: attendance.isJustified ? "Sí" : "No",
@@ -130,19 +115,13 @@ export default function AsistenciasPage() {
       }
     })
 
-    // Formatear la fecha manualmente para el nombre del archivo
-    const year = selectedDate.getFullYear()
-    const month = String(selectedDate.getMonth() + 1).padStart(2, "0")
-    const day = String(selectedDate.getDate()).padStart(2, "0")
-    const formattedDate = `${year}-${month}-${day}`
-
-    exportToCSV(data, `asistencias_${formattedDate}`)
+    exportToCSV(data, `asistencias_${selectedDateString}`)
   }
 
   const handleEmployeeChange = (employeeId: string) => {
     setSelectedEmployee(employeeId)
 
-    // Si se selecciona un empleado, actualizar los horarios esperados
+    // Si se selecciona un empleado para nueva asistencia, actualizar los horarios esperados
     if (employeeId && employeeId !== "all") {
       const employee = employees.find((e) => e.id === employeeId)
       if (employee) {
@@ -232,30 +211,19 @@ export default function AsistenciasPage() {
 
   const handleSubmit = async () => {
     try {
-      // Formatear la fecha correctamente para la base de datos
-      const dateObj = new Date(newAttendance.date)
-      const year = dateObj.getFullYear()
-      const month = String(dateObj.getMonth() + 1).padStart(2, "0")
-      const day = String(dateObj.getDate()).padStart(2, "0")
-      const formattedDate = `${year}-${month}-${day}`
+      console.log("Creando asistencia con fecha:", newAttendance.date)
+      const createdAttendance = await dbService.createAttendance(newAttendance)
 
-      // Crear nueva asistencia con la fecha formateada
-      const attendanceToCreate = {
-        ...newAttendance,
-        date: formattedDate,
+      // Actualizar la lista de asistencias solo si la fecha coincide con la seleccionada
+      if (createdAttendance.date === selectedDateString) {
+        setAttendances((prev) => [...prev, createdAttendance])
       }
-
-      console.log("Creando asistencia con fecha:", formattedDate)
-      const createdAttendance = await dbService.createAttendance(attendanceToCreate)
-
-      // Actualizar la lista de asistencias
-      setAttendances((prev) => [...prev, createdAttendance])
 
       // Cerrar el diálogo y resetear el formulario
       setIsDialogOpen(false)
       setNewAttendance({
         employeeId: "",
-        date: new Date().toISOString().split("T")[0],
+        date: selectedDateString,
         checkIn: "",
         checkOut: "",
         expectedCheckIn: "",
@@ -337,22 +305,22 @@ export default function AsistenciasPage() {
     {
       accessorKey: "checkIn",
       header: "Hora Entrada",
-      cell: ({ row }) => (row.original.isAbsent ? "-" : row.original.checkIn),
+      cell: ({ row }) => (row.original.isAbsent ? "-" : row.original.checkIn || "-"),
     },
     {
       accessorKey: "checkOut",
       header: "Hora Salida",
-      cell: ({ row }) => (row.original.isAbsent ? "-" : row.original.checkOut),
+      cell: ({ row }) => (row.original.isAbsent ? "-" : row.original.checkOut || "-"),
     },
     {
       accessorKey: "lateMinutes",
       header: "Min. Tarde",
-      cell: ({ row }) => (row.original.isAbsent ? "-" : row.original.lateMinutes),
+      cell: ({ row }) => (row.original.isAbsent ? "-" : row.original.lateMinutes || 0),
     },
     {
       accessorKey: "earlyDepartureMinutes",
       header: "Min. Salida Anticipada",
-      cell: ({ row }) => (row.original.isAbsent ? "-" : row.original.earlyDepartureMinutes),
+      cell: ({ row }) => (row.original.isAbsent ? "-" : row.original.earlyDepartureMinutes || 0),
     },
     {
       accessorKey: "status",
@@ -437,26 +405,26 @@ export default function AsistenciasPage() {
                   <h3 className="text-sm font-medium">Información de Asistencia</h3>
                   <div className="mt-2 space-y-1 text-sm">
                     <p>
-                      <span className="font-medium">Hora Entrada Esperada:</span> {row.original.expectedCheckIn}
+                      <span className="font-medium">Hora Entrada Esperada:</span> {row.original.expectedCheckIn || "-"}
                     </p>
                     <p>
-                      <span className="font-medium">Hora Salida Esperada:</span> {row.original.expectedCheckOut}
+                      <span className="font-medium">Hora Salida Esperada:</span> {row.original.expectedCheckOut || "-"}
                     </p>
                     <p>
                       <span className="font-medium">Hora Entrada Real:</span>{" "}
-                      {row.original.isAbsent ? "-" : row.original.checkIn}
+                      {row.original.isAbsent ? "-" : row.original.checkIn || "-"}
                     </p>
                     <p>
                       <span className="font-medium">Hora Salida Real:</span>{" "}
-                      {row.original.isAbsent ? "-" : row.original.checkOut}
+                      {row.original.isAbsent ? "-" : row.original.checkOut || "-"}
                     </p>
                     <p>
                       <span className="font-medium">Minutos Tarde:</span>{" "}
-                      {row.original.isAbsent ? "-" : row.original.lateMinutes}
+                      {row.original.isAbsent ? "-" : row.original.lateMinutes || 0}
                     </p>
                     <p>
                       <span className="font-medium">Minutos Salida Anticipada:</span>{" "}
-                      {row.original.isAbsent ? "-" : row.original.earlyDepartureMinutes}
+                      {row.original.isAbsent ? "-" : row.original.earlyDepartureMinutes || 0}
                     </p>
                   </div>
                 </div>
@@ -518,7 +486,13 @@ export default function AsistenciasPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="employee">Empleado</Label>
-                    <Select value={newAttendance.employeeId} onValueChange={handleEmployeeChange}>
+                    <Select
+                      value={newAttendance.employeeId}
+                      onValueChange={(value) => {
+                        // Usar el manejador específico para actualizar también los horarios esperados
+                        handleEmployeeChange(value)
+                      }}
+                    >
                       <SelectTrigger id="employee">
                         <SelectValue placeholder="Seleccionar empleado" />
                       </SelectTrigger>
@@ -536,20 +510,13 @@ export default function AsistenciasPage() {
 
                   <div className="space-y-2">
                     <Label htmlFor="date">Fecha</Label>
-                    <SimpleDatePicker
-                      date={new Date(newAttendance.date)}
-                      setDate={(date) => {
-                        // Formatear la fecha manualmente para evitar problemas de zona horaria
-                        const year = date.getFullYear()
-                        const month = String(date.getMonth() + 1).padStart(2, "0")
-                        const day = String(date.getDate()).padStart(2, "0")
-                        const formattedDate = `${year}-${month}-${day}`
-
-                        console.log("Fecha formateada manualmente:", formattedDate)
-
+                    <StringDateSelector
+                      dateString={newAttendance.date}
+                      onDateChange={(dateString) => {
+                        console.log("Nueva fecha seleccionada:", dateString)
                         setNewAttendance((prev) => ({
                           ...prev,
-                          date: formattedDate,
+                          date: dateString,
                         }))
                       }}
                     />
@@ -944,7 +911,7 @@ export default function AsistenciasPage() {
             <div className="flex items-center mb-4 space-x-4">
               <div className="flex items-center space-x-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
-                <SimpleDatePicker date={selectedDate} setDate={handleDateChange} />
+                <StringDateSelector dateString={selectedDateString} onDateChange={setSelectedDateString} />
               </div>
 
               <div className="flex-1 max-w-sm">
@@ -983,6 +950,8 @@ export default function AsistenciasPage() {
     </DashboardLayout>
   )
 }
+
+
 
 
 
