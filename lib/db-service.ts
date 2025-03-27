@@ -131,7 +131,7 @@ class DatabaseService {
   // NUEVO: Obtener todas las asistencias con información del empleado
   async getAttendances({ date, employeeId }: { date: string; employeeId?: string }) {
     try {
-      console.log("Consultando asistencias para fecha:", date)
+      console.log("Consultando asistencias para fecha exacta:", date)
 
       // Construir la consulta base
       let query = this.supabase.from("attendance").select(`
@@ -139,7 +139,7 @@ class DatabaseService {
           employees (id, first_name, last_name)
         `)
 
-      // Filtrar por fecha
+      // Filtrar por fecha exacta (sin manipulación)
       if (date) {
         query = query.eq("date", date)
       }
@@ -713,6 +713,8 @@ function calculateExpectedWorkday(expectedCheckIn: string, expectedCheckOut: str
 }
 
 export const dbService = new DatabaseService()
+
+
 
 
 

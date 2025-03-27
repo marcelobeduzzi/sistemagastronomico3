@@ -23,7 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { StringDateSelector } from "@/components/string-date-selector"
+import { UltraSimpleDatePicker } from "@/components/ultra-simple-date-picker"
 import { StatusBadge } from "@/components/status-badge"
 import { useToast } from "@/components/ui/use-toast"
 
@@ -223,7 +223,7 @@ export default function AsistenciasPage() {
       setIsDialogOpen(false)
       setNewAttendance({
         employeeId: "",
-        date: selectedDateString,
+        date: todayString,
         checkIn: "",
         checkOut: "",
         expectedCheckIn: "",
@@ -510,9 +510,9 @@ export default function AsistenciasPage() {
 
                   <div className="space-y-2">
                     <Label htmlFor="date">Fecha</Label>
-                    <StringDateSelector
-                      dateString={newAttendance.date}
-                      onDateChange={(dateString) => {
+                    <UltraSimpleDatePicker
+                      value={newAttendance.date}
+                      onChange={(dateString) => {
                         console.log("Nueva fecha seleccionada:", dateString)
                         setNewAttendance((prev) => ({
                           ...prev,
@@ -911,7 +911,7 @@ export default function AsistenciasPage() {
             <div className="flex items-center mb-4 space-x-4">
               <div className="flex items-center space-x-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
-                <StringDateSelector dateString={selectedDateString} onDateChange={setSelectedDateString} />
+                <UltraSimpleDatePicker value={selectedDateString} onChange={setSelectedDateString} />
               </div>
 
               <div className="flex-1 max-w-sm">
@@ -950,6 +950,8 @@ export default function AsistenciasPage() {
     </DashboardLayout>
   )
 }
+
+
 
 
 
