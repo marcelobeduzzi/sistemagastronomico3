@@ -31,7 +31,11 @@ export default function AsistenciasPage() {
   const [attendances, setAttendances] = useState<Attendance[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+  const [selectedDate, setSelectedDate] = useState<Date>(() => {
+    // Crear una fecha con la hora fija a mediodía para evitar problemas de zona horaria
+    const today = new Date()
+    return new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0, 0)
+  })
   const [selectedEmployee, setSelectedEmployee] = useState<string>("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -56,6 +60,13 @@ export default function AsistenciasPage() {
 
   // Estado para el formulario de edición de asistencia
   const [editAttendance, setEditAttendance] = useState<Attendance | null>(null)
+
+  // Función para manejar cambios de fecha de manera segura
+  const handleDateChange = (date: Date) => {
+    // Crear una nueva fecha con la hora fija a mediodía para evitar problemas de zona horaria
+    const correctedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0)
+    setSelectedDate(correctedDate)
+  }
 
   useEffect(() => {
     const fetchData = async () => {
@@ -491,9 +502,14 @@ export default function AsistenciasPage() {
                     <Label htmlFor="date">Fecha</Label>
                     <DatePicker
                       date={new Date(newAttendance.date)}
-                      setDate={(date) =>
-                        setNewAttendance((prev) => ({ ...prev, date: date.toISOString().split("T")[0] }))
-                      }
+                      setDate={(date) => {
+                        // Corregir la fecha para evitar problemas de zona horaria
+                        const correctedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0)
+                        setNewAttendance((prev) => ({
+                          ...prev,
+                          date: correctedDate.toISOString().split("T")[0],
+                        }))
+                      }}
                     />
                   </div>
                 </div>
@@ -886,7 +902,7 @@ export default function AsistenciasPage() {
             <div className="flex items-center mb-4 space-x-4">
               <div className="flex items-center space-x-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
-                <DatePicker date={selectedDate} setDate={setSelectedDate} />
+                <DatePicker date={selectedDate} setDate={handleDateChange} />
               </div>
 
               <div className="flex-1 max-w-sm">
@@ -925,4 +941,6 @@ export default function AsistenciasPage() {
     </DashboardLayout>
   )
 }
+
+
 

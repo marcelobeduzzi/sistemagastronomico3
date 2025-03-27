@@ -15,18 +15,11 @@ interface DatePickerProps {
 }
 
 export function DatePicker({ date, setDate, className }: DatePickerProps) {
-  // Corregir el problema de zona horaria
-  const handleDateChange = (newDate: Date | undefined) => {
+  // Función para manejar el cambio de fecha de manera segura
+  const handleDateSelect = (newDate: Date | undefined) => {
     if (newDate) {
-      // Crear una nueva fecha con la hora local para evitar problemas de zona horaria
-      const correctedDate = new Date(
-        newDate.getFullYear(),
-        newDate.getMonth(),
-        newDate.getDate(),
-        12, // Establecer la hora a mediodía para evitar problemas con cambios de horario
-        0,
-        0,
-      )
+      // Crear una nueva fecha con la hora fija a mediodía para evitar problemas de zona horaria
+      const correctedDate = new Date(newDate.getFullYear(), newDate.getMonth(), newDate.getDate(), 12, 0, 0)
       setDate(correctedDate)
     }
   }
@@ -44,21 +37,31 @@ export function DatePicker({ date, setDate, className }: DatePickerProps) {
             {date ? format(date, "PPP", { locale: es }) : <span>Seleccionar fecha</span>}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
+        <PopoverContent className="w-auto p-0 z-50" align="start">
           <Calendar
             mode="single"
             selected={date}
-            onSelect={handleDateChange}
+            onSelect={handleDateSelect}
             initialFocus
             locale={es}
-            // Corregir el problema de alineación
-            className="border rounded-md shadow-md"
+            className="border rounded-md"
+            fixedWeeks
+            styles={{
+              caption: { textAlign: "center" },
+              caption_label: { fontSize: "1rem", fontWeight: 500 },
+              table: { width: "100%", borderCollapse: "separate", borderSpacing: "0" },
+              head_row: { marginBottom: "0.5rem" },
+              row: { width: "100%", display: "flex", justifyContent: "space-between" },
+              cell: { textAlign: "center", padding: "0.25rem 0", margin: "0 0.125rem" },
+              day: { width: "2rem", height: "2rem", display: "flex", alignItems: "center", justifyContent: "center" },
+            }}
           />
         </PopoverContent>
       </Popover>
     </div>
   )
 }
+
 
 
 
