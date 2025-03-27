@@ -400,14 +400,41 @@ class DatabaseService {
       // Añadir timestamp de actualización
       updatedAttendance.updatedAt = new Date().toISOString()
 
+      // IMPORTANTE: Eliminar cualquier propiedad 'employees' que pueda estar causando el problema
+      const cleanedAttendance = { ...updatedAttendance }
+      if ("employees" in cleanedAttendance) {
+        delete cleanedAttendance.employees
+      }
+
       // Convertir automáticamente de camelCase a snake_case
-      const snakeCaseData = objectToSnakeCase(updatedAttendance)
+      const snakeCaseData = objectToSnakeCase(cleanedAttendance)
 
       // Registrar los datos exactos que se están enviando
       console.log("Datos enviados a Supabase para actualización:", snakeCaseData)
 
-      // MODIFICADO: Eliminada completamente la parte .select() para evitar el error
-      const { error } = await this.supabase.from("attendance").update(snakeCaseData).eq("id", id)
+      // Crear un objeto con solo los campos que queremos actualizar
+      // Esto evita enviar campos que podrían causar problemas
+      const updateFields = {
+        employee_id: snakeCaseData.employee_id,
+        date: snakeCaseData.date,
+        check_in: snakeCaseData.check_in,
+        check_out: snakeCaseData.check_out,
+        expected_check_in: snakeCaseData.expected_check_in,
+        expected_check_out: snakeCaseData.expected_check_out,
+        late_minutes: snakeCaseData.late_minutes,
+        early_departure_minutes: snakeCaseData.early_departure_minutes,
+        extra_minutes: snakeCaseData.extra_minutes,
+        total_minutes_worked: snakeCaseData.total_minutes_worked,
+        total_minutes_balance: snakeCaseData.total_minutes_balance,
+        is_holiday: snakeCaseData.is_holiday,
+        is_absent: snakeCaseData.is_absent,
+        is_justified: snakeCaseData.is_justified,
+        notes: snakeCaseData.notes,
+        updated_at: snakeCaseData.updated_at,
+      }
+
+      // Realizar la actualización con los campos específicos
+      const { error } = await this.supabase.from("attendance").update(updateFields).eq("id", id)
 
       if (error) {
         console.error("Error detallado de Supabase:", {
@@ -666,6 +693,8 @@ function calculateExpectedWorkday(expectedCheckIn: string, expectedCheckOut: str
 }
 
 export const dbService = new DatabaseService()
+
+
 
 
 
