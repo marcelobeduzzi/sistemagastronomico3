@@ -4,10 +4,11 @@ import { useState, useEffect } from "react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { CalendarIcon } from "lucide-react"
-import { DayPicker } from "react-day-picker"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
+import ReactDatePicker from "react-datepicker"
+import "react-datepicker/dist/react-datepicker.css"
 
 interface DatePickerProps {
   date: Date
@@ -18,52 +19,27 @@ interface DatePickerProps {
 export function DatePicker({ date, setDate, className }: DatePickerProps) {
   // Estado local para manejar la fecha
   const [selectedDate, setSelectedDate] = useState<Date>(date)
-  const [month, setMonth] = useState<Date>(date)
 
   // Actualizar el estado local cuando cambia la prop date
   useEffect(() => {
     setSelectedDate(date)
-    setMonth(date)
   }, [date])
 
   // Función para manejar el cambio de fecha de manera segura
-  const handleDateSelect = (newDate: Date | undefined) => {
+  const handleDateChange = (newDate: Date | null) => {
     if (newDate) {
-      // Importante: Crear una nueva fecha en UTC para evitar problemas de zona horaria
-      // Usamos UTC para asegurarnos de que la fecha sea exactamente la que el usuario seleccionó
-      const year = newDate.getUTCFullYear()
-      const month = newDate.getUTCMonth()
-      const day = newDate.getUTCDate()
-
-      // Crear la fecha con la hora fija a mediodía en UTC
-      const correctedDate = new Date(Date.UTC(year, month, day, 12, 0, 0))
+      // Crear una nueva fecha con la hora fija a mediodía para evitar problemas de zona horaria
+      // Importante: Usar el constructor de Date con año, mes, día específicos
+      const correctedDate = new Date(newDate.getFullYear(), newDate.getMonth(), newDate.getDate(), 12, 0, 0)
 
       console.log("Fecha seleccionada (original):", newDate.toISOString())
-      console.log("Fecha corregida (UTC):", correctedDate.toISOString())
-      console.log("Fecha local:", new Date(correctedDate).toLocaleString())
+      console.log("Fecha corregida:", correctedDate.toISOString())
+      console.log("Fecha local:", correctedDate.toLocaleString())
 
       setSelectedDate(correctedDate)
       setDate(correctedDate)
     }
   }
-
-  // Obtener el año y mes actual para el selector
-  const currentYear = new Date().getFullYear()
-  const years = Array.from({ length: 10 }, (_, i) => currentYear - 5 + i)
-  const months = [
-    "Enero",
-    "Febrero",
-    "Marzo",
-    "Abril",
-    "Mayo",
-    "Junio",
-    "Julio",
-    "Agosto",
-    "Septiembre",
-    "Octubre",
-    "Noviembre",
-    "Diciembre",
-  ]
 
   return (
     <div className={cn("grid gap-2", className)}>
@@ -79,101 +55,82 @@ export function DatePicker({ date, setDate, className }: DatePickerProps) {
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0 z-50" align="start">
-          <div className="p-3 border-b">
-            <div className="flex justify-between items-center gap-2">
-              <select
-                value={month.getMonth()}
-                onChange={(e) => {
-                  const newMonth = new Date(month)
-                  newMonth.setMonth(Number.parseInt(e.target.value))
-                  setMonth(newMonth)
-                }}
-                className="p-1 border rounded text-sm"
-              >
-                {months.map((monthName, index) => (
-                  <option key={monthName} value={index}>
-                    {monthName}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={month.getFullYear()}
-                onChange={(e) => {
-                  const newMonth = new Date(month)
-                  newMonth.setFullYear(Number.parseInt(e.target.value))
-                  setMonth(newMonth)
-                }}
-                className="p-1 border rounded text-sm"
-              >
-                {years.map((year) => (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <DayPicker
-            mode="single"
-            selected={selectedDate}
-            onSelect={handleDateSelect}
-            month={month}
-            onMonthChange={setMonth}
-            locale={es}
-            showOutsideDays={true}
-            fixedWeeks={true}
-            className="p-3"
-            // Importante: Usar UTC para evitar problemas de zona horaria
-            fromDate={new Date(Date.UTC(currentYear - 5, 0, 1))}
-            toDate={new Date(Date.UTC(currentYear + 5, 11, 31))}
-            // Deshabilitar la selección de días fuera del mes actual para evitar confusiones
-            disabled={{ before: undefined, after: undefined }}
-            modifiersClassNames={{
-              selected: "bg-primary text-primary-foreground",
-              today: "bg-accent text-accent-foreground",
-            }}
-            classNames={{
-              months: "flex flex-col",
-              month: "space-y-4",
-              caption: "flex justify-center pt-1 relative items-center",
-              caption_label: "hidden", // Ocultar el título del mes/año ya que tenemos selectores
-              nav: "space-x-1 flex items-center",
-              nav_button: cn("h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 border rounded"),
-              table: "w-full border-collapse space-y-1",
-              head_row: "flex",
-              head_cell: "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem]",
-              row: "flex w-full mt-2",
-              cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
-              day: cn(
-                "h-9 w-9 p-0 font-normal aria-selected:opacity-100 hover:bg-accent hover:text-accent-foreground rounded-md",
-              ),
-              day_selected:
-                "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
-              day_today: "bg-accent text-accent-foreground",
-              day_outside: "text-muted-foreground opacity-50",
-              day_disabled: "text-muted-foreground opacity-50",
-              day_hidden: "invisible",
-            }}
-          />
-          <div className="p-3 border-t">
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => {
-                const today = new Date()
-                const utcToday = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0, 0))
-                handleDateSelect(utcToday)
-                setMonth(utcToday)
-              }}
-            >
-              Hoy
-            </Button>
+          <div className="p-4">
+            <ReactDatePicker
+              selected={selectedDate}
+              onChange={handleDateChange}
+              inline
+              locale={es}
+              fixedHeight
+              showMonthDropdown
+              showYearDropdown
+              dropdownMode="select"
+              todayButton="Hoy"
+              dateFormat="dd/MM/yyyy"
+              calendarClassName="border-none"
+              renderCustomHeader={({
+                date,
+                changeYear,
+                changeMonth,
+                decreaseMonth,
+                increaseMonth,
+                prevMonthButtonDisabled,
+                nextMonthButtonDisabled,
+              }) => (
+                <div className="flex justify-between items-center px-2 py-2">
+                  <button
+                    onClick={decreaseMonth}
+                    disabled={prevMonthButtonDisabled}
+                    type="button"
+                    className="p-1 rounded-md border border-gray-300 hover:bg-gray-100"
+                  >
+                    {"<"}
+                  </button>
+
+                  <div className="flex space-x-2">
+                    <select
+                      value={date.getMonth()}
+                      onChange={({ target: { value } }) => changeMonth(Number.parseInt(value))}
+                      className="p-1 text-sm border rounded"
+                    >
+                      {es.localize?.months("standalone").map((month, i) => (
+                        <option key={month} value={i}>
+                          {month}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={date.getFullYear()}
+                      onChange={({ target: { value } }) => changeYear(Number.parseInt(value))}
+                      className="p-1 text-sm border rounded"
+                    >
+                      {Array.from({ length: 10 }, (_, i) => date.getFullYear() - 5 + i).map((year) => (
+                        <option key={year} value={year}>
+                          {year}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <button
+                    onClick={increaseMonth}
+                    disabled={nextMonthButtonDisabled}
+                    type="button"
+                    className="p-1 rounded-md border border-gray-300 hover:bg-gray-100"
+                  >
+                    {">"}
+                  </button>
+                </div>
+              )}
+            />
           </div>
         </PopoverContent>
       </Popover>
     </div>
   )
 }
+
 
 
 
