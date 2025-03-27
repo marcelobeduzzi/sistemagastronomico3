@@ -332,9 +332,9 @@ export default function AsistenciasPage() {
     },
     {
       id: "actions",
-      header: "Acciones",
+      header: () => <div className="text-center">Acciones</div>,
       cell: ({ row }) => (
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center justify-center space-x-2">
           <Dialog>
             <DialogTrigger asChild>
               <Button variant="ghost" size="sm">
@@ -925,3 +925,4 @@ export default function AsistenciasPage() {
     </DashboardLayout>
   )
 }
+

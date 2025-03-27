@@ -1,16 +1,10 @@
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { objectToCamelCase, objectToSnakeCase } from "./utils"
-import type {
-  Employee,
-  Attendance,
-  Payroll,
-  PayrollDetail,
-  DeliveryStats,
-  Audit,
-  AuditItem,
-  Billing,
-  Balance,
-} from "@/types"
+import { objectToCamelCase, objectToSnakeCase } from "./utils" // Import utility functions
+import type { Employee, Attendance, Payroll, PayrollDetail, Audit, Billing, Balance } from "@/types"
+
+interface AttendanceType {
+  [key: string]: any // Define the Attendance interface
+}
 
 class DatabaseService {
   private supabase = createClientComponentClient()
@@ -62,7 +56,7 @@ class DatabaseService {
       }
 
       // Convertir automáticamente de snake_case a camelCase
-      return (data || []).map(emp => objectToCamelCase(emp))
+      return (data || []).map((emp) => objectToCamelCase(emp))
     })
   }
 
@@ -70,7 +64,7 @@ class DatabaseService {
     const { data, error } = await this.supabase.from("employees").select("*").eq("id", id).single()
 
     if (error) throw error
-    
+
     // Convertir automáticamente de snake_case a camelCase
     return objectToCamelCase(data)
   }
@@ -79,7 +73,7 @@ class DatabaseService {
     try {
       // Add timestamps
       const now = new Date().toISOString()
-      
+
       // Convertir automáticamente de camelCase a snake_case
       const employeeData = objectToSnakeCase({
         ...employee,
@@ -116,13 +110,13 @@ class DatabaseService {
     // Convertir automáticamente de camelCase a snake_case
     const updateData = objectToSnakeCase({
       ...employee,
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     })
-    
+
     const { data, error } = await this.supabase.from("employees").update(updateData).eq("id", id).select().single()
 
     if (error) throw error
-    
+
     // Convertir automáticamente de snake_case a camelCase
     return objectToCamelCase(data)
   }
@@ -146,7 +140,7 @@ class DatabaseService {
         .order("date", { ascending: false })
 
       if (error) throw error
-      return (data || []).map(item => objectToCamelCase(item))
+      return (data || []).map((item) => objectToCamelCase(item))
     } catch (error) {
       console.error("Error al obtener asistencias:", error)
       throw error
@@ -181,7 +175,7 @@ class DatabaseService {
       .order("date", { ascending: false })
 
     if (error) throw error
-    return data.map(item => objectToCamelCase(item))
+    return data.map((item) => objectToCamelCase(item))
   }
 
   async createAttendance(attendance: Omit<Attendance, "id">) {
@@ -203,24 +197,24 @@ class DatabaseService {
           // Ausencia justificada: no hay descuento
           totalMinutesBalance = 0
         }
-        
+
         totalMinutesWorked = 0
         lateMinutes = 0
         earlyDepartureMinutes = 0
         extraMinutes = 0
-        
+
         // Asegurarse de que checkIn y checkOut sean null para ausencias
         attendance = {
           ...attendance,
           checkIn: null,
-          checkOut: null
+          checkOut: null,
         }
       } else {
         // Solo calcular estos valores si no es ausente
         if (attendance.expectedCheckIn && attendance.checkIn) {
           const expectedCheckIn = new Date(`2000-01-01T${attendance.expectedCheckIn}`)
           const actualCheckIn = new Date(`2000-01-01T${attendance.checkIn}`)
-          
+
           if (actualCheckIn > expectedCheckIn) {
             lateMinutes = Math.floor((actualCheckIn.getTime() - expectedCheckIn.getTime()) / 60000)
           }
@@ -229,7 +223,7 @@ class DatabaseService {
         if (attendance.expectedCheckOut && attendance.checkOut) {
           const expectedCheckOut = new Date(`2000-01-01T${attendance.expectedCheckOut}`)
           const actualCheckOut = new Date(`2000-01-01T${attendance.checkOut}`)
-          
+
           if (actualCheckOut < expectedCheckOut) {
             earlyDepartureMinutes = Math.floor((expectedCheckOut.getTime() - actualCheckOut.getTime()) / 60000)
           } else if (actualCheckOut > expectedCheckOut) {
@@ -246,9 +240,10 @@ class DatabaseService {
         }
 
         // Calcular la jornada laboral esperada
-        const expectedWorkday = attendance.expectedCheckIn && attendance.expectedCheckOut 
-          ? calculateExpectedWorkday(attendance.expectedCheckIn, attendance.expectedCheckOut)
-          : 480; // 8 horas por defecto
+        const expectedWorkday =
+          attendance.expectedCheckIn && attendance.expectedCheckOut
+            ? calculateExpectedWorkday(attendance.expectedCheckIn, attendance.expectedCheckOut)
+            : 480 // 8 horas por defecto
 
         // Aplicar reglas para días feriados o normales
         if (attendance.isHoliday) {
@@ -270,15 +265,15 @@ class DatabaseService {
         totalMinutesBalance,
         extraMinutes, // Nuevo campo para minutos extra
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
       }
 
       // Convertir automáticamente de camelCase a snake_case
       const attendanceData = objectToSnakeCase(attendanceWithCalculations)
-      
+
       // Registrar los datos exactos que se están enviando
       console.log("Datos enviados a Supabase:", attendanceData)
-      
+
       const { data, error } = await this.supabase.from("attendance").insert([attendanceData]).select().single()
 
       if (error) {
@@ -286,11 +281,11 @@ class DatabaseService {
           message: error.message,
           details: error.details,
           hint: error.hint,
-          code: error.code
+          code: error.code,
         })
         throw error
       }
-      
+
       return objectToCamelCase(data)
     } catch (error) {
       console.error("Error al crear asistencia:", error)
@@ -307,12 +302,12 @@ class DatabaseService {
         .select("*")
         .eq("id", id)
         .single()
-      
+
       if (fetchError) throw fetchError
-      
+
       // Combinar los datos actuales con las actualizaciones
       let updatedAttendance = { ...objectToCamelCase(currentAttendance), ...attendance }
-      
+
       // Si es ausente, establecer valores predeterminados
       if (updatedAttendance.isAbsent) {
         // Ausencia: solo descuento si no está justificada
@@ -323,7 +318,7 @@ class DatabaseService {
           // Ausencia justificada: no hay descuento
           updatedAttendance.totalMinutesBalance = 0
         }
-        
+
         updatedAttendance = {
           ...updatedAttendance,
           checkIn: null,
@@ -331,7 +326,7 @@ class DatabaseService {
           lateMinutes: 0,
           earlyDepartureMinutes: 0,
           extraMinutes: 0,
-          totalMinutesWorked: 0
+          totalMinutesWorked: 0,
         }
       } else {
         // Realizar los cálculos solo si no es ausente
@@ -340,11 +335,11 @@ class DatabaseService {
         let totalMinutesWorked = 0
         let totalMinutesBalance = 0
         let extraMinutes = 0
-        
+
         if (updatedAttendance.expectedCheckIn && updatedAttendance.checkIn) {
           const expectedCheckIn = new Date(`2000-01-01T${updatedAttendance.expectedCheckIn}`)
           const actualCheckIn = new Date(`2000-01-01T${updatedAttendance.checkIn}`)
-          
+
           if (actualCheckIn > expectedCheckIn) {
             lateMinutes = Math.floor((actualCheckIn.getTime() - expectedCheckIn.getTime()) / 60000)
           } else {
@@ -355,7 +350,7 @@ class DatabaseService {
         if (updatedAttendance.expectedCheckOut && updatedAttendance.checkOut) {
           const expectedCheckOut = new Date(`2000-01-01T${updatedAttendance.expectedCheckOut}`)
           const actualCheckOut = new Date(`2000-01-01T${updatedAttendance.checkOut}`)
-          
+
           if (actualCheckOut < expectedCheckOut) {
             earlyDepartureMinutes = Math.floor((expectedCheckOut.getTime() - actualCheckOut.getTime()) / 60000)
             extraMinutes = 0
@@ -377,9 +372,10 @@ class DatabaseService {
         }
 
         // Calcular la jornada laboral esperada
-        const expectedWorkday = updatedAttendance.expectedCheckIn && updatedAttendance.expectedCheckOut 
-          ? calculateExpectedWorkday(updatedAttendance.expectedCheckIn, updatedAttendance.expectedCheckOut)
-          : 480; // 8 horas por defecto
+        const expectedWorkday =
+          updatedAttendance.expectedCheckIn && updatedAttendance.expectedCheckOut
+            ? calculateExpectedWorkday(updatedAttendance.expectedCheckIn, updatedAttendance.expectedCheckOut)
+            : 480 // 8 horas por defecto
 
         // Aplicar reglas para días feriados o normales
         if (updatedAttendance.isHoliday) {
@@ -397,7 +393,7 @@ class DatabaseService {
           earlyDepartureMinutes,
           extraMinutes,
           totalMinutesWorked,
-          totalMinutesBalance
+          totalMinutesBalance,
         }
       }
 
@@ -406,15 +402,16 @@ class DatabaseService {
 
       // Convertir automáticamente de camelCase a snake_case
       const snakeCaseData = objectToSnakeCase(updatedAttendance)
-      
+
       // Registrar los datos exactos que se están enviando
       console.log("Datos enviados a Supabase para actualización:", snakeCaseData)
-      
+
+      // MODIFICADO: Cambiado select() a select("*") para evitar el error de employees
       const { data, error } = await this.supabase
         .from("attendance")
         .update(snakeCaseData)
         .eq("id", id)
-        .select()
+        .select("*")
         .single()
 
       if (error) {
@@ -422,11 +419,11 @@ class DatabaseService {
           message: error.message,
           details: error.details,
           hint: error.hint,
-          code: error.code
+          code: error.code,
         })
         throw error
       }
-      
+
       return objectToCamelCase(data)
     } catch (error) {
       console.error("Error al actualizar asistencia:", error)
@@ -456,7 +453,7 @@ class DatabaseService {
       .order("period_start", { ascending: false })
 
     if (error) throw error
-    return data.map(item => objectToCamelCase(item))
+    return data.map((item) => objectToCamelCase(item))
   }
 
   async createPayroll(payroll: Omit<Payroll, "id">) {
@@ -485,7 +482,7 @@ class DatabaseService {
       .order("date")
 
     if (error) throw error
-    return data.map(item => objectToCamelCase(item))
+    return data.map((item) => objectToCamelCase(item))
   }
 
   // Audit methods
@@ -498,7 +495,7 @@ class DatabaseService {
       .order("date", { ascending: false })
 
     if (error) throw error
-    return data.map(item => objectToCamelCase(item))
+    return data.map((item) => objectToCamelCase(item))
   }
 
   async createAudit(audit: Omit<Audit, "id">) {
@@ -519,7 +516,7 @@ class DatabaseService {
       .order("date", { ascending: false })
 
     if (error) throw error
-    return data.map(item => objectToCamelCase(item))
+    return data.map((item) => objectToCamelCase(item))
   }
 
   async createBilling(billing: Omit<Billing, "id">) {
@@ -540,7 +537,7 @@ class DatabaseService {
       .order("date")
 
     if (error) throw error
-    return data.map(item => objectToCamelCase(item))
+    return data.map((item) => objectToCamelCase(item))
   }
 
   async createBalance(balance: Omit<Balance, "id">) {
@@ -636,13 +633,10 @@ class DatabaseService {
   async checkTableStructure(tableName: string) {
     try {
       // Consultar una fila para ver la estructura
-      const { data, error } = await this.supabase
-        .from(tableName)
-        .select('*')
-        .limit(1)
-      
+      const { data, error } = await this.supabase.from(tableName).select("*").limit(1)
+
       if (error) throw error
-      
+
       if (data && data.length > 0) {
         console.log(`Estructura de la tabla ${tableName}:`, Object.keys(data[0]))
         return Object.keys(data[0])
@@ -665,3 +659,4 @@ function calculateExpectedWorkday(expectedCheckIn: string, expectedCheckOut: str
 }
 
 export const dbService = new DatabaseService()
+
