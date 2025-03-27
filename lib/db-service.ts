@@ -406,12 +406,14 @@ class DatabaseService {
       // Registrar los datos exactos que se están enviando
       console.log("Datos enviados a Supabase para actualización:", snakeCaseData)
 
-      // MODIFICADO: Cambiado select() a select("*") para evitar el error de employees
+      // MODIFICADO: Eliminada la selección de relaciones para evitar el error de employees
       const { data, error } = await this.supabase
         .from("attendance")
         .update(snakeCaseData)
         .eq("id", id)
-        .select("*")
+        .select(
+          "id, employee_id, date, check_in, check_out, expected_check_in, expected_check_out, late_minutes, early_departure_minutes, extra_minutes, total_minutes_worked, total_minutes_balance, is_holiday, is_absent, is_justified, notes, created_at, updated_at",
+        )
         .single()
 
       if (error) {
@@ -659,4 +661,6 @@ function calculateExpectedWorkday(expectedCheckIn: string, expectedCheckOut: str
 }
 
 export const dbService = new DatabaseService()
+
+
 
