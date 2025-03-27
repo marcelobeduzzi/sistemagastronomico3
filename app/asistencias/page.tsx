@@ -23,7 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { DatePicker } from "@/components/date-picker"
+import { SimpleDatePicker } from "@/components/simple-date-picker"
 import { StatusBadge } from "@/components/status-badge"
 import { useToast } from "@/components/ui/use-toast"
 
@@ -512,7 +512,7 @@ export default function AsistenciasPage() {
 
                   <div className="space-y-2">
                     <Label htmlFor="date">Fecha</Label>
-                    <DatePicker
+                    <SimpleDatePicker
                       date={new Date(newAttendance.date)}
                       setDate={(date) => {
                         // Crear una nueva fecha con la hora fija a mediodía para evitar problemas de zona horaria
@@ -920,7 +920,7 @@ export default function AsistenciasPage() {
             <div className="flex items-center mb-4 space-x-4">
               <div className="flex items-center space-x-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
-                <DatePicker date={selectedDate} setDate={handleDateChange} />
+                <SimpleDatePicker date={selectedDate} setDate={handleDateChange} />
               </div>
 
               <div className="flex-1 max-w-sm">
@@ -959,6 +959,8 @@ export default function AsistenciasPage() {
     </DashboardLayout>
   )
 }
+
+
 
 
 
