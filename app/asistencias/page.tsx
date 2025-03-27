@@ -34,7 +34,7 @@ export default function AsistenciasPage() {
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     // Crear una fecha con la hora fija a mediodía para evitar problemas de zona horaria
     const today = new Date()
-    return new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0, 0)
+    return new Date(today.getFullYear(), today.getMonth(), today.getDate())
   })
   const [selectedEmployee, setSelectedEmployee] = useState<string>("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -70,8 +70,12 @@ export default function AsistenciasPage() {
         setEmployees(employeeData)
 
         // Obtener asistencias
-        // Importante: Asegurarnos de que la fecha se formatea correctamente
-        const formattedDate = selectedDate.toISOString().split("T")[0]
+        // Formatear la fecha manualmente para evitar problemas de zona horaria
+        const year = selectedDate.getFullYear()
+        const month = String(selectedDate.getMonth() + 1).padStart(2, "0")
+        const day = String(selectedDate.getDate()).padStart(2, "0")
+        const formattedDate = `${year}-${month}-${day}`
+
         console.log("Fecha formateada para consulta:", formattedDate)
 
         const attendanceData = await dbService.getAttendances({
@@ -124,7 +128,13 @@ export default function AsistenciasPage() {
       }
     })
 
-    exportToCSV(data, `asistencias_${selectedDate.toISOString().split("T")[0]}`)
+    // Formatear la fecha manualmente para el nombre del archivo
+    const year = selectedDate.getFullYear()
+    const month = String(selectedDate.getMonth() + 1).padStart(2, "0")
+    const day = String(selectedDate.getDate()).padStart(2, "0")
+    const formattedDate = `${year}-${month}-${day}`
+
+    exportToCSV(data, `asistencias_${formattedDate}`)
   }
 
   const handleEmployeeChange = (employeeId: string) => {
@@ -514,13 +524,17 @@ export default function AsistenciasPage() {
                     <SimpleDatePicker
                       date={new Date(newAttendance.date)}
                       setDate={(date) => {
-                        console.log("Fecha recibida del selector:", date.toISOString())
+                        // Formatear la fecha manualmente para evitar problemas de zona horaria
+                        const year = date.getFullYear()
+                        const month = String(date.getMonth() + 1).padStart(2, "0")
+                        const day = String(date.getDate()).padStart(2, "0")
+                        const formattedDate = `${year}-${month}-${day}`
 
-                        // Usar directamente la fecha del selector sin ajustes adicionales
-                        // La fecha ya viene con la hora fijada a mediodía UTC desde el componente
+                        console.log("Fecha formateada manualmente:", formattedDate)
+
                         setNewAttendance((prev) => ({
                           ...prev,
-                          date: date.toISOString().split("T")[0],
+                          date: formattedDate,
                         }))
                       }}
                     />
@@ -954,6 +968,8 @@ export default function AsistenciasPage() {
     </DashboardLayout>
   )
 }
+
+
 
 
 

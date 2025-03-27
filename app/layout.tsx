@@ -1,3 +1,4 @@
+// Asegurarse de que el CSS de react-datepicker esté incluido
 import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
@@ -17,7 +18,6 @@ export const metadata: Metadata = {
       { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
     ],
     apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
-    // Se eliminó la referencia al site.webmanifest que causaba el error 401
   },
 }
 
@@ -43,5 +43,7 @@ export default function RootLayout({
     </html>
   )
 }
+
+
 
 
