@@ -519,13 +519,13 @@ export default function AsistenciasPage() {
                         const year = date.getFullYear()
                         const month = date.getMonth()
                         const day = date.getDate()
-                        
+
                         const correctedDate = new Date(year, month, day, 12, 0, 0)
-                        
+
                         // Actualizar el estado con la fecha formateada
                         setNewAttendance((prev) => ({
                           ...prev,
-                          date: correctedDate.toISOString().split('T')[0],
+                          date: correctedDate.toISOString().split("T")[0],
                         }))
                       }}
                     />
@@ -639,13 +639,7 @@ export default function AsistenciasPage() {
                       </div>
                     </div>
 
-                    <div className="gri  100)
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">\
+                    <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="lateMinutes">Minutos Tarde</Label>
                         <Input
@@ -962,9 +956,11 @@ export default function AsistenciasPage() {
           </CardContent>
         </Card>
       </div>
-  </DashboardLayout>
+    </DashboardLayout>
   )
 }
+
+
 
 
 
