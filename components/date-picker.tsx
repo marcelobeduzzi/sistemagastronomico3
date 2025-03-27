@@ -22,15 +22,30 @@ export function DatePicker({ date, setDate, className }: DatePickerProps) {
 
   // Actualizar el estado local cuando cambia la prop date
   useEffect(() => {
-    setSelectedDate(date)
-    setMonth(date)
+    // Asegurarse de que la fecha está correctamente ajustada
+    const year = date.getFullYear()
+    const month = date.getMonth()
+    const day = date.getDate()
+
+    // Crear la fecha usando UTC y luego convertirla a local
+    const correctedDate = new Date(Date.UTC(year, month, day, 12, 0, 0))
+
+    setSelectedDate(correctedDate)
+    setMonth(correctedDate)
   }, [date])
 
   // Función para manejar el cambio de fecha de manera segura
   const handleDateSelect = (newDate: Date | undefined) => {
     if (newDate) {
       // Crear una nueva fecha con la hora fija a mediodía para evitar problemas de zona horaria
-      const correctedDate = new Date(newDate.getFullYear(), newDate.getMonth(), newDate.getDate(), 12, 0, 0)
+      // Usamos UTC para evitar cualquier desplazamiento de zona horaria
+      const year = newDate.getFullYear()
+      const month = newDate.getMonth()
+      const day = newDate.getDate()
+
+      // Crear la fecha usando UTC y luego convertirla a local
+      const correctedDate = new Date(Date.UTC(year, month, day, 12, 0, 0))
+
       setSelectedDate(correctedDate)
       setDate(correctedDate)
     }
@@ -153,6 +168,8 @@ export function DatePicker({ date, setDate, className }: DatePickerProps) {
     </div>
   )
 }
+
+
 
 
 

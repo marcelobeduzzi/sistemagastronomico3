@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from "react"
@@ -34,7 +35,7 @@ export default function AsistenciasPage() {
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     // Crear una fecha con la hora fija a mediodía para evitar problemas de zona horaria
     const today = new Date()
-    return new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0, 0)
+    return new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0, 0))
   })
   const [selectedEmployee, setSelectedEmployee] = useState<string>("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -496,9 +497,17 @@ export default function AsistenciasPage() {
                     <DatePicker
                       date={new Date(newAttendance.date)}
                       setDate={(date) => {
+                        // Asegurarse de obtener la fecha correcta en formato ISO
+                        const year = date.getFullYear()
+                        const month = date.getMonth()
+                        const day = date.getDate()
+
+                        // Crear fecha UTC para evitar problemas de zona horaria
+                        const correctedDate = new Date(Date.UTC(year, month, day, 12, 0, 0))
+
                         setNewAttendance((prev) => ({
                           ...prev,
-                          date: date.toISOString().split("T")[0],
+                          date: correctedDate.toISOString().split("T")[0],
                         }))
                       }}
                     />
@@ -932,6 +941,7 @@ export default function AsistenciasPage() {
     </DashboardLayout>
   )
 }
+
 
 
 
