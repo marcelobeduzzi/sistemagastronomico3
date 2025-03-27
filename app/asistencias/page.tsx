@@ -91,9 +91,17 @@ export default function AsistenciasPage() {
 
   // Función para manejar el cambio de fecha
   const handleDateChange = (date: Date) => {
-    // Usar la fecha tal como viene, sin manipulaciones adicionales
-    console.log("Fecha seleccionada:", date.toISOString())
-    setSelectedDate(date)
+    // Crear una copia de la fecha para evitar referencias
+    const newDate = new Date(date)
+
+    // Imprimir información de depuración
+    console.log("Fecha seleccionada (local):", newDate.toLocaleString())
+    console.log("Día:", newDate.getDate())
+    console.log("Mes:", newDate.getMonth() + 1)
+    console.log("Año:", newDate.getFullYear())
+
+    // Actualizar el estado con la nueva fecha
+    setSelectedDate(newDate)
   }
 
   const handleExportCSV = () => {
@@ -946,6 +954,8 @@ export default function AsistenciasPage() {
     </DashboardLayout>
   )
 }
+
+
 
 
 

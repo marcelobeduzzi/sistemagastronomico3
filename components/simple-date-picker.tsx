@@ -1,8 +1,10 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
-import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 
 interface SimpleDatePickerProps {
@@ -12,98 +14,93 @@ interface SimpleDatePickerProps {
 }
 
 export function SimpleDatePicker({ date, setDate, className }: SimpleDatePickerProps) {
-  // Estados para día, mes y año
-  const [day, setDay] = useState(date.getDate().toString().padStart(2, "0"))
-  const [month, setMonth] = useState((date.getMonth() + 1).toString().padStart(2, "0"))
-  const [year, setYear] = useState(date.getFullYear().toString())
+  // Función para formatear la fecha en formato local DD/MM/YYYY
+  const formatLocalDate = (date: Date): string => {
+    const day = date.getDate().toString().padStart(2, "0")
+    const month = (date.getMonth() + 1).toString().padStart(2, "0")
+    const year = date.getFullYear()
+    return `${day}/${month}/${year}`
+  }
 
-  // Actualizar estados cuando cambia la fecha externa
+  // Función para parsear una fecha en formato DD/MM/YYYY
+  const parseLocalDate = (dateStr: string): Date | null => {
+    const parts = dateStr.split("/")
+    if (parts.length !== 3) return null
+
+    const day = Number.parseInt(parts[0], 10)
+    const month = Number.parseInt(parts[1], 10) - 1 // Meses en JS son 0-11
+    const year = Number.parseInt(parts[2], 10)
+
+    if (isNaN(day) || isNaN(month) || isNaN(year)) return null
+
+    // Crear fecha local sin manipulación de zona horaria
+    const newDate = new Date(year, month, day)
+
+    // Verificar que la fecha es válida
+    if (newDate.getDate() !== day || newDate.getMonth() !== month || newDate.getFullYear() !== year) {
+      return null // Fecha inválida (como 31 de febrero)
+    }
+
+    return newDate
+  }
+
+  // Estado para el valor del input
+  const [inputValue, setInputValue] = useState(formatLocalDate(date))
+
+  // Actualizar el input cuando cambia la fecha externa
   useEffect(() => {
-    setDay(date.getDate().toString().padStart(2, "0"))
-    setMonth((date.getMonth() + 1).toString().padStart(2, "0"))
-    setYear(date.getFullYear().toString())
+    setInputValue(formatLocalDate(date))
   }, [date])
 
-  // Actualizar la fecha cuando cambia alguno de los inputs
-  const updateDate = () => {
-    try {
-      // Validar valores
-      const dayNum = Number.parseInt(day)
-      const monthNum = Number.parseInt(month)
-      const yearNum = Number.parseInt(year)
+  // Manejar cambio en el input
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputValue(e.target.value)
+  }
 
-      if (isNaN(dayNum) || isNaN(monthNum) || isNaN(yearNum)) {
-        return
-      }
-
-      // Crear nueva fecha (con hora fija a mediodía)
-      const newDate = new Date(yearNum, monthNum - 1, dayNum, 12, 0, 0)
-
-      // Verificar si la fecha es válida
-      if (newDate.getDate() !== dayNum || newDate.getMonth() !== monthNum - 1 || newDate.getFullYear() !== yearNum) {
-        return // Fecha inválida (como 31 de febrero)
-      }
-
+  // Manejar cuando el input pierde el foco
+  const handleBlur = () => {
+    const newDate = parseLocalDate(inputValue)
+    if (newDate) {
       setDate(newDate)
-    } catch (error) {
-      console.error("Error al actualizar fecha:", error)
+    } else {
+      // Si la fecha es inválida, restaurar al valor anterior
+      setInputValue(formatLocalDate(date))
+    }
+  }
+
+  // Manejar cuando se presiona Enter
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      handleBlur()
     }
   }
 
   // Establecer fecha a hoy
   const setToday = () => {
     const today = new Date()
-    setDay(today.getDate().toString().padStart(2, "0"))
-    setMonth((today.getMonth() + 1).toString().padStart(2, "0"))
-    setYear(today.getFullYear().toString())
-    setDate(new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0, 0))
+    setDate(today)
+    setInputValue(formatLocalDate(today))
   }
 
   return (
     <div className={cn("flex items-center space-x-2", className)}>
-      <div className="flex space-x-1">
-        <Input
-          type="text"
-          value={day}
-          onChange={(e) => {
-            setDay(e.target.value.replace(/\D/g, "").slice(0, 2))
-          }}
-          onBlur={updateDate}
-          className="w-12 px-2 text-center"
-          placeholder="DD"
-          maxLength={2}
-        />
-        <span className="flex items-center">/</span>
-        <Input
-          type="text"
-          value={month}
-          onChange={(e) => {
-            setMonth(e.target.value.replace(/\D/g, "").slice(0, 2))
-          }}
-          onBlur={updateDate}
-          className="w-12 px-2 text-center"
-          placeholder="MM"
-          maxLength={2}
-        />
-        <span className="flex items-center">/</span>
-        <Input
-          type="text"
-          value={year}
-          onChange={(e) => {
-            setYear(e.target.value.replace(/\D/g, "").slice(0, 4))
-          }}
-          onBlur={updateDate}
-          className="w-20 px-2 text-center"
-          placeholder="AAAA"
-          maxLength={4}
-        />
-      </div>
-      <Button type="button" variant="outline" size="sm" onClick={setToday} className="text-xs">
+      <Input
+        type="text"
+        value={inputValue}
+        onChange={handleInputChange}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        placeholder="DD/MM/AAAA"
+        className="w-[140px]"
+      />
+      <Button type="button" variant="outline" size="sm" onClick={setToday}>
         Hoy
       </Button>
     </div>
   )
 }
+
+
 
 
 

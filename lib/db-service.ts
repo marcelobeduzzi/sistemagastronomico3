@@ -129,15 +129,30 @@ class DatabaseService {
 
   // Attendance methods
   // NUEVO: Obtener todas las asistencias con información del empleado
-  async getAttendances() {
+  async getAttendances({ date, employeeId }: { date: string; employeeId?: string }) {
     try {
-      const { data, error } = await this.supabase
-        .from("attendance")
-        .select(`
-          *,
-          employees (id, first_name, last_name)
-        `)
-        .order("date", { ascending: false })
+      console.log("Consultando asistencias para fecha:", date)
+
+      // Construir la consulta base
+      let query = this.supabase.from("attendance").select(`
+        *,
+        employees (id, first_name, last_name)
+      `)
+
+      // Filtrar por fecha
+      if (date) {
+        query = query.eq("date", date)
+      }
+
+      // Filtrar por empleado si se proporciona
+      if (employeeId) {
+        query = query.eq("employee_id", employeeId)
+      }
+
+      // Ordenar por fecha descendente
+      query = query.order("date", { ascending: false })
+
+      const { data, error } = await query
 
       if (error) throw error
       return (data || []).map((item) => objectToCamelCase(item))
@@ -693,6 +708,8 @@ function calculateExpectedWorkday(expectedCheckIn: string, expectedCheckOut: str
 }
 
 export const dbService = new DatabaseService()
+
+
 
 
 
