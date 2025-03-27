@@ -7,10 +7,6 @@ import { CalendarIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
-// Importar los estilos directamente en el componente
-// Comentamos esta línea porque ahora cargamos los estilos desde el CDN en layout.tsx
-// import "react-datepicker/dist/react-datepicker.css"
-
 // Registrar el idioma español
 registerLocale("es", es)
 
@@ -78,6 +74,8 @@ export function CustomDatePicker({ date, setDate, className }: CustomDatePickerP
     </div>
   )
 }
+
+
 
 
 
