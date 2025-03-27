@@ -1,6 +1,7 @@
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { objectToCamelCase, objectToSnakeCase } from "./utils" // Import utility functions
 import type { Employee, Attendance, Payroll, PayrollDetail, Audit, Billing, Balance } from "@/types"
+import type { Liquidation } from "@/types"
 
 interface AttendanceType {
   [key: string]: any // Define the Attendance interface
@@ -537,6 +538,128 @@ class DatabaseService {
     return objectToCamelCase(data)
   }
 
+  // Método para obtener nóminas por período (mes/año)
+  async getPayrollsByPeriod(month: number, year: number, isPaid = false) {
+    try {
+      const { data, error } = await this.supabase
+        .from("payroll")
+        .select("*, details:payroll_details(*)")
+        .eq("month", month)
+        .eq("year", year)
+        .eq("is_paid", isPaid)
+        .order("created_at", { ascending: false })
+
+      if (error) throw error
+
+      // Convertir de snake_case a camelCase
+      return (data || []).map((item) => {
+        const payroll = objectToCamelCase(item)
+
+        // Convertir también los detalles
+        if (payroll.details && Array.isArray(payroll.details)) {
+          payroll.details = payroll.details.map((detail: any) => objectToCamelCase(detail))
+        }
+
+        return payroll
+      })
+    } catch (error) {
+      console.error("Error al obtener nóminas:", error)
+      throw error
+    }
+  }
+
+  // Método para obtener liquidaciones
+  async getLiquidations(isPaid = false) {
+    try {
+      const { data, error } = await this.supabase
+        .from("liquidations")
+        .select("*")
+        .eq("is_paid", isPaid)
+        .order("created_at", { ascending: false })
+
+      if (error) throw error
+
+      // Convertir de snake_case a camelCase
+      return (data || []).map((item) => objectToCamelCase(item))
+    } catch (error) {
+      console.error("Error al obtener liquidaciones:", error)
+      throw error
+    }
+  }
+
+  // Método para actualizar una nómina
+  async updatePayroll(id: string, payroll: Partial<Payroll>) {
+    try {
+      // Convertir de camelCase a snake_case
+      const payrollData = objectToSnakeCase({
+        ...payroll,
+        updated_at: new Date().toISOString(),
+      })
+
+      const { data, error } = await this.supabase.from("payroll").update(payrollData).eq("id", id).select().single()
+
+      if (error) throw error
+
+      // Convertir de snake_case a camelCase
+      return objectToCamelCase(data)
+    } catch (error) {
+      console.error("Error al actualizar nómina:", error)
+      throw error
+    }
+  }
+
+  // Método para actualizar una liquidación
+  async updateLiquidation(id: string, liquidation: Partial<Liquidation>) {
+    try {
+      // Convertir de camelCase a snake_case
+      const liquidationData = objectToSnakeCase({
+        ...liquidation,
+        updated_at: new Date().toISOString(),
+      })
+
+      const { data, error } = await this.supabase
+        .from("liquidations")
+        .update(liquidationData)
+        .eq("id", id)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      // Convertir de snake_case a camelCase
+      return objectToCamelCase(data)
+    } catch (error) {
+      console.error("Error al actualizar liquidación:", error)
+      throw error
+    }
+  }
+
+  // Método para generar nóminas
+  async generatePayrolls(month: number, year: number) {
+    try {
+      // Este método debería llamar a una función del servidor que genere las nóminas
+      // Para este ejemplo, haremos una llamada a un endpoint específico
+
+      const response = await fetch("/api/payroll/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ month, year }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || "Error al generar nóminas")
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error("Error al generar nóminas:", error)
+      throw error
+    }
+  }
+
   // Delivery stats methods
   async getDeliveryStats(startDate: Date, endDate: Date) {
     const { data, error } = await this.supabase
@@ -724,6 +847,8 @@ function calculateExpectedWorkday(expectedCheckIn: string, expectedCheckOut: str
 }
 
 export const dbService = new DatabaseService()
+
+
 
 
 

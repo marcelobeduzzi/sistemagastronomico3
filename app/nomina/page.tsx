@@ -4,132 +4,202 @@ import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/app/dashboard-layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DataTable } from "@/components/data-table"
 import { dbService } from "@/lib/db-service"
-import { exportToCSV, formatCurrency, formatDate, generatePayslip } from "@/lib/export-utils"
-import type { Payroll, Employee } from "@/types"
-import type { ColumnDef } from "@tanstack/react-table"
-import { Download, FileText, Printer, Search, Check, X, Calendar, RefreshCw } from "lucide-react"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Input } from "@/components/ui/input"
+import { formatCurrency, formatDate, generatePayslip } from "@/lib/export-utils"
+import { useToast } from "@/components/ui/use-toast"
+import { Download, RefreshCw, CheckCircle, FileText, Calendar } from "lucide-react"
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
+import { StatusBadge } from "@/components/status-badge"
+import type { ColumnDef } from "@tanstack/react-table"
+import type { Employee, Payroll, Liquidation } from "@/types"
 
 export default function NominaPage() {
+  const [activeTab, setActiveTab] = useState("pendientes")
   const [payrolls, setPayrolls] = useState<Payroll[]>([])
+  const [liquidations, setLiquidations] = useState<Liquidation[]>([])
+  const [historyPayrolls, setHistoryPayrolls] = useState<Payroll[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
-  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1)
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear())
   const [isLoading, setIsLoading] = useState(true)
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
+  const [isGeneratingPayrolls, setIsGeneratingPayrolls] = useState(false)
   const [selectedPayroll, setSelectedPayroll] = useState<Payroll | null>(null)
-  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null)
-  const [isGenerating, setIsGenerating] = useState(false)
+  const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
+  const { toast } = useToast()
+
+  // Estados para el diálogo de pago
+  const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split("T")[0])
+  const [paymentMethod, setPaymentMethod] = useState<string>("efectivo")
+  const [paymentReference, setPaymentReference] = useState<string>("")
+  const [isHandSalaryPaid, setIsHandSalaryPaid] = useState(false)
+  const [isBankSalaryPaid, setIsBankSalaryPaid] = useState(false)
 
   useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true)
-      try {
-        // Obtener nóminas del mes y año seleccionados
-        const payrollData = await dbService.getPayrolls({
-          month: selectedMonth,
-          year: selectedYear,
-        })
-        setPayrolls(payrollData)
+    loadData()
+  }, [selectedMonth, selectedYear, activeTab])
 
-        // Obtener todos los empleados para referencias
-        const employeeData = await dbService.getEmployees()
-        setEmployees(employeeData)
-      } catch (error) {
-        console.error("Error al cargar datos de nómina:", error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    fetchData()
-  }, [selectedMonth, selectedYear])
-
-  const handleGeneratePayroll = async () => {
-    setIsGenerating(true)
+  const loadData = async () => {
+    setIsLoading(true)
     try {
-      // Generar nómina para el mes y año seleccionados
-      const newPayrolls = await dbService.generateMonthlyPayroll(selectedMonth, selectedYear)
+      // Cargar empleados
+      const employeesData = await dbService.getEmployees()
+      setEmployees(employeesData)
 
-      // Actualizar la lista de nóminas
-      setPayrolls((prev) => {
-        // Filtrar las nóminas existentes para el mes y año seleccionados
-        const filtered = prev.filter((p) => !(p.month === selectedMonth && p.year === selectedYear))
-        // Agregar las nuevas nóminas
-        return [...filtered, ...newPayrolls]
-      })
+      // Cargar nóminas según la pestaña activa
+      if (activeTab === "pendientes" || activeTab === "liquidaciones") {
+        // Cargar nóminas pendientes del mes seleccionado
+        const payrollsData = await dbService.getPayrollsByPeriod(selectedMonth, selectedYear, false)
+        setPayrolls(payrollsData)
 
-      alert(`Se ha generado la nómina para ${selectedMonth}/${selectedYear} correctamente.`)
+        // Cargar liquidaciones pendientes
+        const liquidationsData = await dbService.getLiquidations(false)
+        setLiquidations(liquidationsData)
+      } else if (activeTab === "historial") {
+        // Cargar historial de nóminas pagadas
+        const historyData = await dbService.getPayrollsByPeriod(selectedMonth, selectedYear, true)
+        setHistoryPayrolls(historyData)
+      }
     } catch (error) {
-      console.error("Error al generar nómina:", error)
-      alert("Error al generar la nómina. Por favor, intente nuevamente.")
+      console.error("Error al cargar datos:", error)
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los datos. Intente nuevamente.",
+        variant: "destructive",
+      })
     } finally {
-      setIsGenerating(false)
+      setIsLoading(false)
     }
   }
 
-  const handleUpdatePayrollStatus = async (id: string, field: "isPaidHand" | "isPaidBank", value: boolean) => {
+  const handleGeneratePayrolls = async () => {
+    setIsGeneratingPayrolls(true)
+    try {
+      // Llamar al servicio para generar nóminas
+      await dbService.generatePayrolls(selectedMonth, selectedYear)
+
+      toast({
+        title: "Nóminas generadas",
+        description: "Las nóminas han sido generadas correctamente.",
+      })
+
+      // Recargar datos
+      loadData()
+    } catch (error) {
+      console.error("Error al generar nóminas:", error)
+      toast({
+        title: "Error",
+        description: "No se pudieron generar las nóminas. Intente nuevamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsGeneratingPayrolls(false)
+    }
+  }
+
+  const handlePaymentConfirmation = async () => {
+    if (!selectedPayroll) return
+
     try {
       // Actualizar el estado de pago de la nómina
-      const updatedPayroll = await dbService.updatePayroll(id, {
-        [field]: value,
-        ...(value && field === "isPaidHand" ? { handPaymentDate: new Date().toISOString().split("T")[0] } : {}),
-        ...(value && field === "isPaidBank" ? { bankPaymentDate: new Date().toISOString().split("T")[0] } : {}),
+      const updatedPayroll = {
+        ...selectedPayroll,
+        handSalaryPaid: isHandSalaryPaid,
+        bankSalaryPaid: isBankSalaryPaid,
+        isPaid: isHandSalaryPaid && isBankSalaryPaid,
+        paymentDate: isHandSalaryPaid && isBankSalaryPaid ? paymentDate : null,
+        paymentMethod: paymentMethod,
+        paymentReference: paymentReference,
+      }
+
+      await dbService.updatePayroll(selectedPayroll.id, updatedPayroll)
+
+      toast({
+        title: "Pago confirmado",
+        description: "El estado de pago ha sido actualizado correctamente.",
       })
 
-      if (updatedPayroll) {
-        // Actualizar la lista de nóminas
-        setPayrolls((prev) => prev.map((p) => (p.id === id ? updatedPayroll : p)))
-      }
+      // Cerrar diálogo y recargar datos
+      setIsPaymentDialogOpen(false)
+      loadData()
     } catch (error) {
-      console.error("Error al actualizar estado de pago:", error)
-      alert("Error al actualizar el estado de pago. Por favor, intente nuevamente.")
+      console.error("Error al confirmar pago:", error)
+      toast({
+        title: "Error",
+        description: "No se pudo confirmar el pago. Intente nuevamente.",
+        variant: "destructive",
+      })
     }
   }
 
-  const handleExportCSV = () => {
-    // Preparar datos para exportar
-    const data = payrolls.map((payroll) => {
+  const handleExportPayslip = async (payroll: Payroll) => {
+    try {
+      // Obtener datos del empleado
       const employee = employees.find((e) => e.id === payroll.employeeId)
-      return {
-        Empleado: employee ? `${employee.firstName} ${employee.lastName}` : "Desconocido",
-        Documento: employee?.documentId || "",
-        Cargo: employee?.position || "",
-        Local: employee?.local || "",
-        "Sueldo Base": payroll.baseSalary,
-        "Sueldo Banco": payroll.bankSalary,
-        Deducciones: payroll.deductions,
-        Adiciones: payroll.additions,
-        "Sueldo Final Mano": payroll.finalHandSalary,
-        "Sueldo Total": payroll.totalSalary,
-        "Pagado Mano": payroll.isPaidHand ? "Sí" : "No",
-        "Pagado Banco": payroll.isPaidBank ? "Sí" : "No",
-        "Fecha Pago Mano": formatDate(payroll.handPaymentDate),
-        "Fecha Pago Banco": formatDate(payroll.bankPaymentDate),
+
+      if (!employee) {
+        toast({
+          title: "Error",
+          description: "No se encontró información del empleado.",
+          variant: "destructive",
+        })
+        return
       }
-    })
 
-    exportToCSV(data, `nomina_${selectedMonth}_${selectedYear}`)
-  }
+      // Generar recibo de sueldo
+      generatePayslip(payroll, employee)
 
-  const handlePrintPayslip = () => {
-    if (selectedPayroll && selectedEmployee) {
-      generatePayslip(selectedPayroll, selectedEmployee)
+      toast({
+        title: "Recibo generado",
+        description: "El recibo de sueldo ha sido generado correctamente.",
+      })
+    } catch (error) {
+      console.error("Error al generar recibo:", error)
+      toast({
+        title: "Error",
+        description: "No se pudo generar el recibo. Intente nuevamente.",
+        variant: "destructive",
+      })
     }
   }
 
-  const columns: ColumnDef<Payroll>[] = [
+  const handlePayLiquidation = async (liquidation: Liquidation) => {
+    try {
+      // Marcar liquidación como pagada
+      await dbService.updateLiquidation(liquidation.id, { isPaid: true, paymentDate: new Date().toISOString() })
+
+      toast({
+        title: "Liquidación pagada",
+        description: "La liquidación ha sido marcada como pagada.",
+      })
+
+      // Recargar datos
+      loadData()
+    } catch (error) {
+      console.error("Error al pagar liquidación:", error)
+      toast({
+        title: "Error",
+        description: "No se pudo procesar el pago de la liquidación. Intente nuevamente.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Columnas para la tabla de nóminas pendientes
+  const pendingPayrollColumns: ColumnDef<Payroll>[] = [
     {
       accessorKey: "employeeId",
       header: "Empleado",
@@ -139,9 +209,25 @@ export default function NominaPage() {
       },
     },
     {
-      accessorKey: "baseSalary",
-      header: "Sueldo Base",
-      cell: ({ row }) => formatCurrency(row.original.baseSalary),
+      accessorKey: "period",
+      header: "Período",
+      cell: ({ row }) => {
+        const monthNames = [
+          "Enero",
+          "Febrero",
+          "Marzo",
+          "Abril",
+          "Mayo",
+          "Junio",
+          "Julio",
+          "Agosto",
+          "Septiembre",
+          "Octubre",
+          "Noviembre",
+          "Diciembre",
+        ]
+        return `${monthNames[row.original.month - 1]} ${row.original.year}`
+      },
     },
     {
       accessorKey: "bankSalary",
@@ -149,315 +235,673 @@ export default function NominaPage() {
       cell: ({ row }) => formatCurrency(row.original.bankSalary),
     },
     {
-      accessorKey: "deductions",
-      header: "Deducciones",
-      cell: ({ row }) => formatCurrency(row.original.deductions),
-    },
-    {
-      accessorKey: "additions",
-      header: "Adiciones",
-      cell: ({ row }) => formatCurrency(row.original.additions),
+      accessorKey: "handSalary",
+      header: "Sueldo en Mano",
+      cell: ({ row }) => formatCurrency(row.original.handSalary),
     },
     {
       accessorKey: "finalHandSalary",
-      header: "Sueldo Final Mano",
+      header: "Sueldo Final en Mano",
       cell: ({ row }) => formatCurrency(row.original.finalHandSalary),
     },
     {
       accessorKey: "totalSalary",
-      header: "Sueldo Total",
+      header: "Total a Pagar",
       cell: ({ row }) => formatCurrency(row.original.totalSalary),
     },
     {
-      accessorKey: "isPaidHand",
-      header: "Pagado Mano",
-      cell: ({ row }) => (
-        <Button
-          variant={row.original.isPaidHand ? "outline" : "default"}
-          size="sm"
-          onClick={() => handleUpdatePayrollStatus(row.original.id, "isPaidHand", !row.original.isPaidHand)}
-        >
-          {row.original.isPaidHand ? <Check className="mr-1 h-4 w-4 text-green-500" /> : <X className="mr-1 h-4 w-4" />}
-          {row.original.isPaidHand ? "Pagado" : "Marcar Pagado"}
-        </Button>
-      ),
-    },
-    {
-      accessorKey: "isPaidBank",
-      header: "Pagado Banco",
-      cell: ({ row }) => (
-        <Button
-          variant={row.original.isPaidBank ? "outline" : "default"}
-          size="sm"
-          onClick={() => handleUpdatePayrollStatus(row.original.id, "isPaidBank", !row.original.isPaidBank)}
-        >
-          {row.original.isPaidBank ? <Check className="mr-1 h-4 w-4 text-green-500" /> : <X className="mr-1 h-4 w-4" />}
-          {row.original.isPaidBank ? "Pagado" : "Marcar Pagado"}
-        </Button>
-      ),
+      accessorKey: "status",
+      header: "Estado",
+      cell: ({ row }) => {
+        if (row.original.isPaid) {
+          return <StatusBadge status="Pagado" className="bg-green-100 text-green-800" />
+        } else if (row.original.handSalaryPaid && !row.original.bankSalaryPaid) {
+          return <StatusBadge status="Mano Pagado" className="bg-yellow-100 text-yellow-800" />
+        } else if (!row.original.handSalaryPaid && row.original.bankSalaryPaid) {
+          return <StatusBadge status="Banco Pagado" className="bg-yellow-100 text-yellow-800" />
+        } else {
+          return <StatusBadge status="Pendiente" className="bg-red-100 text-red-800" />
+        }
+      },
     },
     {
       id: "actions",
       header: "Acciones",
-      cell: ({ row }) => {
-        const employee = employees.find((e) => e.id === row.original.employeeId)
-        return (
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSelectedPayroll(row.original)
-                  setSelectedEmployee(employee || null)
-                }}
-              >
-                <FileText className="mr-1 h-4 w-4" />
-                Detalles
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-3xl">
-              <DialogHeader>
-                <DialogTitle>Detalles de Nómina</DialogTitle>
-                <DialogDescription>
-                  {employee
-                    ? `${employee.firstName} ${employee.lastName} - ${selectedMonth}/${selectedYear}`
-                    : "Empleado desconocido"}
-                </DialogDescription>
-              </DialogHeader>
+      cell: ({ row }) => (
+        <div className="flex items-center space-x-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setSelectedPayroll(row.original)
+              setIsHandSalaryPaid(row.original.handSalaryPaid)
+              setIsBankSalaryPaid(row.original.bankSalaryPaid)
+              setPaymentMethod(row.original.paymentMethod || "efectivo")
+              setPaymentReference(row.original.paymentReference || "")
+              setIsPaymentDialogOpen(true)
+            }}
+          >
+            <CheckCircle className="mr-1 h-4 w-4" />
+            Confirmar Pago
+          </Button>
 
-              <Tabs defaultValue="summary">
-                <TabsList>
-                  <TabsTrigger value="summary">Resumen</TabsTrigger>
-                  <TabsTrigger value="details">Detalles</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="summary" className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <h3 className="text-sm font-medium">Información del Empleado</h3>
-                      <div className="mt-2 space-y-1 text-sm">
-                        <p>
-                          <span className="font-medium">Nombre:</span> {employee?.firstName} {employee?.lastName}
-                        </p>
-                        <p>
-                          <span className="font-medium">Documento:</span> {employee?.documentId}
-                        </p>
-                        <p>
-                          <span className="font-medium">Cargo:</span> {employee?.position}
-                        </p>
-                        <p>
-                          <span className="font-medium">Local:</span> {employee?.local}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div>
-                      <h3 className="text-sm font-medium">Información de Pago</h3>
-                      <div className="mt-2 space-y-1 text-sm">
-                        <p>
-                          <span className="font-medium">Sueldo Base:</span> {formatCurrency(row.original.baseSalary)}
-                        </p>
-                        <p>
-                          <span className="font-medium">Sueldo Banco:</span> {formatCurrency(row.original.bankSalary)}
-                        </p>
-                        <p>
-                          <span className="font-medium">Deducciones:</span> {formatCurrency(row.original.deductions)}
-                        </p>
-                        <p>
-                          <span className="font-medium">Adiciones:</span> {formatCurrency(row.original.additions)}
-                        </p>
-                        <p>
-                          <span className="font-medium">Sueldo Final Mano:</span>{" "}
-                          {formatCurrency(row.original.finalHandSalary)}
-                        </p>
-                        <p>
-                          <span className="font-medium">Sueldo Total:</span> {formatCurrency(row.original.totalSalary)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end space-x-2">
-                    <Button variant="outline" onClick={handlePrintPayslip}>
-                      <Printer className="mr-2 h-4 w-4" />
-                      Imprimir Recibo
-                    </Button>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="details">
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-medium">Deducciones</h3>
-                    <div className="rounded-md border">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Concepto
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Fecha
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Monto
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {row.original.details
-                            .filter((d) => d.type === "deduction")
-                            .map((detail) => (
-                              <tr key={detail.id}>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm">{detail.concept}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDate(detail.date)}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(detail.amount)}</td>
-                              </tr>
-                            ))}
-                          {row.original.details.filter((d) => d.type === "deduction").length === 0 && (
-                            <tr>
-                              <td colSpan={3} className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                                No hay deducciones
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <h3 className="text-sm font-medium">Adiciones</h3>
-                    <div className="rounded-md border">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Concepto
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Fecha
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Monto
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {row.original.details
-                            .filter((d) => d.type === "addition")
-                            .map((detail) => (
-                              <tr key={detail.id}>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm">{detail.concept}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDate(detail.date)}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(detail.amount)}</td>
-                              </tr>
-                            ))}
-                          {row.original.details.filter((d) => d.type === "addition").length === 0 && (
-                            <tr>
-                              <td colSpan={3} className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                                No hay adiciones
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </DialogContent>
-          </Dialog>
-        )
-      },
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setSelectedPayroll(row.original)
+              setIsDetailsDialogOpen(true)
+            }}
+          >
+            <FileText className="mr-1 h-4 w-4" />
+            Detalles
+          </Button>
+        </div>
+      ),
     },
   ]
+
+  // Columnas para la tabla de liquidaciones
+  const liquidationsColumns: ColumnDef<Liquidation>[] = [
+    {
+      accessorKey: "employeeId",
+      header: "Empleado",
+      cell: ({ row }) => {
+        const employee = employees.find((e) => e.id === row.original.employeeId)
+        return employee ? `${employee.firstName} ${employee.lastName}` : "Desconocido"
+      },
+    },
+    {
+      accessorKey: "terminationDate",
+      header: "Fecha de Egreso",
+      cell: ({ row }) => formatDate(row.original.terminationDate),
+    },
+    {
+      accessorKey: "workedDays",
+      header: "Días Trabajados",
+      cell: ({ row }) => row.original.workedDays,
+    },
+    {
+      accessorKey: "workedMonths",
+      header: "Meses Trabajados",
+      cell: ({ row }) => row.original.workedMonths,
+    },
+    {
+      accessorKey: "baseSalary",
+      header: "Salario Base",
+      cell: ({ row }) => formatCurrency(row.original.baseSalary),
+    },
+    {
+      accessorKey: "proportionalVacation",
+      header: "Vacaciones Proporcionales",
+      cell: ({ row }) => formatCurrency(row.original.proportionalVacation),
+    },
+    {
+      accessorKey: "proportionalBonus",
+      header: "Aguinaldo Proporcional",
+      cell: ({ row }) => formatCurrency(row.original.proportionalBonus),
+    },
+    {
+      accessorKey: "compensationAmount",
+      header: "Indemnización",
+      cell: ({ row }) => formatCurrency(row.original.compensationAmount),
+    },
+    {
+      accessorKey: "totalAmount",
+      header: "Total a Pagar",
+      cell: ({ row }) => formatCurrency(row.original.totalAmount),
+    },
+    {
+      accessorKey: "status",
+      header: "Estado",
+      cell: ({ row }) => {
+        if (row.original.isPaid) {
+          return <StatusBadge status="Pagado" className="bg-green-100 text-green-800" />
+        } else {
+          return <StatusBadge status="Pendiente" className="bg-red-100 text-red-800" />
+        }
+      },
+    },
+    {
+      id: "actions",
+      header: "Acciones",
+      cell: ({ row }) => (
+        <div className="flex items-center space-x-2">
+          {!row.original.isPaid && (
+            <Button variant="outline" size="sm" onClick={() => handlePayLiquidation(row.original)}>
+              <CheckCircle className="mr-1 h-4 w-4" />
+              Confirmar Pago
+            </Button>
+          )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              // Implementar vista de detalles de liquidación
+            }}
+          >
+            <FileText className="mr-1 h-4 w-4" />
+            Detalles
+          </Button>
+        </div>
+      ),
+    },
+  ]
+
+  // Columnas para la tabla de historial de nóminas
+  const historyPayrollColumns: ColumnDef<Payroll>[] = [
+    {
+      accessorKey: "employeeId",
+      header: "Empleado",
+      cell: ({ row }) => {
+        const employee = employees.find((e) => e.id === row.original.employeeId)
+        return employee ? `${employee.firstName} ${employee.lastName}` : "Desconocido"
+      },
+    },
+    {
+      accessorKey: "period",
+      header: "Período",
+      cell: ({ row }) => {
+        const monthNames = [
+          "Enero",
+          "Febrero",
+          "Marzo",
+          "Abril",
+          "Mayo",
+          "Junio",
+          "Julio",
+          "Agosto",
+          "Septiembre",
+          "Octubre",
+          "Noviembre",
+          "Diciembre",
+        ]
+        return `${monthNames[row.original.month - 1]} ${row.original.year}`
+      },
+    },
+    {
+      accessorKey: "paymentDate",
+      header: "Fecha de Pago",
+      cell: ({ row }) => formatDate(row.original.paymentDate || ""),
+    },
+    {
+      accessorKey: "bankSalary",
+      header: "Sueldo Banco",
+      cell: ({ row }) => formatCurrency(row.original.bankSalary),
+    },
+    {
+      accessorKey: "finalHandSalary",
+      header: "Sueldo Final en Mano",
+      cell: ({ row }) => formatCurrency(row.original.finalHandSalary),
+    },
+    {
+      accessorKey: "totalSalary",
+      header: "Total Pagado",
+      cell: ({ row }) => formatCurrency(row.original.totalSalary),
+    },
+    {
+      accessorKey: "paymentMethod",
+      header: "Método de Pago",
+      cell: ({ row }) => {
+        const methods: Record<string, string> = {
+          efectivo: "Efectivo",
+          transferencia: "Transferencia",
+          cheque: "Cheque",
+          otro: "Otro",
+        }
+        return methods[row.original.paymentMethod || "efectivo"] || row.original.paymentMethod
+      },
+    },
+    {
+      id: "actions",
+      header: "Acciones",
+      cell: ({ row }) => (
+        <div className="flex items-center space-x-2">
+          <Button variant="outline" size="sm" onClick={() => handleExportPayslip(row.original)}>
+            <Download className="mr-1 h-4 w-4" />
+            Recibo
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setSelectedPayroll(row.original)
+              setIsDetailsDialogOpen(true)
+            }}
+          >
+            <FileText className="mr-1 h-4 w-4" />
+            Detalles
+          </Button>
+        </div>
+      ),
+    },
+  ]
+
+  // Generar años para el selector (año actual y 5 años anteriores)
+  const currentYear = new Date().getFullYear()
+  const years = Array.from({ length: 6 }, (_, i) => currentYear - i)
 
   return (
     <DashboardLayout>
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight">Nómina</h2>
-            <p className="text-muted-foreground">Gestiona los pagos de nómina de todos los empleados</p>
+            <h2 className="text-3xl font-bold tracking-tight">Gestión de Nómina</h2>
+            <p className="text-muted-foreground">Administra los pagos de salarios y liquidaciones</p>
           </div>
-          <Button onClick={handleGeneratePayroll} disabled={isGenerating}>
-            <RefreshCw className="mr-2 h-4 w-4" />
-            {isGenerating ? "Generando..." : "Generar Nómina"}
+        </div>
+
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2">
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <Select
+              value={selectedMonth.toString()}
+              onValueChange={(value) => setSelectedMonth(Number.parseInt(value))}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Seleccionar mes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">Enero</SelectItem>
+                <SelectItem value="2">Febrero</SelectItem>
+                <SelectItem value="3">Marzo</SelectItem>
+                <SelectItem value="4">Abril</SelectItem>
+                <SelectItem value="5">Mayo</SelectItem>
+                <SelectItem value="6">Junio</SelectItem>
+                <SelectItem value="7">Julio</SelectItem>
+                <SelectItem value="8">Agosto</SelectItem>
+                <SelectItem value="9">Septiembre</SelectItem>
+                <SelectItem value="10">Octubre</SelectItem>
+                <SelectItem value="11">Noviembre</SelectItem>
+                <SelectItem value="12">Diciembre</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Select value={selectedYear.toString()} onValueChange={(value) => setSelectedYear(Number.parseInt(value))}>
+              <SelectTrigger className="w-[120px]">
+                <SelectValue placeholder="Seleccionar año" />
+              </SelectTrigger>
+              <SelectContent>
+                {years.map((year) => (
+                  <SelectItem key={year} value={year.toString()}>
+                    {year}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Button variant="outline" onClick={handleGeneratePayrolls} disabled={isGeneratingPayrolls}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${isGeneratingPayrolls ? "animate-spin" : ""}`} />
+            {isGeneratingPayrolls ? "Generando..." : "Generar Nóminas"}
           </Button>
         </div>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle>Nómina del Período</CardTitle>
-            <CardDescription>Selecciona el mes y año para ver la nómina correspondiente</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center mb-4 space-x-4">
-              <div className="flex items-center space-x-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <Select
-                  value={selectedMonth.toString()}
-                  onValueChange={(value) => setSelectedMonth(Number.parseInt(value))}
-                >
-                  <SelectTrigger className="w-32">
-                    <SelectValue placeholder="Mes" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">Enero</SelectItem>
-                    <SelectItem value="2">Febrero</SelectItem>
-                    <SelectItem value="3">Marzo</SelectItem>
-                    <SelectItem value="4">Abril</SelectItem>
-                    <SelectItem value="5">Mayo</SelectItem>
-                    <SelectItem value="6">Junio</SelectItem>
-                    <SelectItem value="7">Julio</SelectItem>
-                    <SelectItem value="8">Agosto</SelectItem>
-                    <SelectItem value="9">Septiembre</SelectItem>
-                    <SelectItem value="10">Octubre</SelectItem>
-                    <SelectItem value="11">Noviembre</SelectItem>
-                    <SelectItem value="12">Diciembre</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={selectedYear.toString()}
-                  onValueChange={(value) => setSelectedYear(Number.parseInt(value))}
-                >
-                  <SelectTrigger className="w-32">
-                    <SelectValue placeholder="Año" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={(new Date().getFullYear() - 1).toString()}>
-                      {new Date().getFullYear() - 1}
-                    </SelectItem>
-                    <SelectItem value={new Date().getFullYear().toString()}>{new Date().getFullYear()}</SelectItem>
-                    <SelectItem value={(new Date().getFullYear() + 1).toString()}>
-                      {new Date().getFullYear() + 1}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+        <Tabs defaultValue="pendientes" value={activeTab} onValueChange={setActiveTab}>
+          <TabsList>
+            <TabsTrigger value="pendientes">Pagos Pendientes</TabsTrigger>
+            <TabsTrigger value="liquidaciones">Liquidaciones</TabsTrigger>
+            <TabsTrigger value="historial">Historial de Pagos</TabsTrigger>
+          </TabsList>
 
-              <div className="relative flex-1 max-w-sm">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input type="search" placeholder="Buscar empleado..." className="pl-8" />
-              </div>
+          <TabsContent value="pendientes">
+            <Card>
+              <CardHeader>
+                <CardTitle>Pagos Pendientes</CardTitle>
+                <CardDescription>Nóminas pendientes de pago para el período seleccionado</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <DataTable
+                  columns={pendingPayrollColumns}
+                  data={payrolls}
+                  searchColumn="employeeId"
+                  searchPlaceholder="Buscar empleado..."
+                  isLoading={isLoading}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-              <div className="ml-auto flex items-center gap-2">
-                <Button variant="outline" onClick={handleExportCSV}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Exportar CSV
-                </Button>
-              </div>
-            </div>
+          <TabsContent value="liquidaciones">
+            <Card>
+              <CardHeader>
+                <CardTitle>Liquidaciones Finales</CardTitle>
+                <CardDescription>Liquidaciones pendientes por fin de relación laboral</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <DataTable
+                  columns={liquidationsColumns}
+                  data={liquidations}
+                  searchColumn="employeeId"
+                  searchPlaceholder="Buscar empleado..."
+                  isLoading={isLoading}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-            <DataTable
-              columns={columns}
-              data={payrolls}
-              searchColumn="employeeId"
-              searchPlaceholder="Buscar empleado..."
-            />
-          </CardContent>
-        </Card>
+          <TabsContent value="historial">
+            <Card>
+              <CardHeader>
+                <CardTitle>Historial de Pagos</CardTitle>
+                <CardDescription>Nóminas pagadas para el período seleccionado</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <DataTable
+                  columns={historyPayrollColumns}
+                  data={historyPayrolls}
+                  searchColumn="employeeId"
+                  searchPlaceholder="Buscar empleado..."
+                  isLoading={isLoading}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+
+        {/* Diálogo de confirmación de pago */}
+        <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Confirmar Pago de Nómina</DialogTitle>
+              <DialogDescription>
+                {(() => {
+                  if (!selectedPayroll) return "Confirme el estado de pago"
+
+                  const employee = employees.find((e) => e.id === selectedPayroll.employeeId)
+                  const employeeName = employee ? `${employee.firstName} ${employee.lastName}` : "Empleado"
+
+                  const monthNames = [
+                    "Enero",
+                    "Febrero",
+                    "Marzo",
+                    "Abril",
+                    "Mayo",
+                    "Junio",
+                    "Julio",
+                    "Agosto",
+                    "Septiembre",
+                    "Octubre",
+                    "Noviembre",
+                    "Diciembre",
+                  ]
+
+                  return `${employeeName} - ${monthNames[selectedPayroll.month - 1]} ${selectedPayroll.year}`
+                })()}
+              </DialogDescription>
+            </DialogHeader>
+
+            {selectedPayroll && (
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <h3 className="font-medium mb-2">Sueldo en Banco</h3>
+                    <p className="text-lg font-bold">{formatCurrency(selectedPayroll.bankSalary)}</p>
+                    <div className="flex items-center space-x-2 mt-2">
+                      <Checkbox
+                        id="bankSalaryPaid"
+                        checked={isBankSalaryPaid}
+                        onCheckedChange={(checked) => setIsBankSalaryPaid(checked === true)}
+                      />
+                      <Label htmlFor="bankSalaryPaid">Marcar como pagado</Label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="font-medium mb-2">Sueldo en Mano</h3>
+                    <p className="text-lg font-bold">{formatCurrency(selectedPayroll.finalHandSalary)}</p>
+                    <div className="flex items-center space-x-2 mt-2">
+                      <Checkbox
+                        id="handSalaryPaid"
+                        checked={isHandSalaryPaid}
+                        onCheckedChange={(checked) => setIsHandSalaryPaid(checked === true)}
+                      />
+                      <Label htmlFor="handSalaryPaid">Marcar como pagado</Label>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t pt-4">
+                  <h3 className="font-medium mb-2">Detalles del Pago</h3>
+
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="paymentDate">Fecha de Pago</Label>
+                        <Input
+                          id="paymentDate"
+                          type="date"
+                          value={paymentDate}
+                          onChange={(e) => setPaymentDate(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="paymentMethod">Método de Pago</Label>
+                        <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                          <SelectTrigger id="paymentMethod">
+                            <SelectValue placeholder="Seleccionar método" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="efectivo">Efectivo</SelectItem>
+                            <SelectItem value="transferencia">Transferencia</SelectItem>
+                            <SelectItem value="cheque">Cheque</SelectItem>
+                            <SelectItem value="otro">Otro</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="paymentReference">Referencia de Pago</Label>
+                      <Input
+                        id="paymentReference"
+                        placeholder="Número de transferencia, cheque, etc."
+                        value={paymentReference}
+                        onChange={(e) => setPaymentReference(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsPaymentDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handlePaymentConfirmation}>Confirmar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Diálogo de detalles de nómina */}
+        <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Detalles de Nómina</DialogTitle>
+              <DialogDescription>
+                {(() => {
+                  if (!selectedPayroll) return "Detalles de la nómina"
+
+                  const employee = employees.find((e) => e.id === selectedPayroll.employeeId)
+                  const employeeName = employee ? `${employee.firstName} ${employee.lastName}` : "Empleado"
+
+                  const monthNames = [
+                    "Enero",
+                    "Febrero",
+                    "Marzo",
+                    "Abril",
+                    "Mayo",
+                    "Junio",
+                    "Julio",
+                    "Agosto",
+                    "Septiembre",
+                    "Octubre",
+                    "Noviembre",
+                    "Diciembre",
+                  ]
+
+                  return `${employeeName} - ${monthNames[selectedPayroll.month - 1]} ${selectedPayroll.year}`
+                })()}
+              </DialogDescription>
+            </DialogHeader>
+
+            {selectedPayroll && (
+              <div className="grid gap-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <h3 className="font-medium mb-2">Información del Empleado</h3>
+                    {(() => {
+                      const employee = employees.find((e) => e.id === selectedPayroll.employeeId)
+                      if (!employee) return <p>Información no disponible</p>
+
+                      return (
+                        <div className="space-y-1 text-sm">
+                          <p>
+                            <span className="font-medium">Nombre:</span> {employee.firstName} {employee.lastName}
+                          </p>
+                          <p>
+                            <span className="font-medium">DNI:</span> {employee.documentId}
+                          </p>
+                          <p>
+                            <span className="font-medium">Cargo:</span> {employee.position}
+                          </p>
+                          <p>
+                            <span className="font-medium">Local:</span> {employee.local}
+                          </p>
+                          <p>
+                            <span className="font-medium">Fecha de ingreso:</span> {formatDate(employee.hireDate)}
+                          </p>
+                        </div>
+                      )
+                    })()}
+                  </div>
+
+                  <div>
+                    <h3 className="font-medium mb-2">Información de Pago</h3>
+                    <div className="space-y-1 text-sm">
+                      <p>
+                        <span className="font-medium">Estado:</span> {selectedPayroll.isPaid ? "Pagado" : "Pendiente"}
+                      </p>
+                      {selectedPayroll.paymentDate && (
+                        <p>
+                          <span className="font-medium">Fecha de pago:</span> {formatDate(selectedPayroll.paymentDate)}
+                        </p>
+                      )}
+                      {selectedPayroll.paymentMethod && (
+                        <p>
+                          <span className="font-medium">Método de pago:</span>{" "}
+                          {{
+                            efectivo: "Efectivo",
+                            transferencia: "Transferencia",
+                            cheque: "Cheque",
+                            otro: "Otro",
+                          }[selectedPayroll.paymentMethod] || selectedPayroll.paymentMethod}
+                        </p>
+                      )}
+                      {selectedPayroll.paymentReference && (
+                        <p>
+                          <span className="font-medium">Referencia:</span> {selectedPayroll.paymentReference}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="font-medium mb-2">Detalle de Salario</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm">
+                        <span className="font-medium">Sueldo Base:</span> {formatCurrency(selectedPayroll.baseSalary)}
+                      </p>
+                      <p className="text-sm">
+                        <span className="font-medium">Sueldo en Banco:</span>{" "}
+                        {formatCurrency(selectedPayroll.bankSalary)}
+                      </p>
+                      <p className="text-sm">
+                        <span className="font-medium">Sueldo en Mano Original:</span>{" "}
+                        {formatCurrency(selectedPayroll.handSalary)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm">
+                        <span className="font-medium">Deducciones:</span> {formatCurrency(selectedPayroll.deductions)}
+                      </p>
+                      <p className="text-sm">
+                        <span className="font-medium">Adiciones:</span> {formatCurrency(selectedPayroll.additions)}
+                      </p>
+                      <p className="text-sm">
+                        <span className="font-medium">Sueldo Final en Mano:</span>{" "}
+                        {formatCurrency(selectedPayroll.finalHandSalary)}
+                      </p>
+                      <p className="text-sm font-bold mt-2">
+                        <span className="font-medium">TOTAL A PAGAR:</span>{" "}
+                        {formatCurrency(selectedPayroll.totalSalary)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {selectedPayroll.details && selectedPayroll.details.length > 0 && (
+                  <div>
+                    <h3 className="font-medium mb-2">Conceptos</h3>
+                    <div className="border rounded-md">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Concepto
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Tipo
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Monto
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {selectedPayroll.details.map((detail, index) => (
+                            <tr key={index}>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm">{detail.concept}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                {detail.type === "addition" ? "Adición" : "Deducción"}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                {detail.type === "addition"
+                                  ? formatCurrency(detail.amount)
+                                  : `- ${formatCurrency(detail.amount)}`}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end space-x-2">
+                  {selectedPayroll.isPaid && (
+                    <Button variant="outline" onClick={() => handleExportPayslip(selectedPayroll)}>
+                      <Download className="mr-2 h-4 w-4" />
+                      Descargar Recibo
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   )
 }
+
+
 
