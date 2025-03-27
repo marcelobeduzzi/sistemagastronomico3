@@ -39,7 +39,12 @@ export function SimpleDatePicker({ date, setDate, className }: SimpleDatePickerP
     if (newDay > daysInMonth) newDay = daysInMonth
 
     // Crear la nueva fecha con hora fija a mediodía
-    const newDate = new Date(newYear, newMonth - 1, newDay, 12, 0, 0)
+    // Usamos UTC para evitar cualquier ajuste por zona horaria
+    const newDate = new Date(Date.UTC(newYear, newMonth - 1, newDay, 12, 0, 0))
+    console.log("Fecha seleccionada:", { day: newDay, month: newMonth, year: newYear })
+    console.log("Fecha creada:", newDate.toISOString())
+    console.log("Fecha local:", newDate.toLocaleString())
+    console.log("getDate():", newDate.getDate())
 
     // Actualizar los estados locales
     setDay(newDay)
@@ -53,7 +58,10 @@ export function SimpleDatePicker({ date, setDate, className }: SimpleDatePickerP
   // Función para establecer la fecha a hoy
   const setToday = () => {
     const today = new Date()
-    updateDate(today.getDate(), today.getMonth() + 1, today.getFullYear())
+    const todayUTC = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0, 0))
+    console.log("Hoy (local):", today.toLocaleString())
+    console.log("Hoy (UTC):", todayUTC.toISOString())
+    updateDate(todayUTC.getUTCDate(), todayUTC.getUTCMonth() + 1, todayUTC.getUTCFullYear())
   }
 
   // Obtener el nombre del mes actual
@@ -133,4 +141,6 @@ export function SimpleDatePicker({ date, setDate, className }: SimpleDatePickerP
     </div>
   )
 }
+
+
 

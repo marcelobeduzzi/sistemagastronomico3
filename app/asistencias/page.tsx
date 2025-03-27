@@ -91,18 +91,12 @@ export default function AsistenciasPage() {
 
   // Función para manejar el cambio de fecha
   const handleDateChange = (date: Date) => {
-    // Crear una nueva fecha con la hora fija a mediodía para evitar problemas de zona horaria
-    const year = date.getFullYear()
-    const month = date.getMonth()
-    const day = date.getDate()
+    console.log("Fecha seleccionada del selector:", date.toISOString())
+    console.log("Fecha local:", date.toLocaleString())
+    console.log("getDate():", date.getDate())
 
-    const correctedDate = new Date(year, month, day, 12, 0, 0)
-
-    console.log("Fecha seleccionada (original):", date.toISOString())
-    console.log("Fecha corregida:", correctedDate.toISOString())
-    console.log("Fecha formateada:", correctedDate.toISOString().split("T")[0])
-
-    setSelectedDate(correctedDate)
+    // Usar directamente la fecha del selector sin ajustes adicionales
+    setSelectedDate(date)
   }
 
   const handleExportCSV = () => {
@@ -515,17 +509,13 @@ export default function AsistenciasPage() {
                     <SimpleDatePicker
                       date={new Date(newAttendance.date)}
                       setDate={(date) => {
-                        // Crear una nueva fecha con la hora fija a mediodía para evitar problemas de zona horaria
-                        const year = date.getFullYear()
-                        const month = date.getMonth()
-                        const day = date.getDate()
+                        console.log("Fecha recibida del selector:", date.toISOString())
 
-                        const correctedDate = new Date(year, month, day, 12, 0, 0)
-
-                        // Actualizar el estado con la fecha formateada
+                        // Usar directamente la fecha del selector sin ajustes adicionales
+                        // La fecha ya viene con la hora fijada a mediodía UTC desde el componente
                         setNewAttendance((prev) => ({
                           ...prev,
-                          date: correctedDate.toISOString().split("T")[0],
+                          date: date.toISOString().split("T")[0],
                         }))
                       }}
                     />
@@ -959,6 +949,8 @@ export default function AsistenciasPage() {
     </DashboardLayout>
   )
 }
+
+
 
 
 
