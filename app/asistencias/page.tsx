@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from "react"
@@ -35,7 +34,7 @@ export default function AsistenciasPage() {
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     // Crear una fecha con la hora fija a mediodía para evitar problemas de zona horaria
     const today = new Date()
-    return new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0, 0))
+    return new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0, 0)
   })
   const [selectedEmployee, setSelectedEmployee] = useState<string>("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -71,7 +70,10 @@ export default function AsistenciasPage() {
         setEmployees(employeeData)
 
         // Obtener asistencias
+        // Importante: Asegurarnos de que la fecha se formatea correctamente
         const formattedDate = selectedDate.toISOString().split("T")[0]
+        console.log("Fecha formateada para consulta:", formattedDate)
+
         const attendanceData = await dbService.getAttendances({
           date: formattedDate,
           ...(selectedEmployee ? { employeeId: selectedEmployee } : {}),
@@ -86,6 +88,18 @@ export default function AsistenciasPage() {
 
     fetchData()
   }, [selectedDate, selectedEmployee])
+
+  // Función para manejar el cambio de fecha
+  const handleDateChange = (date: Date) => {
+    // Crear una nueva fecha con la hora fija a mediodía para evitar problemas de zona horaria
+    const correctedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0)
+
+    console.log("Fecha seleccionada:", date.toISOString())
+    console.log("Fecha corregida:", correctedDate.toISOString())
+    console.log("Fecha formateada:", correctedDate.toISOString().split("T")[0])
+
+    setSelectedDate(correctedDate)
+  }
 
   const handleExportCSV = () => {
     // Preparar datos para exportar
@@ -497,14 +511,10 @@ export default function AsistenciasPage() {
                     <DatePicker
                       date={new Date(newAttendance.date)}
                       setDate={(date) => {
-                        // Asegurarse de obtener la fecha correcta en formato ISO
-                        const year = date.getFullYear()
-                        const month = date.getMonth()
-                        const day = date.getDate()
+                        // Crear una nueva fecha con la hora fija a mediodía para evitar problemas de zona horaria
+                        const correctedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0)
 
-                        // Crear fecha UTC para evitar problemas de zona horaria
-                        const correctedDate = new Date(Date.UTC(year, month, day, 12, 0, 0))
-
+                        // Actualizar el estado con la fecha formateada
                         setNewAttendance((prev) => ({
                           ...prev,
                           date: correctedDate.toISOString().split("T")[0],
@@ -902,7 +912,7 @@ export default function AsistenciasPage() {
             <div className="flex items-center mb-4 space-x-4">
               <div className="flex items-center space-x-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
-                <DatePicker date={selectedDate} setDate={setSelectedDate} />
+                <DatePicker date={selectedDate} setDate={handleDateChange} />
               </div>
 
               <div className="flex-1 max-w-sm">
@@ -941,6 +951,8 @@ export default function AsistenciasPage() {
     </DashboardLayout>
   )
 }
+
+
 
 
 
