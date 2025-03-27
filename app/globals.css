@@ -1,3 +1,6 @@
+
+@import "react-datepicker/dist/react-datepicker.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -92,4 +95,51 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+/* Estilos personalizados para react-datepicker */
+.react-datepicker {
+  font-family: Arial, Helvetica, sans-serif !important;
+  border-radius: 0.5rem !important;
+  border: 1px solid hsl(var(--border)) !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+}
+
+.react-datepicker__header {
+  background-color: hsl(var(--secondary)) !important;
+  border-bottom: 1px solid hsl(var(--border)) !important;
+  border-top-left-radius: 0.5rem !important;
+  border-top-right-radius: 0.5rem !important;
+  padding-top: 0.5rem !important;
+}
+
+.react-datepicker__month-select,
+.react-datepicker__year-select {
+  background-color: hsl(var(--background)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 0.25rem !important;
+  padding: 0.25rem !important;
+  font-size: 0.875rem !important;
+}
+
+.react-datepicker__day--selected {
+  background-color: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+}
+
+.react-datepicker__day:hover {
+  background-color: hsl(var(--accent)) !important;
+}
+
+.react-datepicker__day--today {
+  font-weight: bold !important;
+  color: hsl(var(--primary)) !important;
+}
+
+.react-datepicker__today-button {
+  background-color: hsl(var(--secondary)) !important;
+  border-top: 1px solid hsl(var(--border)) !important;
+  padding: 0.5rem !important;
+  font-weight: 500 !important;
+}
+
 
