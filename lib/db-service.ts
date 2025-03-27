@@ -406,15 +406,8 @@ class DatabaseService {
       // Registrar los datos exactos que se están enviando
       console.log("Datos enviados a Supabase para actualización:", snakeCaseData)
 
-      // MODIFICADO: Eliminada la selección de relaciones para evitar el error de employees
-      const { data, error } = await this.supabase
-        .from("attendance")
-        .update(snakeCaseData)
-        .eq("id", id)
-        .select(
-          "id, employee_id, date, check_in, check_out, expected_check_in, expected_check_out, late_minutes, early_departure_minutes, extra_minutes, total_minutes_worked, total_minutes_balance, is_holiday, is_absent, is_justified, notes, created_at, updated_at",
-        )
-        .single()
+      // MODIFICADO: Eliminada completamente la parte .select() para evitar el error
+      const { error } = await this.supabase.from("attendance").update(snakeCaseData).eq("id", id)
 
       if (error) {
         console.error("Error detallado de Supabase:", {
@@ -426,7 +419,19 @@ class DatabaseService {
         throw error
       }
 
-      return objectToCamelCase(data)
+      // Hacer una consulta separada para obtener los datos actualizados
+      const { data: updatedData, error: fetchUpdatedError } = await this.supabase
+        .from("attendance")
+        .select("*")
+        .eq("id", id)
+        .single()
+
+      if (fetchUpdatedError) {
+        console.error("Error al obtener datos actualizados:", fetchUpdatedError)
+        throw fetchUpdatedError
+      }
+
+      return objectToCamelCase(updatedData)
     } catch (error) {
       console.error("Error al actualizar asistencia:", error)
       throw error
@@ -661,6 +666,8 @@ function calculateExpectedWorkday(expectedCheckIn: string, expectedCheckOut: str
 }
 
 export const dbService = new DatabaseService()
+
+
 
 
 
