@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { dbService } from "@/lib/db-service"
 import type { Employee, Local, WorkShift, EmployeeStatus, UserRole } from "@/types"
-import { ArrowLeft, Save } from "lucide-react"
+import { ArrowLeft, Save } from 'lucide-react'
 import Link from "next/link"
 import { useToast } from "@/components/ui/use-toast"
 
@@ -48,7 +48,9 @@ export default function NuevoEmpleadoPage() {
 
     if (type === "number") {
       setFormData((prev) => {
-        const newData = { ...prev, [name]: Number.parseFloat(value) || 0 }
+        // Asegurar que valores vacíos se conviertan a 0
+        const numValue = value === "" ? 0 : Number.parseFloat(value)
+        const newData = { ...prev, [name]: numValue }
 
         // Actualizar sueldo total automáticamente
         if (name === "baseSalary" || name === "bankSalary") {
@@ -341,6 +343,8 @@ export default function NuevoEmpleadoPage() {
                         id="baseSalary"
                         name="baseSalary"
                         type="number"
+                        min="0"
+                        step="0.01"
                         placeholder="0.00"
                         value={formData.baseSalary || ""}
                         onChange={handleChange}
@@ -353,11 +357,16 @@ export default function NuevoEmpleadoPage() {
                         id="bankSalary"
                         name="bankSalary"
                         type="number"
+                        min="0"
+                        step="0.01"
                         placeholder="0.00"
                         value={formData.bankSalary || ""}
                         onChange={handleChange}
                         required
                       />
+                      <p className="text-xs text-muted-foreground">
+                        Puede ser 0 para empleados no registrados formalmente.
+                      </p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="totalSalary">Sueldo Total</Label>

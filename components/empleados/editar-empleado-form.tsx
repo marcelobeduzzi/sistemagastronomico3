@@ -46,12 +46,14 @@ export function EditarEmpleadoForm({ empleado }: EditarEmpleadoFormProps) {
 
     if (type === "number") {
       setFormData((prev) => {
-        const newData = { ...prev, [name]: value }
+        // Asegurar que valores vacíos se conviertan a "0"
+        const newValue = value === "" ? "0" : value
+        const newData = { ...prev, [name]: newValue }
 
         // Actualizar sueldo total automáticamente
         if (name === "baseSalary" || name === "bankSalary") {
-          const baseSalary = Number.parseFloat(name === "baseSalary" ? value : prev.baseSalary) || 0
-          const bankSalary = Number.parseFloat(name === "bankSalary" ? value : prev.bankSalary) || 0
+          const baseSalary = Number.parseFloat(name === "baseSalary" ? newValue : prev.baseSalary) || 0
+          const bankSalary = Number.parseFloat(name === "bankSalary" ? newValue : prev.bankSalary) || 0
           newData.totalSalary = (baseSalary + bankSalary).toString()
         }
 
@@ -73,9 +75,9 @@ export function EditarEmpleadoForm({ empleado }: EditarEmpleadoFormProps) {
     try {
       await actualizarEmpleado(empleado.id, {
         ...formData,
-        baseSalary: Number.parseFloat(formData.baseSalary),
-        bankSalary: Number.parseFloat(formData.bankSalary),
-        totalSalary: Number.parseFloat(formData.totalSalary),
+        baseSalary: Number.parseFloat(formData.baseSalary) || 0,
+        bankSalary: Number.parseFloat(formData.bankSalary) || 0,
+        totalSalary: Number.parseFloat(formData.totalSalary) || 0,
       })
 
       toast.success("Empleado actualizado correctamente")
@@ -262,6 +264,8 @@ export function EditarEmpleadoForm({ empleado }: EditarEmpleadoFormProps) {
                 id="baseSalary"
                 name="baseSalary"
                 type="number"
+                min="0"
+                step="0.01"
                 value={formData.baseSalary}
                 onChange={handleChange}
                 required
@@ -274,10 +278,15 @@ export function EditarEmpleadoForm({ empleado }: EditarEmpleadoFormProps) {
                 id="bankSalary"
                 name="bankSalary"
                 type="number"
+                min="0"
+                step="0.01"
                 value={formData.bankSalary}
                 onChange={handleChange}
                 required
               />
+              <p className="text-xs text-muted-foreground">
+                Puede ser 0 para empleados no registrados formalmente.
+              </p>
             </div>
 
             <div className="space-y-2">
