@@ -764,11 +764,6 @@ class DatabaseService {
             attendanceError,
           )
         } else if (attendances && attendances.length > 0) {
-          console
-          attendanceError
-          )
-          \
-        } else if (attendances && attendances.length > 0) {
           console.log(`Encontradas ${attendances.length} asistencias para el período`)
 
           // Calcular el valor del minuto trabajado (basado en 30 días de 8 horas)
@@ -1087,6 +1082,10 @@ function calculateExpectedWorkday(expectedCheckIn: string, expectedCheckOut: str
 }
 
 export const dbService = new DatabaseService()
+
+
+
+
 
 
 
