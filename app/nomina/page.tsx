@@ -9,7 +9,7 @@ import { DataTable } from "@/components/data-table"
 import { dbService } from "@/lib/db-service"
 import { formatCurrency, formatDate, generatePayslip } from "@/lib/export-utils"
 import { useToast } from "@/components/ui/use-toast"
-import { Download, RefreshCw, CheckCircle, FileText, Calendar, Eye } from "lucide-react"
+import { Download, RefreshCw, CheckCircle, FileText, Calendar, Eye, ArrowLeft } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -25,8 +25,13 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { StatusBadge } from "@/components/status-badge"
 import type { ColumnDef } from "@tanstack/react-table"
 import type { Employee, Payroll, Liquidation, Attendance } from "@/types"
+import { useRouter } from "next/navigation"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import Link from "next/link"
 
 export default function NominaPage() {
+  const router = useRouter()
+  const supabase = createClientComponentClient()
   const [activeTab, setActiveTab] = useState("pendientes")
   const [payrolls, setPayrolls] = useState<Payroll[]>([])
   const [filteredPayrolls, setFilteredPayrolls] = useState<Payroll[]>([])
@@ -51,10 +56,46 @@ export default function NominaPage() {
   const [paymentReference, setPaymentReference] = useState<string>("")
   const [isHandSalaryPaid, setIsHandSalaryPaid] = useState(false)
   const [isBankSalaryPaid, setIsBankSalaryPaid] = useState(false)
+  const [sessionStatus, setSessionStatus] = useState<"valid" | "invalid" | "checking">("checking")
+
+  // Verificar sesión al cargar la página
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        // Primero verificar si hay un token de diagnóstico
+        const diagnosticSession = localStorage.getItem("diagnostic_session")
+
+        if (diagnosticSession === "active") {
+          console.log("Sesión de diagnóstico detectada")
+          setSessionStatus("valid")
+          return
+        }
+
+        // Si no hay token de diagnóstico, verificar sesión normal
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+        setSessionStatus(session ? "valid" : "invalid")
+      } catch (error) {
+        console.error("Error al verificar sesión:", error)
+        setSessionStatus("invalid")
+      }
+    }
+
+    checkSession()
+  }, [supabase.auth])
 
   useEffect(() => {
-    loadData()
-  }, [selectedMonth, selectedYear, activeTab, showAllPending])
+    if (sessionStatus === "valid") {
+      loadData()
+    }
+  }, [selectedMonth, selectedYear, activeTab, showAllPending, sessionStatus])
+
+  // Función para preservar la sesión al navegar a otras páginas
+  const preserveSession = () => {
+    // Almacenar un token temporal en localStorage
+    localStorage.setItem("nomina_session", "active")
+  }
 
   const loadData = async () => {
     setIsLoading(true)
@@ -529,6 +570,45 @@ export default function NominaPage() {
   const currentYear = new Date().getFullYear()
   const years = Array.from({ length: 6 }, (_, i) => currentYear - i)
 
+  // Si no hay sesión válida, mostrar mensaje
+  if (sessionStatus === "invalid") {
+    return (
+      <DashboardLayout>
+        <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+          <Card className="border-red-200 bg-red-50">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-red-700">Sesión no válida</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-red-700">
+                No se ha detectado una sesión válida. Por favor inicie sesión para continuar.
+              </p>
+              <div className="mt-4">
+                <Button asChild>
+                  <Link href="/login">Iniciar Sesión</Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  // Si está verificando la sesión, mostrar cargando
+  if (sessionStatus === "checking") {
+    return (
+      <DashboardLayout>
+        <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-700"></div>
+            <span className="ml-2">Verificando sesión...</span>
+          </div>
+        </div>
+      </DashboardLayout>
+    )
+  }
+
   return (
     <DashboardLayout>
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
@@ -536,6 +616,14 @@ export default function NominaPage() {
           <div>
             <h2 className="text-3xl font-bold tracking-tight">Gestión de Nómina</h2>
             <p className="text-muted-foreground">Administra los pagos de salarios y liquidaciones</p>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button variant="outline" asChild onClick={preserveSession}>
+              <Link href="/diagnostico">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Volver a Diagnóstico
+              </Link>
+            </Button>
           </div>
         </div>
 
@@ -776,7 +864,7 @@ export default function NominaPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Diálogo de detalles de nómina - ACTUALIZADO con cálculos detallados */}
+        {/* Diálogo de detalles de nómina */}
         <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
@@ -870,7 +958,7 @@ export default function NominaPage() {
                   </div>
                 </div>
 
-                {/* NUEVA SECCIÓN: Resultados del Cálculo */}
+                {/* Resultados del Cálculo */}
                 <Card className="bg-blue-50 border-blue-200">
                   <CardHeader className="bg-blue-100">
                     <CardTitle>
@@ -1124,6 +1212,8 @@ export default function NominaPage() {
     </DashboardLayout>
   )
 }
+
+
 
 
 

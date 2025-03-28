@@ -127,26 +127,38 @@ export interface DeliveryStats {
 
 export interface Audit {
   id: string
-  localId: string
+  localId?: string
   local: string
   date: string
-  shift: string
-  supervisorId: string
+  shift: "morning" | "afternoon" | "night"
+  supervisorId?: string
   supervisorName: string
-  managerId: string
+  managerId?: string
   managerName: string
   totalScore: number
+  maxScore?: number
+  currentScore?: number
+  notes?: string
   items: AuditItem[]
+  categories?: AuditCategory[]
+  auditor?: string
   createdAt: string
-  updatedAt: string
+  updatedAt?: string
 }
 
 export interface AuditItem {
   id: string
   category: string
+  categoryId?: string
   name: string
   value: number
   completed: boolean
+}
+
+export interface AuditCategory {
+  id: string
+  name: string
+  items: AuditItem[]
 }
 
 export interface Billing {
@@ -194,4 +206,29 @@ export interface Report {
   }
   createdAt: string
 }
+
+// Para la sección de pedidos Brozziano
+export type ProductType = "empanada" | "pizza" | "medialuna" | "caja" | "sobre" | "almibar"
+
+export interface Product {
+  id: string
+  name: string
+  type: ProductType
+  price?: number
+  cost?: number
+}
+
+export interface Order {
+  id: string
+  localId: string
+  date: string
+  items: Record<string, number>
+  stock: Record<string, number>
+  deliveryDate: string
+  status: "pending" | "delivered" | "cancelled"
+  createdAt: string
+  updatedAt?: string
+}
+
+
 

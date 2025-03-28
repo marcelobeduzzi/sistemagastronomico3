@@ -17,9 +17,18 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination"
-import { Plus, Search, Filter } from "lucide-react"
+import { Plus, Search, Filter, Trash2, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import type { Employee } from "@/types"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { useToast } from "@/components/ui/use-toast"
 
 // Función de respaldo por si formatDate no está disponible
 const formatDateFallback = (dateString: string) => {
@@ -45,6 +54,10 @@ export default function EmpleadosPage() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [localFilter, setLocalFilter] = useState("all")
   const [positionFilter, setPositionFilter] = useState("all")
+  const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const { toast } = useToast()
 
   // Paginación
   const [currentPage, setCurrentPage] = useState(1)
@@ -155,6 +168,38 @@ export default function EmpleadosPage() {
     return pages
   }
 
+  // Función para eliminar un empleado
+  const handleDeleteEmployee = async () => {
+    if (!employeeToDelete) return
+
+    setIsDeleting(true)
+
+    try {
+      await dbService.deleteEmployee(employeeToDelete.id)
+
+      // Actualizar la lista de empleados
+      setEmployees((prevEmployees) => prevEmployees.filter((emp) => emp.id !== employeeToDelete.id))
+
+      toast({
+        title: "Empleado eliminado",
+        description: `${employeeToDelete.firstName} ${employeeToDelete.lastName} ha sido eliminado correctamente.`,
+      })
+
+      setDialogOpen(false)
+      setEmployeeToDelete(null)
+    } catch (error) {
+      console.error("Error al eliminar empleado:", error)
+
+      toast({
+        title: "Error",
+        description: "No se pudo eliminar el empleado. Intente nuevamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   return (
     <DashboardLayout>
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
@@ -241,15 +286,15 @@ export default function EmpleadosPage() {
               </div>
 
               {/* Tabla de Empleados */}
-              <div className="rounded-md border">
+              <div className="rounded-md border overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Nombre</TableHead>
-                      <TableHead>Documento</TableHead>
-                      <TableHead>Local</TableHead>
-                      <TableHead>Cargo</TableHead>
-                      <TableHead>Ingreso</TableHead>
+                      <TableHead className="hidden md:table-cell">Documento</TableHead>
+                      <TableHead className="hidden md:table-cell">Local</TableHead>
+                      <TableHead className="hidden md:table-cell">Cargo</TableHead>
+                      <TableHead className="hidden md:table-cell">Ingreso</TableHead>
                       <TableHead>Estado</TableHead>
                       <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
@@ -276,11 +321,10 @@ export default function EmpleadosPage() {
                           <TableCell className="font-medium">
                             {employee.firstName} {employee.lastName}
                           </TableCell>
-                          <TableCell>{employee.documentId}</TableCell>
-                          <TableCell>{employee.local}</TableCell>
-                          <TableCell>{employee.position}</TableCell>
-                          <TableCell>
-                            {/* Usar la función de respaldo si formatDate no está disponible */}
+                          <TableCell className="hidden md:table-cell">{employee.documentId}</TableCell>
+                          <TableCell className="hidden md:table-cell">{employee.local}</TableCell>
+                          <TableCell className="hidden md:table-cell">{employee.position}</TableCell>
+                          <TableCell className="hidden md:table-cell">
                             {formatDateFallback(employee.hireDate)}
                           </TableCell>
                           <TableCell>
@@ -288,11 +332,22 @@ export default function EmpleadosPage() {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end space-x-2">
-                              <Button variant="outline" size="sm" asChild>
+                              <Button variant="outline" size="sm" asChild className="hidden sm:flex">
                                 <Link href={`/empleados/${employee.id}/ver`}>Ver</Link>
                               </Button>
                               <Button variant="outline" size="sm" asChild>
                                 <Link href={`/empleados/${employee.id}/editar`}>Editar</Link>
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                onClick={() => {
+                                  setEmployeeToDelete(employee)
+                                  setDialogOpen(true)
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
                           </TableCell>
@@ -315,7 +370,7 @@ export default function EmpleadosPage() {
                     </PaginationItem>
 
                     {getPageNumbers().map((page) => (
-                      <PaginationItem key={page}>
+                      <PaginationItem key={page} className="hidden sm:inline-block">
                         <PaginationLink
                           onClick={() => setCurrentPage(page)}
                           isActive={currentPage === page}
@@ -339,8 +394,35 @@ export default function EmpleadosPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Diálogo de confirmación para eliminar empleado */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-500" />
+              Confirmar eliminación
+            </DialogTitle>
+            <DialogDescription>
+              ¿Está seguro que desea eliminar a {employeeToDelete?.firstName} {employeeToDelete?.lastName}?
+              <br />
+              Esta acción no se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={isDeleting}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteEmployee} disabled={isDeleting}>
+              {isDeleting ? "Eliminando..." : "Eliminar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   )
 }
+
+
 
 

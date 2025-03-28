@@ -1,6 +1,6 @@
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { objectToCamelCase, objectToSnakeCase } from "./utils" // Import utility functions
-import type { Employee, Attendance, Payroll, PayrollDetail, Audit, Billing, Balance } from "@/types"
+import type { Employee, Attendance, Payroll, PayrollDetail, Audit, Billing, Balance, Order } from "@/types"
 import type { Liquidation } from "@/types"
 
 interface AttendanceType {
@@ -122,10 +122,21 @@ class DatabaseService {
     return objectToCamelCase(data)
   }
 
-  async deleteEmployee(id: string) {
-    const { error } = await this.supabase.from("employees").delete().eq("id", id)
+  /**
+   * Elimina un empleado por su ID
+   * @param id ID del empleado a eliminar
+   * @returns true si se eliminó correctamente, false en caso contrario
+   */
+  async deleteEmployee(id: string): Promise<boolean> {
+    try {
+      const { error } = await this.supabase.from("employees").delete().eq("id", id)
 
-    if (error) throw error
+      if (error) throw error
+      return true
+    } catch (error) {
+      console.error("Error en deleteEmployee:", error)
+      throw error
+    }
   }
 
   // Attendance methods
@@ -176,6 +187,46 @@ class DatabaseService {
     } catch (error) {
       console.error("Error al obtener asistencias:", error)
       throw error
+    }
+  }
+
+  /**
+   * Obtiene las asistencias más recientes
+   * @param limit Número máximo de asistencias a obtener
+   * @returns Lista de asistencias ordenadas por fecha descendente
+   */
+  async getRecentAttendances(limit = 100): Promise<Attendance[]> {
+    try {
+      // Aquí iría la lógica para obtener las asistencias de la base de datos
+      // Ordenadas por fecha descendente y limitadas a la cantidad especificada
+      const { data, error } = await this.supabase
+        .from("attendance")
+        .select(`
+          *,
+          employees (id, first_name, last_name)
+        `)
+        .order("date", { ascending: false })
+        .limit(limit)
+
+      if (error) {
+        console.error("Error en getRecentAttendances:", error)
+        throw error
+      }
+
+      // Convertir de snake_case a camelCase
+      const attendances = (data || []).map((item) => {
+        const attendance = objectToCamelCase(item)
+        // Asegurarse de que la fecha se mantenga como string
+        if (typeof attendance.date === "string") {
+          attendance.date = attendance.date.split("T")[0] // Eliminar la parte de tiempo si existe
+        }
+        return attendance
+      })
+
+      return attendances
+    } catch (error) {
+      console.error("Error en getRecentAttendances:", error)
+      return []
     }
   }
 
@@ -909,24 +960,71 @@ class DatabaseService {
   }
 
   // Audit methods
-  async getAudits(startDate: Date, endDate: Date) {
-    const { data, error } = await this.supabase
-      .from("audits")
-      .select("*")
-      .gte("date", startDate.toISOString())
-      .lte("date", endDate.toISOString())
-      .order("date", { ascending: false })
+  async getAudits(startDate?: Date, endDate?: Date) {
+    try {
+      let query = this.supabase.from("audits").select("*").order("date", { ascending: false })
 
-    if (error) throw error
-    return data.map((item) => objectToCamelCase(item))
+      if (startDate) {
+        query = query.gte("date", startDate.toISOString())
+      }
+
+      if (endDate) {
+        query = query.lte("date", endDate.toISOString())
+      }
+
+      const { data, error } = await query
+
+      if (error) throw error
+      return data.map((item) => objectToCamelCase(item))
+    } catch (error) {
+      console.error("Error en getAudits:", error)
+      return []
+    }
   }
 
-  async createAudit(audit: Omit<Audit, "id">) {
-    const auditData = objectToSnakeCase(audit)
-    const { data, error } = await this.supabase.from("audits").insert([auditData]).select().single()
+  /**
+   * Crea una nueva auditoría
+   * @param auditData Datos de la auditoría
+   * @returns La auditoría creada
+   */
+  async createAudit(auditData: any): Promise<Audit> {
+    try {
+      // Convertir de camelCase a snake_case
+      const snakeCaseData = objectToSnakeCase(auditData)
 
-    if (error) throw error
-    return objectToCamelCase(data)
+      const { data, error } = await this.supabase.from("audits").insert([snakeCaseData]).select().single()
+
+      if (error) {
+        console.error("Error en createAudit:", error)
+        throw error
+      }
+
+      return objectToCamelCase(data)
+    } catch (error) {
+      console.error("Error en createAudit:", error)
+      throw error
+    }
+  }
+
+  /**
+   * Obtiene una auditoría por su ID
+   * @param id ID de la auditoría
+   * @returns La auditoría encontrada o null si no existe
+   */
+  async getAuditById(id: string): Promise<Audit | null> {
+    try {
+      const { data, error } = await this.supabase.from("audits").select("*").eq("id", id).single()
+
+      if (error) {
+        console.error("Error en getAuditById:", error)
+        throw error
+      }
+
+      return objectToCamelCase(data)
+    } catch (error) {
+      console.error("Error en getAuditById:", error)
+      return null
+    }
   }
 
   // Billing methods
@@ -969,6 +1067,77 @@ class DatabaseService {
 
     if (error) throw error
     return objectToCamelCase(data)
+  }
+
+  /**
+   * Obtiene el promedio de ventas para un local
+   * @param localId ID del local
+   * @returns Objeto con los promedios de ventas por producto
+   */
+  async getAverageSales(localId: string): Promise<Record<string, number>> {
+    try {
+      const { data, error } = await this.supabase.from("sales_average").select("*").eq("local_id", localId).single()
+
+      if (error) {
+        console.error("Error en getAverageSales:", error)
+        throw error
+      }
+
+      return objectToCamelCase(data.averages || {})
+    } catch (error) {
+      console.error("Error en getAverageSales:", error)
+      return {}
+    }
+  }
+
+  /**
+   * Obtiene el stock actual para un local
+   * @param localId ID del local
+   * @returns Objeto con el stock actual por producto
+   */
+  async getCurrentStock(localId: string): Promise<Record<string, number>> {
+    try {
+      const { data, error } = await this.supabase
+        .from("stock")
+        .select("*")
+        .eq("local_id", localId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+
+      if (error) {
+        console.error("Error en getCurrentStock:", error)
+        throw error
+      }
+
+      return objectToCamelCase(data[0]?.items || {})
+    } catch (error) {
+      console.error("Error en getCurrentStock:", error)
+      return {}
+    }
+  }
+
+  /**
+   * Guarda un pedido
+   * @param orderData Datos del pedido
+   * @returns El pedido guardado
+   */
+  async saveOrder(orderData: any): Promise<Order> {
+    try {
+      // Convertir de camelCase a snake_case
+      const snakeCaseData = objectToSnakeCase(orderData)
+
+      const { data, error } = await this.supabase.from("orders").insert([snakeCaseData]).select().single()
+
+      if (error) {
+        console.error("Error en saveOrder:", error)
+        throw error
+      }
+
+      return objectToCamelCase(data)
+    } catch (error) {
+      console.error("Error en saveOrder:", error)
+      throw error
+    }
   }
 
   // UPDATED: Simplified getDashboardStats method to fix the error
@@ -1082,6 +1251,8 @@ function calculateExpectedWorkday(expectedCheckIn: string, expectedCheckOut: str
 }
 
 export const dbService = new DatabaseService()
+
+
 
 
 

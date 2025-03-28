@@ -9,7 +9,7 @@ import { dbService } from "@/lib/db-service"
 import { exportToCSV, formatDate } from "@/lib/export-utils"
 import type { Attendance, Employee } from "@/types"
 import type { ColumnDef } from "@tanstack/react-table"
-import { Download, Plus, Calendar, Edit, FileText } from "lucide-react"
+import { Download, Plus, Calendar, Edit, FileText, List } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -26,11 +26,15 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { UltraSimpleDatePicker } from "@/components/ultra-simple-date-picker"
 import { StatusBadge } from "@/components/status-badge"
 import { useToast } from "@/components/ui/use-toast"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function AsistenciasPage() {
   const [attendances, setAttendances] = useState<Attendance[]>([])
+  const [recentAttendances, setRecentAttendances] = useState<Attendance[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isRecentLoading, setIsRecentLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<string>("recent")
 
   // Usar string para la fecha en formato YYYY-MM-DD
   const today = new Date()
@@ -62,15 +66,56 @@ export default function AsistenciasPage() {
   // Estado para el formulario de edición de asistencia
   const [editAttendance, setEditAttendance] = useState<Attendance | null>(null)
 
+  // Cargar empleados al inicio
   useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true)
+    const fetchEmployees = async () => {
       try {
-        // Obtener empleados
         const employeeData = await dbService.getEmployees()
         setEmployees(employeeData)
+      } catch (error) {
+        console.error("Error al cargar empleados:", error)
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar los empleados. Intente nuevamente.",
+          variant: "destructive",
+        })
+      }
+    }
 
-        // Obtener asistencias usando directamente el string de fecha
+    fetchEmployees()
+  }, [toast])
+
+  // Cargar asistencias recientes
+  useEffect(() => {
+    const fetchRecentAttendances = async () => {
+      setIsRecentLoading(true)
+      try {
+        const recentData = await dbService.getRecentAttendances(100)
+        setRecentAttendances(recentData)
+      } catch (error) {
+        console.error("Error al cargar asistencias recientes:", error)
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar las asistencias recientes. Intente nuevamente.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsRecentLoading(false)
+      }
+    }
+
+    if (activeTab === "recent") {
+      fetchRecentAttendances()
+    }
+  }, [activeTab, toast])
+
+  // Cargar asistencias por fecha
+  useEffect(() => {
+    const fetchAttendancesByDate = async () => {
+      if (activeTab !== "date") return
+
+      setIsLoading(true)
+      try {
         console.log("Consultando asistencias para fecha:", selectedDateString)
 
         const attendanceData = await dbService.getAttendances({
@@ -92,12 +137,13 @@ export default function AsistenciasPage() {
       }
     }
 
-    fetchData()
-  }, [selectedDateString, selectedEmployee, toast])
+    fetchAttendancesByDate()
+  }, [selectedDateString, selectedEmployee, activeTab, toast])
 
   const handleExportCSV = () => {
     // Preparar datos para exportar
-    const data = attendances.map((attendance) => {
+    const dataToExport = activeTab === "recent" ? recentAttendances : attendances
+    const data = dataToExport.map((attendance) => {
       const employee = employees.find((e) => e.id === attendance.employeeId)
       return {
         Empleado: employee ? `${employee.firstName} ${employee.lastName}` : "Desconocido",
@@ -115,7 +161,7 @@ export default function AsistenciasPage() {
       }
     })
 
-    exportToCSV(data, `asistencias_${selectedDateString}`)
+    exportToCSV(data, `asistencias_${activeTab === "recent" ? "recientes" : selectedDateString}`)
   }
 
   const handleEmployeeChange = (employeeId: string) => {
@@ -214,9 +260,11 @@ export default function AsistenciasPage() {
       console.log("Creando asistencia con fecha:", newAttendance.date)
       const createdAttendance = await dbService.createAttendance(newAttendance)
 
-      // Actualizar la lista de asistencias solo si la fecha coincide con la seleccionada
-      if (createdAttendance.date === selectedDateString) {
+      // Actualizar la lista de asistencias según la pestaña activa
+      if (activeTab === "date" && createdAttendance.date === selectedDateString) {
         setAttendances((prev) => [...prev, createdAttendance])
+      } else if (activeTab === "recent") {
+        setRecentAttendances((prev) => [createdAttendance, ...prev])
       }
 
       // Cerrar el diálogo y resetear el formulario
@@ -265,10 +313,16 @@ export default function AsistenciasPage() {
       // Actualizar la asistencia en la base de datos
       const updatedAttendance = await dbService.updateAttendance(editAttendance.id, editAttendance)
 
-      // Actualizar la lista de asistencias
-      setAttendances((prev) =>
-        prev.map((attendance) => (attendance.id === updatedAttendance.id ? updatedAttendance : attendance)),
-      )
+      // Actualizar la lista de asistencias según la pestaña activa
+      if (activeTab === "date") {
+        setAttendances((prev) =>
+          prev.map((attendance) => (attendance.id === updatedAttendance.id ? updatedAttendance : attendance)),
+        )
+      } else if (activeTab === "recent") {
+        setRecentAttendances((prev) =>
+          prev.map((attendance) => (attendance.id === updatedAttendance.id ? updatedAttendance : attendance)),
+        )
+      }
 
       // Cerrar el diálogo de edición
       setIsEditDialogOpen(false)
@@ -905,51 +959,85 @@ export default function AsistenciasPage() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle>Registro de Asistencias</CardTitle>
-            <CardDescription>Selecciona una fecha para ver las asistencias correspondientes</CardDescription>
+            <CardDescription>Visualiza y gestiona las asistencias de los empleados</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center mb-4 space-x-4">
-              <div className="flex items-center space-x-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <UltraSimpleDatePicker value={selectedDateString} onChange={setSelectedDateString} />
-              </div>
+            <Tabs defaultValue="recent" onValueChange={setActiveTab} value={activeTab}>
+              <TabsList className="mb-4">
+                <TabsTrigger value="recent">
+                  <List className="mr-2 h-4 w-4" />
+                  Asistencias Recientes
+                </TabsTrigger>
+                <TabsTrigger value="date">
+                  <Calendar className="mr-2 h-4 w-4" />
+                  Por Fecha
+                </TabsTrigger>
+              </TabsList>
 
-              <div className="flex-1 max-w-sm">
-                <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todos los empleados" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los empleados</SelectItem>
-                    {employees.map((employee) => (
-                      <SelectItem key={employee.id} value={employee.id}>
-                        {employee.firstName} {employee.lastName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <TabsContent value="recent">
+                <div className="flex items-center mb-4 justify-end">
+                  <Button variant="outline" onClick={handleExportCSV}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Exportar CSV
+                  </Button>
+                </div>
 
-              <div className="ml-auto flex items-center gap-2">
-                <Button variant="outline" onClick={handleExportCSV}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Exportar CSV
-                </Button>
-              </div>
-            </div>
+                <DataTable
+                  columns={columns}
+                  data={recentAttendances}
+                  searchColumn="employeeId"
+                  searchPlaceholder="Buscar empleado..."
+                  isLoading={isRecentLoading}
+                />
+              </TabsContent>
 
-            <DataTable
-              columns={columns}
-              data={attendances}
-              searchColumn="employeeId"
-              searchPlaceholder="Buscar empleado..."
-            />
+              <TabsContent value="date">
+                <div className="flex items-center mb-4 space-x-4">
+                  <div className="flex items-center space-x-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <UltraSimpleDatePicker value={selectedDateString} onChange={setSelectedDateString} />
+                  </div>
+
+                  <div className="flex-1 max-w-sm">
+                    <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos los empleados" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos los empleados</SelectItem>
+                        {employees.map((employee) => (
+                          <SelectItem key={employee.id} value={employee.id}>
+                            {employee.firstName} {employee.lastName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="ml-auto flex items-center gap-2">
+                    <Button variant="outline" onClick={handleExportCSV}>
+                      <Download className="mr-2 h-4 w-4" />
+                      Exportar CSV
+                    </Button>
+                  </div>
+                </div>
+
+                <DataTable
+                  columns={columns}
+                  data={attendances}
+                  searchColumn="employeeId"
+                  searchPlaceholder="Buscar empleado..."
+                  isLoading={isLoading}
+                />
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
       </div>
     </DashboardLayout>
   )
 }
+
 
 
 

@@ -1,7 +1,5 @@
 "use client"
 
-import { DialogFooter } from "@/components/ui/dialog"
-
 import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/app/dashboard-layout"
 import { Button } from "@/components/ui/button"
@@ -11,11 +9,12 @@ import { dbService } from "@/lib/db-service"
 import { exportToCSV, formatDate, generateAuditReport } from "@/lib/export-utils"
 import type { Audit, AuditItem } from "@/types"
 import type { ColumnDef } from "@tanstack/react-table"
-import { Download, Plus, Calendar, FileText } from "lucide-react"
+import { Download, Plus, Calendar, FileText, List, Eye } from "lucide-react"
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -27,14 +26,22 @@ import { DatePicker } from "@/components/date-picker"
 import { Progress } from "@/components/ui/progress"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
+import { useToast } from "@/components/ui/use-toast"
 
 export default function AuditoriasPage() {
   const [audits, setAudits] = useState<Audit[]>([])
+  const [recentAudits, setRecentAudits] = useState<Audit[]>([])
   const [auditItems, setAuditItems] = useState<AuditItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isRecentLoading, setIsRecentLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined)
   const [selectedLocal, setSelectedLocal] = useState<string>("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState<string>("recent")
+  const [selectedAudit, setSelectedAudit] = useState<Audit | null>(null)
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
+  const { toast } = useToast()
 
   // Estado para el formulario de nueva auditoría
   const [newAudit, setNewAudit] = useState<Omit<Audit, "id">>({
@@ -50,8 +57,35 @@ export default function AuditoriasPage() {
     items: [],
   })
 
+  // Cargar auditorías recientes
+  useEffect(() => {
+    const fetchRecentAudits = async () => {
+      if (activeTab !== "recent") return
+
+      setIsRecentLoading(true)
+      try {
+        const recentData = await dbService.getAudits()
+        setRecentAudits(recentData.slice(0, 50)) // Mostrar las 50 más recientes
+      } catch (error) {
+        console.error("Error al cargar auditorías recientes:", error)
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar las auditorías recientes. Intente nuevamente.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsRecentLoading(false)
+      }
+    }
+
+    fetchRecentAudits()
+  }, [activeTab, toast])
+
+  // Cargar auditorías filtradas y items
   useEffect(() => {
     const fetchData = async () => {
+      if (activeTab !== "date") return
+
       setIsLoading(true)
       try {
         // Obtener auditorías
@@ -60,7 +94,25 @@ export default function AuditoriasPage() {
           ...(selectedLocal ? { local: selectedLocal } : {}),
         })
         setAudits(auditData)
+      } catch (error) {
+        console.error("Error al cargar datos de auditorías:", error)
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar las auditorías. Intente nuevamente.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
 
+    fetchData()
+  }, [selectedDate, selectedLocal, activeTab, toast])
+
+  // Cargar items de auditoría
+  useEffect(() => {
+    const fetchAuditItems = async () => {
+      try {
         // Obtener items de auditoría
         const itemsData = await dbService.getAuditItems()
         setAuditItems(itemsData)
@@ -71,18 +123,22 @@ export default function AuditoriasPage() {
           items: itemsData.map((item) => ({ ...item, completed: false })),
         }))
       } catch (error) {
-        console.error("Error al cargar datos de auditorías:", error)
-      } finally {
-        setIsLoading(false)
+        console.error("Error al cargar items de auditoría:", error)
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar los items de auditoría. Intente nuevamente.",
+          variant: "destructive",
+        })
       }
     }
 
-    fetchData()
-  }, [selectedDate, selectedLocal])
+    fetchAuditItems()
+  }, [toast])
 
   const handleExportCSV = () => {
     // Preparar datos para exportar
-    const data = audits.map((audit) => ({
+    const dataToExport = activeTab === "recent" ? recentAudits : audits
+    const data = dataToExport.map((audit) => ({
       Local: audit.local,
       Fecha: formatDate(audit.date),
       Turno: audit.shift === "morning" ? "Mañana" : audit.shift === "afternoon" ? "Tarde" : "Noche",
@@ -93,7 +149,10 @@ export default function AuditoriasPage() {
       Porcentaje: `${Math.round((audit.totalScore / 150) * 100)}%`,
     }))
 
-    exportToCSV(data, `auditorias_${selectedDate ? selectedDate.toISOString().split("T")[0] : "todas"}`)
+    exportToCSV(
+      data,
+      `auditorias_${activeTab === "recent" ? "recientes" : selectedDate ? selectedDate.toISOString().split("T")[0] : "todas"}`,
+    )
   }
 
   const handleItemChange = (id: string, completed: boolean) => {
@@ -113,11 +172,21 @@ export default function AuditoriasPage() {
       // Crear nueva auditoría
       const createdAudit = await dbService.createAudit(newAudit)
 
-      // Actualizar la lista de auditorías
-      setAudits((prev) => [...prev, createdAudit])
+      // Actualizar la lista de auditorías según la pestaña activa
+      if (activeTab === "recent") {
+        setRecentAudits((prev) => [createdAudit, ...prev])
+      } else {
+        setAudits((prev) => [...prev, createdAudit])
+      }
 
       // Cerrar el diálogo
       setIsDialogOpen(false)
+
+      // Mostrar mensaje de éxito
+      toast({
+        title: "Auditoría creada",
+        description: "La auditoría ha sido registrada correctamente.",
+      })
 
       // Resetear el formulario
       setNewAudit({
@@ -134,8 +203,59 @@ export default function AuditoriasPage() {
       })
     } catch (error) {
       console.error("Error al crear auditoría:", error)
-      alert("Error al registrar la auditoría. Por favor, intente nuevamente.")
+      toast({
+        title: "Error",
+        description: "Error al registrar la auditoría. Por favor, intente nuevamente.",
+        variant: "destructive",
+      })
     }
+  }
+
+  const handleViewAuditDetails = async (audit: Audit) => {
+    try {
+      // Si la auditoría ya tiene los items detallados, usarla directamente
+      if (audit.items && audit.items.length > 0) {
+        setSelectedAudit(audit)
+        setIsDetailsDialogOpen(true)
+        return
+      }
+
+      // Si no, obtener los detalles de la auditoría
+      const auditDetails = await dbService.getAuditById(audit.id)
+      if (auditDetails) {
+        setSelectedAudit(auditDetails)
+        setIsDetailsDialogOpen(true)
+      } else {
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar los detalles de la auditoría.",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error al obtener detalles de la auditoría:", error)
+      toast({
+        title: "Error",
+        description: "Error al cargar los detalles de la auditoría.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Función para obtener el color de la barra de progreso según el puntaje
+  const getProgressColor = (score: number) => {
+    const percentage = (score / 150) * 100
+    if (percentage >= 90) return "bg-green-500"
+    if (percentage >= 70) return "bg-yellow-500"
+    return "bg-red-500"
+  }
+
+  // Función para obtener el color del badge según el puntaje
+  const getBadgeColor = (score: number) => {
+    const percentage = (score / 150) * 100
+    if (percentage >= 90) return "bg-green-500 hover:bg-green-600"
+    if (percentage >= 70) return "bg-yellow-500 hover:bg-yellow-600"
+    return "bg-red-500 hover:bg-red-600"
   }
 
   const columns: ColumnDef<Audit>[] = [
@@ -159,18 +279,17 @@ export default function AuditoriasPage() {
       header: "Supervisor",
     },
     {
-      accessorKey: "managerName",
-      header: "Encargado",
-    },
-    {
       accessorKey: "totalScore",
       header: "Puntaje",
-      cell: ({ row }) => (
-        <div className="flex items-center space-x-2">
-          <span>{row.original.totalScore}/150</span>
-          <Progress value={(row.original.totalScore / 150) * 100} className="w-24" />
-        </div>
-      ),
+      cell: ({ row }) => {
+        const percentage = Math.round((row.original.totalScore / 150) * 100)
+        return (
+          <div className="flex items-center space-x-2">
+            <Badge className={getBadgeColor(row.original.totalScore)}>{percentage}%</Badge>
+            <Progress value={percentage} className={`w-24 ${getProgressColor(row.original.totalScore)}`} />
+          </div>
+        )
+      },
     },
     {
       id: "actions",
@@ -181,22 +300,19 @@ export default function AuditoriasPage() {
             variant="ghost"
             size="sm"
             onClick={() => {
-              // Ver detalles de la auditoría
-              const audit = row.original
-              generateAuditReport(audit)
+              // Exportar auditoría
+              generateAuditReport(row.original)
+              toast({
+                title: "Reporte generado",
+                description: "El reporte de auditoría ha sido generado correctamente.",
+              })
             }}
           >
             <FileText className="mr-1 h-4 w-4" />
             Exportar
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              // Ver detalles de la auditoría
-              alert(`Ver detalles de la auditoría del ${formatDate(row.original.date)}`)
-            }}
-          >
+          <Button variant="ghost" size="sm" onClick={() => handleViewAuditDetails(row.original)}>
+            <Eye className="mr-1 h-4 w-4" />
             Ver
           </Button>
         </div>
@@ -304,7 +420,10 @@ export default function AuditoriasPage() {
                     <Label>Items de Auditoría</Label>
                     <div className="text-sm">
                       Puntaje: <span className="font-medium">{newAudit.totalScore}/150</span>
-                      <Progress value={(newAudit.totalScore / 150) * 100} className="w-24 ml-2 inline-block" />
+                      <Progress
+                        value={(newAudit.totalScore / 150) * 100}
+                        className={`w-24 ml-2 inline-block ${getProgressColor(newAudit.totalScore)}`}
+                      />
                     </div>
                   </div>
 
@@ -349,6 +468,9 @@ export default function AuditoriasPage() {
               </div>
 
               <DialogFooter>
+                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                  Cancelar
+                </Button>
                 <Button type="submit" onClick={handleSubmit}>
                   Guardar Auditoría
                 </Button>
@@ -357,53 +479,222 @@ export default function AuditoriasPage() {
           </Dialog>
         </div>
 
+        {/* Diálogo de detalles de auditoría */}
+        <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+          <DialogContent className="max-w-4xl">
+            <DialogHeader>
+              <DialogTitle>Detalles de Auditoría</DialogTitle>
+              <DialogDescription>
+                {selectedAudit && (
+                  <>
+                    {selectedAudit.local} - {formatDate(selectedAudit.date)} -
+                    {selectedAudit.shift === "morning"
+                      ? " Turno Mañana"
+                      : selectedAudit.shift === "afternoon"
+                        ? " Turno Tarde"
+                        : " Turno Noche"}
+                  </>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+
+            {selectedAudit && (
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <h3 className="text-sm font-medium">Información General</h3>
+                    <div className="mt-2 space-y-1 text-sm">
+                      <p>
+                        <span className="font-medium">Local:</span> {selectedAudit.local}
+                      </p>
+                      <p>
+                        <span className="font-medium">Fecha:</span> {formatDate(selectedAudit.date)}
+                      </p>
+                      <p>
+                        <span className="font-medium">Turno:</span>{" "}
+                        {selectedAudit.shift === "morning"
+                          ? "Mañana"
+                          : selectedAudit.shift === "afternoon"
+                            ? "Tarde"
+                            : "Noche"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-medium">Responsables</h3>
+                    <div className="mt-2 space-y-1 text-sm">
+                      <p>
+                        <span className="font-medium">Supervisor:</span> {selectedAudit.supervisorName}
+                      </p>
+                      <p>
+                        <span className="font-medium">Encargado:</span> {selectedAudit.managerName}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium">Puntaje</h3>
+                    <div className="flex items-center space-x-2">
+                      <Badge className={getBadgeColor(selectedAudit.totalScore)}>
+                        {Math.round((selectedAudit.totalScore / 150) * 100)}%
+                      </Badge>
+                      <span className="text-sm">{selectedAudit.totalScore}/150 puntos</span>
+                    </div>
+                  </div>
+                  <Progress
+                    value={(selectedAudit.totalScore / 150) * 100}
+                    className={`mt-2 ${getProgressColor(selectedAudit.totalScore)}`}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium">Items Evaluados</h3>
+                  <Tabs defaultValue="limpieza">
+                    <TabsList className="grid grid-cols-7 w-full">
+                      <TabsTrigger value="limpieza">Limpieza</TabsTrigger>
+                      <TabsTrigger value="orden">Orden</TabsTrigger>
+                      <TabsTrigger value="operatividad">Operatividad</TabsTrigger>
+                      <TabsTrigger value="temperaturas">Temperaturas</TabsTrigger>
+                      <TabsTrigger value="procedimientos">Procedimientos</TabsTrigger>
+                      <TabsTrigger value="legales">Legales</TabsTrigger>
+                      <TabsTrigger value="nomina">Nómina</TabsTrigger>
+                    </TabsList>
+
+                    {["limpieza", "orden", "operatividad", "temperaturas", "procedimientos", "legales", "nomina"].map(
+                      (category) => (
+                        <TabsContent key={category} value={category} className="border rounded-md p-4">
+                          <div className="space-y-4">
+                            {selectedAudit.items
+                              .filter((item) => item.category.toLowerCase() === category)
+                              .map((item) => (
+                                <div key={item.id} className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-2">
+                                    <Checkbox id={`detail-item-${item.id}`} checked={item.completed} disabled />
+                                    <Label htmlFor={`detail-item-${item.id}`} className="text-sm">
+                                      {item.name}
+                                    </Label>
+                                  </div>
+                                  <div className="text-sm text-muted-foreground">{item.value} puntos</div>
+                                </div>
+                              ))}
+                          </div>
+                        </TabsContent>
+                      ),
+                    )}
+                  </Tabs>
+                </div>
+
+                <div className="flex justify-between">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      generateAuditReport(selectedAudit)
+                      toast({
+                        title: "Reporte generado",
+                        description: "El reporte de auditoría ha sido generado correctamente.",
+                      })
+                    }}
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    Exportar Reporte
+                  </Button>
+                  <Button onClick={() => setIsDetailsDialogOpen(false)}>Cerrar</Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
         <Card>
           <CardHeader className="pb-3">
             <CardTitle>Historial de Auditorías</CardTitle>
             <CardDescription>Consulta y gestiona las auditorías realizadas</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center mb-4 space-x-4">
-              <div className="flex items-center space-x-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <DatePicker date={selectedDate || new Date()} setDate={(date) => setSelectedDate(date)} />
-                <Button variant="outline" size="sm" onClick={() => setSelectedDate(undefined)}>
-                  Todas las fechas
-                </Button>
-              </div>
+            <Tabs defaultValue="recent" onValueChange={setActiveTab} value={activeTab}>
+              <TabsList className="mb-4">
+                <TabsTrigger value="recent">
+                  <List className="mr-2 h-4 w-4" />
+                  Auditorías Recientes
+                </TabsTrigger>
+                <TabsTrigger value="date">
+                  <Calendar className="mr-2 h-4 w-4" />
+                  Filtrar por Fecha
+                </TabsTrigger>
+              </TabsList>
 
-              <div className="flex-1 max-w-sm">
-                <Select value={selectedLocal} onValueChange={setSelectedLocal}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todos los locales" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos los locales</SelectItem>
-                    <SelectItem value="BR Cabildo">BR Cabildo</SelectItem>
-                    <SelectItem value="BR Carranza">BR Carranza</SelectItem>
-                    <SelectItem value="BR Pacifico">BR Pacifico</SelectItem>
-                    <SelectItem value="BR Lavalle">BR Lavalle</SelectItem>
-                    <SelectItem value="BR Rivadavia">BR Rivadavia</SelectItem>
-                    <SelectItem value="BR Aguero">BR Aguero</SelectItem>
-                    <SelectItem value="BR Dorrego">BR Dorrego</SelectItem>
-                    <SelectItem value="Dean & Dennys">Dean & Dennys</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <TabsContent value="recent">
+                <div className="flex items-center mb-4 justify-end">
+                  <Button variant="outline" onClick={handleExportCSV}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Exportar CSV
+                  </Button>
+                </div>
 
-              <div className="ml-auto flex items-center gap-2">
-                <Button variant="outline" onClick={handleExportCSV}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Exportar CSV
-                </Button>
-              </div>
-            </div>
+                <DataTable
+                  columns={columns}
+                  data={recentAudits}
+                  searchColumn="local"
+                  searchPlaceholder="Buscar por local..."
+                  isLoading={isRecentLoading}
+                />
+              </TabsContent>
 
-            <DataTable columns={columns} data={audits} searchColumn="local" searchPlaceholder="Buscar por local..." />
+              <TabsContent value="date">
+                <div className="flex items-center mb-4 space-x-4">
+                  <div className="flex items-center space-x-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <DatePicker date={selectedDate || new Date()} setDate={(date) => setSelectedDate(date)} />
+                    <Button variant="outline" size="sm" onClick={() => setSelectedDate(undefined)}>
+                      Todas las fechas
+                    </Button>
+                  </div>
+
+                  <div className="flex-1 max-w-sm">
+                    <Select value={selectedLocal} onValueChange={setSelectedLocal}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos los locales" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos los locales</SelectItem>
+                        <SelectItem value="BR Cabildo">BR Cabildo</SelectItem>
+                        <SelectItem value="BR Carranza">BR Carranza</SelectItem>
+                        <SelectItem value="BR Pacifico">BR Pacifico</SelectItem>
+                        <SelectItem value="BR Lavalle">BR Lavalle</SelectItem>
+                        <SelectItem value="BR Rivadavia">BR Rivadavia</SelectItem>
+                        <SelectItem value="BR Aguero">BR Aguero</SelectItem>
+                        <SelectItem value="BR Dorrego">BR Dorrego</SelectItem>
+                        <SelectItem value="Dean & Dennys">Dean & Dennys</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="ml-auto flex items-center gap-2">
+                    <Button variant="outline" onClick={handleExportCSV}>
+                      <Download className="mr-2 h-4 w-4" />
+                      Exportar CSV
+                    </Button>
+                  </div>
+                </div>
+
+                <DataTable
+                  columns={columns}
+                  data={audits}
+                  searchColumn="local"
+                  searchPlaceholder="Buscar por local..."
+                  isLoading={isLoading}
+                />
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
       </div>
     </DashboardLayout>
   )
 }
+
+
 
