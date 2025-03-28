@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { dbService } from "@/lib/db-service"
 import type { Employee, Local, WorkShift, EmployeeStatus, UserRole } from "@/types"
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save } from "lucide-react"
 import Link from "next/link"
 import { useToast } from "@/components/ui/use-toast"
 
@@ -32,6 +32,19 @@ export default function EditarEmpleadoPage({ params }: { params: { id: string } 
       try {
         const employee = await dbService.getEmployeeById(id)
         if (employee) {
+          // Asegurarse de que bankSalary sea un número, incluso si es 0
+          if (employee.bankSalary === null || employee.bankSalary === undefined) {
+            employee.bankSalary = 0
+          }
+
+          // Asegurarse de que baseSalary sea un número
+          if (employee.baseSalary === null || employee.baseSalary === undefined) {
+            employee.baseSalary = 0
+          }
+
+          // Calcular totalSalary
+          employee.totalSalary = (employee.baseSalary || 0) + (employee.bankSalary || 0)
+
           setFormData(employee)
         } else {
           toast({
@@ -62,10 +75,13 @@ export default function EditarEmpleadoPage({ params }: { params: { id: string } 
     if (!formData) return
 
     if (type === "number") {
+      // Convertir a número o usar 0 si está vacío
+      const numValue = value === "" ? 0 : Number.parseFloat(value)
+
       setFormData((prev) => {
         if (!prev) return prev
 
-        const newData = { ...prev, [name]: Number.parseFloat(value) || 0 }
+        const newData = { ...prev, [name]: numValue }
 
         // Actualizar sueldo total automáticamente
         if (name === "baseSalary" || name === "bankSalary") {
@@ -98,7 +114,15 @@ export default function EditarEmpleadoPage({ params }: { params: { id: string } 
     setIsSubmitting(true)
 
     try {
-      const updatedEmployee = await dbService.updateEmployee(id, formData)
+      // Asegurarse de que bankSalary y baseSalary sean números antes de enviar
+      const dataToSubmit = {
+        ...formData,
+        bankSalary: typeof formData.bankSalary === "number" ? formData.bankSalary : 0,
+        baseSalary: typeof formData.baseSalary === "number" ? formData.baseSalary : 0,
+        totalSalary: typeof formData.totalSalary === "number" ? formData.totalSalary : 0,
+      }
+
+      const updatedEmployee = await dbService.updateEmployee(id, dataToSubmit)
 
       if (updatedEmployee) {
         toast({
@@ -386,8 +410,10 @@ export default function EditarEmpleadoPage({ params }: { params: { id: string } 
                         id="baseSalary"
                         name="baseSalary"
                         type="number"
+                        min="0"
+                        step="0.01"
                         placeholder="0.00"
-                        value={formData.baseSalary || ""}
+                        value={formData.baseSalary === 0 ? "0" : formData.baseSalary || ""}
                         onChange={handleChange}
                         required
                       />
@@ -398,11 +424,16 @@ export default function EditarEmpleadoPage({ params }: { params: { id: string } 
                         id="bankSalary"
                         name="bankSalary"
                         type="number"
+                        min="0"
+                        step="0.01"
                         placeholder="0.00"
-                        value={formData.bankSalary || ""}
+                        value={formData.bankSalary === 0 ? "0" : formData.bankSalary || ""}
                         onChange={handleChange}
                         required
                       />
+                      <p className="text-xs text-muted-foreground">
+                        Puede ser 0 para empleados no registrados formalmente.
+                      </p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="totalSalary">Sueldo Total</Label>
@@ -411,7 +442,7 @@ export default function EditarEmpleadoPage({ params }: { params: { id: string } 
                         name="totalSalary"
                         type="number"
                         placeholder="0.00"
-                        value={formData.totalSalary || ""}
+                        value={formData.totalSalary === 0 ? "0" : formData.totalSalary || ""}
                         readOnly
                         className="bg-muted"
                       />
@@ -435,4 +466,6 @@ export default function EditarEmpleadoPage({ params }: { params: { id: string } 
     </DashboardLayout>
   )
 }
+
+
 
