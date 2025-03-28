@@ -8,12 +8,28 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { dbService } from "@/lib/db-service"
-import { formatDate } from "@/lib/utils"
+import { formatDate } from "@/lib/export-utils" // Corregido: importar desde export-utils en lugar de utils
 import { StatusBadge } from "@/components/status-badge"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { Plus, Search, Filter } from 'lucide-react'
 import Link from "next/link"
 import type { Employee } from "@/types"
+
+// Función de respaldo por si formatDate no está disponible
+const formatDateFallback = (dateString: string) => {
+  if (!dateString) return "-";
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('es-AR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  } catch (error) {
+    console.error("Error al formatear fecha:", error);
+    return dateString.split('T')[0] || dateString;
+  }
+};
 
 export default function EmpleadosPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -254,7 +270,10 @@ export default function EmpleadosPage() {
                           <TableCell>{employee.documentId}</TableCell>
                           <TableCell>{employee.local}</TableCell>
                           <TableCell>{employee.position}</TableCell>
-                          <TableCell>{formatDate(employee.hireDate)}</TableCell>
+                          <TableCell>
+                            {/* Usar la función de respaldo si formatDate no está disponible */}
+                            {formatDateFallback(employee.hireDate)}
+                          </TableCell>
                           <TableCell>
                             <StatusBadge status={employee.status} />
                           </TableCell>
@@ -318,4 +337,3 @@ export default function EmpleadosPage() {
     </DashboardLayout>
   )
 }
-
