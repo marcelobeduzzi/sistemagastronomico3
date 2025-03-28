@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
 import { DashboardLayout } from "@/app/dashboard-layout"
@@ -17,145 +17,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { db } from "@/lib/db"
 import { toast } from "@/components/ui/use-toast"
 
-// Estructura de categorías e ítems para la auditoría
-const auditCategories = [
-  {
-    id: "limpieza",
-    name: "Limpieza y Orden",
-    maxScore: 25,
-    items: [
-      {
-        id: "limpieza_general",
-        name: "Limpieza general del local",
-        maxScore: 5,
-      },
-      {
-        id: "orden_cocina",
-        name: "Orden en la cocina",
-        maxScore: 5,
-      },
-      {
-        id: "limpieza_banos",
-        name: "Limpieza de baños",
-        maxScore: 5,
-      },
-      {
-        id: "manejo_residuos",
-        name: "Manejo de residuos",
-        maxScore: 5,
-      },
-      {
-        id: "orden_almacen",
-        name: "Orden en almacén",
-        maxScore: 5,
-      },
-    ],
-  },
-  {
-    id: "seguridad_alimentaria",
-    name: "Seguridad Alimentaria",
-    maxScore: 25,
-    items: [
-      {
-        id: "control_temperatura",
-        name: "Control de temperatura de alimentos",
-        maxScore: 5,
-      },
-      {
-        id: "almacenamiento",
-        name: "Almacenamiento adecuado",
-        maxScore: 5,
-      },
-      {
-        id: "fechas_vencimiento",
-        name: "Control de fechas de vencimiento",
-        maxScore: 5,
-      },
-      {
-        id: "manipulacion",
-        name: "Manipulación de alimentos",
-        maxScore: 5,
-      },
-      {
-        id: "contaminacion_cruzada",
-        name: "Prevención de contaminación cruzada",
-        maxScore: 5,
-      },
-    ],
-  },
-  {
-    id: "atencion_cliente",
-    name: "Atención al Cliente",
-    maxScore: 20,
-    items: [
-      {
-        id: "presentacion_personal",
-        name: "Presentación del personal",
-        maxScore: 5,
-      },
-      {
-        id: "amabilidad",
-        name: "Amabilidad y cortesía",
-        maxScore: 5,
-      },
-      {
-        id: "rapidez",
-        name: "Rapidez en el servicio",
-        maxScore: 5,
-      },
-      {
-        id: "conocimiento_menu",
-        name: "Conocimiento del menú",
-        maxScore: 5,
-      },
-    ],
-  },
-  {
-    id: "calidad_producto",
-    name: "Calidad del Producto",
-    maxScore: 20,
-    items: [
-      {
-        id: "presentacion_platos",
-        name: "Presentación de platos",
-        maxScore: 5,
-      },
-      {
-        id: "sabor",
-        name: "Sabor y temperatura adecuados",
-        maxScore: 5,
-      },
-      {
-        id: "consistencia",
-        name: "Consistencia en la calidad",
-        maxScore: 5,
-      },
-      {
-        id: "frescura",
-        name: "Frescura de ingredientes",
-        maxScore: 5,
-      },
-    ],
-  },
-  {
-    id: "procesos_operativos",
-    name: "Procesos Operativos",
-    maxScore: 10,
-    items: [
-      {
-        id: "seguimiento_recetas",
-        name: "Seguimiento de recetas estándar",
-        maxScore: 5,
-      },
-      {
-        id: "eficiencia",
-        name: "Eficiencia en procesos",
-        maxScore: 5,
-      },
-    ],
-  },
-]
-
 // Lista de locales para seleccionar
 const locales = [
   { id: "cabildo", name: "BR Cabildo" },
@@ -163,12 +24,16 @@ const locales = [
   { id: "pacifico", name: "BR Pacífico" },
   { id: "lavalle", name: "BR Lavalle" },
   { id: "rivadavia", name: "BR Rivadavia" },
+  { id: "aguero", name: "BR Aguero" },
+  { id: "dorrego", name: "BR Dorrego" },
+  { id: "dean_dennys", name: "Dean & Dennys" },
 ]
 
 export default function NuevaAuditoriaPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("limpieza")
+  const [auditCategories, setAuditCategories] = useState([])
 
   // Estado para los datos de la auditoría
   const [auditData, setAuditData] = useState({
@@ -176,16 +41,118 @@ export default function NuevaAuditoriaPage() {
     auditor: "",
     date: format(new Date(), "yyyy-MM-dd"),
     generalObservations: "",
-    categories: auditCategories.map((category) => ({
-      ...category,
-      score: 0,
-      items: category.items.map((item) => ({
-        ...item,
-        score: 0,
-        observations: "",
-      })),
-    })),
+    categories: [],
   })
+
+  // Cargar categorías desde la base de datos
+  useEffect(() => {
+    const fetchAuditConfig = async () => {
+      try {
+        setIsLoading(true)
+
+        // Intentar cargar desde la base de datos
+        const { data: configData, error } = await db.supabase.from("audit_config").select("*").single()
+
+        let categories = []
+
+        if (error || !configData) {
+          // Si no hay configuración, usar valores predeterminados
+          categories = [
+            {
+              id: "limpieza",
+              name: "Limpieza y Orden",
+              maxScore: 25,
+              items: [
+                { id: "limpieza_general", name: "Limpieza general del local", maxScore: 5 },
+                { id: "orden_cocina", name: "Orden en la cocina", maxScore: 5 },
+                { id: "limpieza_banos", name: "Limpieza de baños", maxScore: 5 },
+                { id: "manejo_residuos", name: "Manejo de residuos", maxScore: 5 },
+                { id: "orden_almacen", name: "Orden en almacén", maxScore: 5 },
+              ],
+            },
+            {
+              id: "seguridad_alimentaria",
+              name: "Seguridad Alimentaria",
+              maxScore: 25,
+              items: [
+                { id: "control_temperatura", name: "Control de temperatura de alimentos", maxScore: 5 },
+                { id: "almacenamiento", name: "Almacenamiento adecuado", maxScore: 5 },
+                { id: "fechas_vencimiento", name: "Control de fechas de vencimiento", maxScore: 5 },
+                { id: "manipulacion", name: "Manipulación de alimentos", maxScore: 5 },
+                { id: "contaminacion_cruzada", name: "Prevención de contaminación cruzada", maxScore: 5 },
+              ],
+            },
+            {
+              id: "atencion_cliente",
+              name: "Atención al Cliente",
+              maxScore: 20,
+              items: [
+                { id: "presentacion_personal", name: "Presentación del personal", maxScore: 5 },
+                { id: "amabilidad", name: "Amabilidad y cortesía", maxScore: 5 },
+                { id: "rapidez", name: "Rapidez en el servicio", maxScore: 5 },
+                { id: "conocimiento_menu", name: "Conocimiento del menú", maxScore: 5 },
+              ],
+            },
+            {
+              id: "calidad_producto",
+              name: "Calidad del Producto",
+              maxScore: 20,
+              items: [
+                { id: "presentacion_platos", name: "Presentación de platos", maxScore: 5 },
+                { id: "sabor", name: "Sabor y temperatura adecuados", maxScore: 5 },
+                { id: "consistencia", name: "Consistencia en la calidad", maxScore: 5 },
+                { id: "frescura", name: "Frescura de ingredientes", maxScore: 5 },
+              ],
+            },
+            {
+              id: "procesos_operativos",
+              name: "Procesos Operativos",
+              maxScore: 10,
+              items: [
+                { id: "seguimiento_recetas", name: "Seguimiento de recetas estándar", maxScore: 5 },
+                { id: "eficiencia", name: "Eficiencia en procesos", maxScore: 5 },
+              ],
+            },
+          ]
+        } else {
+          // Usar la configuración de la base de datos
+          categories = configData.categories || []
+        }
+
+        setAuditCategories(categories)
+
+        // Inicializar el estado de la auditoría con las categorías cargadas
+        setAuditData({
+          ...auditData,
+          categories: categories.map((category) => ({
+            ...category,
+            score: 0,
+            items: category.items.map((item) => ({
+              ...item,
+              score: 0,
+              observations: "",
+            })),
+          })),
+        })
+
+        // Establecer la primera categoría como activa
+        if (categories.length > 0) {
+          setActiveTab(categories[0].id)
+        }
+      } catch (error) {
+        console.error("Error al cargar configuración de auditoría:", error)
+        toast({
+          title: "Error",
+          description: "No se pudo cargar la configuración de auditoría",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchAuditConfig()
+  }, [])
 
   // Calcular puntaje total
   const totalScore = auditData.categories.reduce((acc, category) => acc + category.score, 0)
@@ -412,29 +379,30 @@ export default function NuevaAuditoriaPage() {
               <CardDescription>Califica cada ítem de 0 a 5 puntos</CardDescription>
             </CardHeader>
             <CardContent>
-              <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid grid-cols-2 md:grid-cols-5 mb-4">
-                  {auditCategories.map((category) => (
-                    <TabsTrigger key={category.id} value={category.id}>
-                      {category.name}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
+              {auditData.categories.length === 0 ? (
+                <div className="flex items-center justify-center h-64">
+                  <p className="text-muted-foreground">Cargando categorías...</p>
+                </div>
+              ) : (
+                <Tabs value={activeTab} onValueChange={setActiveTab}>
+                  <TabsList className="grid grid-cols-2 md:grid-cols-5 mb-4">
+                    {auditData.categories.map((category) => (
+                      <TabsTrigger key={category.id} value={category.id}>
+                        {category.name}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
 
-                {auditCategories.map((category) => {
-                  const currentCategory = auditData.categories.find((c) => c.id === category.id)
-                  if (!currentCategory) return null
-
-                  return (
+                  {auditData.categories.map((category) => (
                     <TabsContent key={category.id} value={category.id} className="space-y-6">
                       <div className="flex justify-between items-center">
                         <h3 className="text-lg font-medium">{category.name}</h3>
                         <span className="text-sm font-medium">
-                          {currentCategory.score} / {category.maxScore} puntos
+                          {category.score} / {category.maxScore} puntos
                         </span>
                       </div>
 
-                      {currentCategory.items.map((item) => (
+                      {category.items.map((item) => (
                         <div key={item.id} className="space-y-4 border-b pb-4">
                           <div className="flex justify-between items-center">
                             <Label htmlFor={item.id}>{item.name}</Label>
@@ -462,9 +430,9 @@ export default function NuevaAuditoriaPage() {
                         </div>
                       ))}
                     </TabsContent>
-                  )
-                })}
-              </Tabs>
+                  ))}
+                </Tabs>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -472,6 +440,8 @@ export default function NuevaAuditoriaPage() {
     </DashboardLayout>
   )
 }
+
+
 
 
 

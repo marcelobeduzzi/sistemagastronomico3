@@ -148,9 +148,9 @@ class DatabaseService {
 
       // Construir la consulta base
       let query = this.supabase.from("attendance").select(`
-    *,
-    employees (id, first_name, last_name)
-  `)
+      *,
+      employees (id, first_name, last_name)
+    `)
 
       // Filtrar por fecha exacta (sin manipulación)
       if (date) {
@@ -203,9 +203,9 @@ class DatabaseService {
       const { data, error } = await this.supabase
         .from("attendance")
         .select(`
-        *,
-        employees (id, first_name, last_name)
-      `)
+          *,
+          employees (id, first_name, last_name)
+        `)
         .order("date", { ascending: false })
         .limit(limit)
 
@@ -240,9 +240,9 @@ class DatabaseService {
       const query = this.supabase
         .from("attendance")
         .select(`
-      *,
-      employees (id, first_name, last_name)
-    `)
+        *,
+        employees (id, first_name, last_name)
+      `)
         .eq("employee_id", employeeId)
         .gte("date", startDate)
         .lte("date", endDate)
@@ -280,9 +280,9 @@ class DatabaseService {
       const { data, error } = await this.supabase
         .from("attendance")
         .select(`
-    *,
-    employees (id, first_name, last_name)
-  `)
+      *,
+      employees (id, first_name, last_name)
+    `)
         .eq("id", id)
         .single()
 
@@ -1264,6 +1264,60 @@ class DatabaseService {
     }
   }
 
+  /**
+   * Obtiene la configuración de auditorías
+   * @returns Configuración de categorías e ítems para auditorías
+   */
+  async getAuditConfig() {
+    try {
+      const { data, error } = await this.supabase.from("audit_config").select("*").single()
+
+      if (error) {
+        console.error("Error al obtener configuración de auditorías:", error)
+        throw error
+      }
+
+      return data
+    } catch (error) {
+      console.error("Error en getAuditConfig:", error)
+      return null
+    }
+  }
+
+  /**
+   * Guarda la configuración de auditorías
+   * @param config Configuración de categorías e ítems para auditorías
+   * @returns Resultado de la operación
+   */
+  async saveAuditConfig(config: any) {
+    try {
+      // Verificar si ya existe una configuración
+      const { data: existingConfig } = await this.supabase.from("audit_config").select("id").single()
+
+      if (existingConfig) {
+        // Actualizar configuración existente
+        const { data, error } = await this.supabase
+          .from("audit_config")
+          .update(config)
+          .eq("id", existingConfig.id)
+          .select()
+          .single()
+
+        if (error) throw error
+        return data
+      } else {
+        // Crear nueva configuración
+        const { data, error } = await this.supabase.from("audit_config").insert([config]).select().single()
+
+        if (error) throw error
+        return data
+      }
+    } catch (error) {
+      console.error("Error en saveAuditConfig:", error)
+      throw error
+    }
+  }
+
   // Billing methods
   async getBilling(startDate: Date, endDate: Date) {
     const { data, error } = await this.supabase
@@ -1597,6 +1651,8 @@ export const db = {
 
 // Exportar también el servicio original para mantener compatibilidad
 export { dbService }
+
+
 
 
 

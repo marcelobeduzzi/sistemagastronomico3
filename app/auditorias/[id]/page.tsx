@@ -12,6 +12,8 @@ import { AuditDetail } from "@/components/auditorias/audit-detail"
 import { db } from "@/lib/db"
 import { toast } from "@/components/ui/use-toast"
 import { ArrowLeft, Printer } from "lucide-react"
+// Importa la función de exportación
+import { generateAuditReport } from "@/lib/export-utils"
 
 export default function AuditoriaDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter()
@@ -53,8 +55,11 @@ export default function AuditoriaDetailPage({ params }: { params: { id: string }
     fetchAudit()
   }, [params.id, router])
 
+  // Reemplaza la función handlePrint
   const handlePrint = () => {
-    window.print()
+    if (audit) {
+      generateAuditReport(audit)
+    }
   }
 
   if (isLoading) {
@@ -185,6 +190,8 @@ export default function AuditoriaDetailPage({ params }: { params: { id: string }
     </DashboardLayout>
   )
 }
+
+
 
 
 

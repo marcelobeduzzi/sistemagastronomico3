@@ -1,4 +1,4 @@
-import type { Employee, Payroll, Audit, Balance } from "@/types"
+import type { Employee, Payroll, Audit, Balance, Order } from "@/types"
 import { jsPDF } from "jspdf"
 import "jspdf-autotable"
 
@@ -279,26 +279,156 @@ export const generateAuditReport = (audit: Audit) => {
 
     // Información general
     doc.setFontSize(12)
-    doc.text(`Local: ${audit.local}`, 14, 30)
+    doc.text(`Local: ${audit.localName || audit.local}`, 14, 30)
     doc.text(`Fecha: ${formatDate(audit.date)}`, 14, 35)
-    doc.text(`Turno: ${audit.shift === "morning" ? "Mañana" : audit.shift === "afternoon" ? "Tarde" : "Noche"}`, 14, 40)
-    doc.text(`Supervisor: ${audit.supervisorName}`, 14, 45)
-    doc.text(`Encargado: ${audit.managerName}`, 14, 50)
-    doc.text(`Puntaje Total: ${audit.totalScore} / 150`, 14, 55)
+    doc.text(`Auditor: ${audit.auditor || audit.supervisorName}`, 14, 40)
+    
+    // Verificar si existe el campo shift
+    if (audit.shift) {
+      doc.text(`Turno: ${audit.shift === "morning" ? "Mañana" : audit.shift === "afternoon" ? "Tarde" : "Noche"}`, 14, 45)
+      doc.text(`Encargado: ${audit.managerName || ""}`, 14, 50)
+      doc.text(`Puntaje Total: ${audit.totalScore} / ${audit.maxScore || 150}`, 14, 55)
+    } else {
+      // Si no existe shift, es el nuevo formato de auditoría
+      doc.text(`Puntaje Total: ${audit.totalScore} / ${audit.maxScore}`, 14, 45)
+      doc.text(`Porcentaje: ${audit.percentage}%`, 14, 50)
+    }
 
-    // Agrupar items por categoría
-    const itemsByCategory: Record<string, AuditItem[]> = {}
-    audit.items.forEach((item) => {
-      if (!itemsByCategory[item.category]) {
-        itemsByCategory[item.category] = []
+    let yPos = 60
+
+    // Verificar si tiene el campo categories (nuevo formato)
+    if (audit.categories && audit.categories.length > 0) {
+      // Mostrar resumen de categorías
+      doc.setFontSize(14)
+      doc.text("Resumen por Categorías", 14, yPos)
+      yPos += 5
+      doc.line(14, yPos, 196, yPos)
+      yPos += 10
+
+      // Tabla de categorías
+      const categoryColumn = ["Categoría", "Puntaje", "Porcentaje"]
+      const categoryRows = audit.categories.map((category) => [
+        category.name,
+        `${category.score} / ${category.maxScore}`,
+        `${Math.round((category.score / category.maxScore) * 100)}%`,
+      ])
+
+      doc.autoTable({
+        startY: yPos,
+        head: [categoryColumn],
+        body: categoryRows,
+        theme: "grid",
+        headStyles: {
+          fillColor: [40, 40, 40],
+          textColor: 255,
+          fontStyle: "bold",
+        },
+      })
+
+      yPos = (doc as any).lastAutoTable.finalY + 15
+
+      // Detalles por categoría
+      doc.setFontSize(14)
+      doc.text("Detalle por Categorías", 14, yPos)
+      yPos += 5
+      doc.line(14, yPos, 196, yPos)
+      yPos += 10
+
+      // Recorrer cada categoría
+      for (const category of audit.categories) {
+        // Verificar si hay espacio suficiente en la página
+        if (yPos > 250) {
+          doc.addPage()
+          yPos = 20
+        }
+
+        doc.setFontSize(12)
+        doc.text(`${category.name} (${category.score}/${category.maxScore})`, 14, yPos)
+        yPos += 5
+
+        // Tabla de items
+        const itemColumn = ["Ítem", "Puntaje", "Observaciones"]
+        const itemRows = category.items.map((item) => [
+          item.name,
+          `${item.score} / ${item.maxScore}`,
+          item.observations || "",
+        ])
+
+        doc.autoTable({
+          startY: yPos,
+          head: [itemColumn],
+          body: itemRows,
+          theme: "grid",
+          headStyles: {
+            fillColor: [40, 40, 40],
+            textColor: 255,
+            fontStyle: "bold",
+          },
+          columnStyles: {
+            2: { cellWidth: 80 }, // Ancho para observaciones
+          },
+        })
+
+        yPos = (doc as any).lastAutoTable.finalY + 10
       }
-      itemsByCategory[item.category].push(item)
-    })
+    } else if (audit.items && audit.items.length > 0) {
+      // Formato antiguo con items
+      // Agrupar items por categoría
+      const itemsByCategory: Record<string, AuditItem[]> = {}
+      audit.items.forEach((item) => {
+        if (!itemsByCategory[item.category]) {
+          itemsByCategory[item.category] = []
+        }
+        itemsByCategory[item.category].push(item)
+      })
 
-    let yPos = 65
+      // Mostrar items por categoría
+      Object.entries(itemsByCategory).forEach(([category, items]) => {
+        // Verificar si hay espacio suficiente en la página
+        if (yPos > 250) {
+          doc.addPage()
+          yPos = 20
+        }
 
-    // Mostrar items por categoría
-    Object.entries(itemsByCategory).forEach(([category, items]) => {
+        doc.setFontSize(14)
+        doc.text(`${category}`, 14, yPos)
+        yPos += 5
+        doc.line(14, yPos, 196, yPos)
+        yPos += 10
+
+        // Calcular puntaje de la categoría
+        const categoryScore = items.reduce((sum, item) => sum + (item.completed ? item.value : 0), 0)
+        const categoryMaxScore = items.reduce((sum, item) => sum + item.value, 0)
+
+        doc.setFontSize(12)
+        doc.text(`Puntaje: ${categoryScore} / ${categoryMaxScore}`, 14, yPos)
+        yPos += 10
+
+        // Tabla de items
+        const tableColumn = ["Item", "Valor", "Completado"]
+        const tableRows = items.map((item) => [item.name, item.value.toString(), item.completed ? "Sí" : "No"])
+
+        doc.autoTable({
+          startY: yPos,
+          head: [tableColumn],
+          body: tableRows,
+          theme: "grid",
+          headStyles: {
+            fillColor: [40, 40, 40],
+            textColor: 255,
+            fontStyle: "bold",
+          },
+          alternateRowStyles: {
+            fillColor: [245, 245, 245],
+          },
+        })
+
+        yPos = (doc as any).lastAutoTable.finalY + 15
+      })
+    }
+
+    // Observaciones generales
+    if (audit.generalObservations) {
       // Verificar si hay espacio suficiente en la página
       if (yPos > 250) {
         doc.addPage()
@@ -306,43 +436,20 @@ export const generateAuditReport = (audit: Audit) => {
       }
 
       doc.setFontSize(14)
-      doc.text(`${category}`, 14, yPos)
+      doc.text("Observaciones Generales", 14, yPos)
       yPos += 5
       doc.line(14, yPos, 196, yPos)
       yPos += 10
 
-      // Calcular puntaje de la categoría
-      const categoryScore = items.reduce((sum, item) => sum + (item.completed ? item.value : 0), 0)
-      const categoryMaxScore = items.reduce((sum, item) => sum + item.value, 0)
-
       doc.setFontSize(12)
-      doc.text(`Puntaje: ${categoryScore} / ${categoryMaxScore}`, 14, yPos)
-      yPos += 10
-
-      // Tabla de items
-      const tableColumn = ["Item", "Valor", "Completado"]
-      const tableRows = items.map((item) => [item.name, item.value.toString(), item.completed ? "Sí" : "No"])
-
-      doc.autoTable({
-        startY: yPos,
-        head: [tableColumn],
-        body: tableRows,
-        theme: "grid",
-        headStyles: {
-          fillColor: [40, 40, 40],
-          textColor: 255,
-          fontStyle: "bold",
-        },
-        alternateRowStyles: {
-          fillColor: [245, 245, 245],
-        },
-      })
-
-      yPos = (doc as any).lastAutoTable.finalY + 15
-    })
+      const splitText = doc.splitTextToSize(audit.generalObservations, 180)
+      doc.text(splitText, 14, yPos)
+    }
 
     // Guardar PDF
-    doc.save(`Auditoria_${audit.local}_${audit.date}.pdf`)
+    const localName = audit.localName || audit.local || "Local"
+    const formattedDate = formatDate(audit.date).replace(/\//g, "-")
+    doc.save(`Auditoria_${localName}_${formattedDate}.pdf`)
   } catch (error) {
     console.error("Error al generar reporte de auditoría:", error)
     alert("Ocurrió un error al generar el reporte de auditoría. Por favor, intente nuevamente.")
@@ -440,5 +547,95 @@ export const generateBalanceReport = (balance: Balance) => {
   }
 }
 
+// Función para generar reporte de pedido Brozziano en PDF
+export const generateOrderReport = (order: Order) => {
+  try {
+    const doc = new jsPDF()
+
+    // Encabezado
+    doc.setFontSize(18)
+    doc.text("PEDIDO BROZZIANO", 105, 20, { align: "center" })
+
+    // Información general
+    doc.setFontSize(12)
+    doc.text(`Número de Pedido: ${order.id}`, 14, 30)
+    doc.text(`Fecha: ${formatDate(order.date || order.createdAt)}`, 14, 35)
+    doc.text(`Local: ${order.localName || order.local}`, 14, 40)
+    doc.text(`Estado: ${order.status || "Pendiente"}`, 14, 45)
+
+    // Información del cliente
+    if (order.clientName) {
+      doc.text(`Cliente: ${order.clientName}`, 14, 50)
+    }
+    
+    if (order.clientPhone) {
+      doc.text(`Teléfono: ${order.clientPhone}`, 14, 55)
+    }
+    
+    if (order.clientAddress) {
+      doc.text(`Dirección: ${order.clientAddress}`, 14, 60)
+    }
+
+    let yPos = 65
+
+    // Tabla de productos
+    if (order.items && order.items.length > 0) {
+      doc.setFontSize(14)
+      doc.text("PRODUCTOS", 14, yPos)
+      yPos += 5
+      doc.line(14, yPos, 196, yPos)
+      yPos += 5
+
+      const itemsData = order.items.map((item: any) => [
+        item.name || item.productName,
+        item.quantity,
+        formatCurrency(item.price),
+        formatCurrency(item.quantity * item.price)
+      ])
+
+      doc.autoTable({
+        startY: yPos,
+        head: [["Producto", "Cantidad", "Precio", "Subtotal"]],
+        body: itemsData,
+        theme: "grid",
+        headStyles: {
+          fillColor: [40, 40, 40],
+          textColor: 255,
+          fontStyle: "bold",
+        },
+      })
+
+      yPos = (doc as any).lastAutoTable.finalY + 10
+
+      // Total
+      const total = order.total || order.items.reduce((sum: number, item: any) => sum + (item.quantity * item.price), 0)
+      
+      doc.setFontSize(14)
+      doc.text(`TOTAL: ${formatCurrency(total)}`, 150, yPos, { align: "right" })
+      yPos += 15
+    }
+
+    // Observaciones
+    if (order.notes || order.observations) {
+      const notes = order.notes || order.observations
+      
+      doc.setFontSize(14)
+      doc.text("OBSERVACIONES", 14, yPos)
+      yPos += 5
+      doc.line(14, yPos, 196, yPos)
+      yPos += 10
+
+      doc.setFontSize(12)
+      const splitText = doc.splitTextToSize(notes, 180)
+      doc.text(splitText, 14, yPos)
+    }
+
+    // Guardar PDF
+    doc.save(`Pedido_${order.id}_${formatDate(order.date || order.createdAt).replace(/\//g, "-")}.pdf`)
+  } catch (error) {
+    console.error("Error al generar reporte de pedido:", error)
+    alert("Ocurrió un error al generar el reporte de pedido. Por favor, intente nuevamente.")
+  }
+}
 
 

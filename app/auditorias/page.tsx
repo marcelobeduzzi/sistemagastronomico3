@@ -9,7 +9,7 @@ import { db } from "@/lib/db"
 import { exportToCSV, formatDate, generateAuditReport } from "@/lib/export-utils"
 import type { Audit, AuditItem } from "@/types"
 import type { ColumnDef } from "@tanstack/react-table"
-import { Download, Plus, Calendar, FileText, List, Eye } from "lucide-react"
+import { Download, Plus, Calendar, FileText, List, Eye, Settings } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -509,6 +509,12 @@ export default function AuditoriasPage() {
             <p className="text-muted-foreground">Gestiona las auditorías de los locales</p>
           </div>
           <div className="flex gap-2">
+            <Button asChild variant="outline">
+              <Link href="/auditorias/configuracion">
+                <Settings className="mr-2 h-4 w-4" />
+                Configuración
+              </Link>
+            </Button>
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
                 <Button>
@@ -884,6 +890,8 @@ export default function AuditoriasPage() {
     </DashboardLayout>
   )
 }
+
+
 
 
 
