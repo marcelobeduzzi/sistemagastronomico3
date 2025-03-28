@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { dbService } from "@/lib/db-service"
 import { formatCurrency, formatDate } from "@/lib/export-utils"
 import { useToast } from "@/components/ui/use-toast"
-import { Calendar, Search } from 'lucide-react'
+import { Calendar, Search, Calculator } from 'lucide-react'
 import type { Employee, Attendance } from "@/types"
 
 export default function DiagnosticPage() {
@@ -51,6 +51,106 @@ export default function DiagnosticPage() {
     
     loadEmployees()
   }, [toast])
+
+  // Función para calcular manualmente los resultados
+  const calculateResults = () => {
+    if (!selectedEmployee || attendances.length === 0) return;
+    
+    const employee = employees.find(e => e.id === selectedEmployee);
+    if (!employee) return;
+    
+    // Calcular valores basados en asistencias
+    const baseSalary = employee.baseSalary || 0;
+    const bankSalary = employee.bankSalary || 0;
+    
+    // Calcular sueldo en mano (debe ser positivo)
+    const totalSalaryBeforeAdjustments = bankSalary > baseSalary ? bankSalary + baseSalary : baseSalary;
+    const handSalary = bankSalary > baseSalary ? baseSalary : baseSalary - bankSalary;
+    
+    // Calcular deducciones y adiciones
+    let deductions = 0;
+    let additions = 0;
+    let totalMinutesBalance = 0;
+    
+    // Valor del minuto trabajado
+    const minuteValue = totalSalaryBeforeAdjustments / (30 * 8 * 60);
+    
+    console.log("Calculando resultados para", employee.firstName, employee.lastName);
+    console.log("Valor del minuto:", minuteValue);
+    
+    // Procesar asistencias
+    attendances.forEach(attendance => {
+      console.log("Procesando asistencia:", attendance.date);
+      
+      // Sumar balance de minutos
+      totalMinutesBalance += attendance.totalMinutesBalance || 0;
+      
+      // Ausencias injustificadas
+      if (attendance.isAbsent && !attendance.isJustified) {
+        const dailyRate = totalSalaryBeforeAdjustments / 30;
+        deductions += dailyRate;
+        console.log("- Deducción por ausencia injustificada:", dailyRate);
+      }
+      
+      // Minutos tarde
+      if (attendance.lateMinutes > 0) {
+        const lateDeduction = attendance.lateMinutes * minuteValue;
+        deductions += lateDeduction;
+        console.log("- Deducción por", attendance.lateMinutes, "minutos tarde:", lateDeduction);
+      }
+      
+      // Salida anticipada
+      if (attendance.earlyDepartureMinutes > 0) {
+        const earlyDeduction = attendance.earlyDepartureMinutes * minuteValue;
+        deductions += earlyDeduction;
+        console.log("- Deducción por", attendance.earlyDepartureMinutes, "minutos de salida anticipada:", earlyDeduction);
+      }
+      
+      // Horas extra
+      if (attendance.extraMinutes > 0) {
+        const extraAddition = attendance.extraMinutes * minuteValue * 1.5;
+        additions += extraAddition;
+        console.log("- Adición por", attendance.extraMinutes, "minutos extra:", extraAddition);
+      }
+      
+      // Feriados (adición por trabajar en feriado)
+      if (attendance.isHoliday && !attendance.isAbsent) {
+        const holidayAddition = 480 * minuteValue; // Una jornada completa adicional
+        additions += holidayAddition;
+        console.log("- Adición por trabajar en feriado:", holidayAddition);
+      }
+    });
+    
+    // Redondear valores
+    deductions = Math.round(deductions * 100) / 100;
+    additions = Math.round(additions * 100) / 100;
+    
+    // Calcular valores finales
+    const finalHandSalary = handSalary - deductions + additions;
+    const totalSalary = bankSalary + finalHandSalary;
+    
+    console.log("Resultados calculados:");
+    console.log("- Sueldo base:", baseSalary);
+    console.log("- Sueldo banco:", bankSalary);
+    console.log("- Sueldo en mano original:", handSalary);
+    console.log("- Deducciones:", deductions);
+    console.log("- Adiciones:", additions);
+    console.log("- Sueldo final en mano:", finalHandSalary);
+    console.log("- Total a pagar:", totalSalary);
+    
+    // Guardar resultados del diagnóstico
+    setDiagnosticResults({
+      baseSalary,
+      bankSalary,
+      handSalary,
+      deductions,
+      additions,
+      finalHandSalary,
+      totalSalary,
+      totalMinutesBalance,
+      minuteValue
+    });
+  }
 
   // Función para buscar asistencias
   const handleSearch = async () => {
@@ -93,75 +193,12 @@ export default function DiagnosticPage() {
       
       setPayrollData(matchingPayroll || null)
       
-      // Realizar diagnóstico
+      // Realizar cálculos inmediatamente si hay asistencias
       if (attendanceData.length > 0) {
-        const employee = employees.find(e => e.id === selectedEmployee)
-        
-        if (employee) {
-          // Calcular valores basados en asistencias
-          const baseSalary = employee.baseSalary || 0
-          const bankSalary = employee.bankSalary || 0
-          
-          // Calcular sueldo en mano (debe ser positivo)
-          const totalSalaryBeforeAdjustments = bankSalary > baseSalary ? bankSalary + baseSalary : baseSalary
-          const handSalary = bankSalary > baseSalary ? baseSalary : baseSalary - bankSalary
-          
-          // Calcular deducciones y adiciones
-          let deductions = 0
-          let additions = 0
-          let totalMinutesBalance = 0
-          
-          // Valor del minuto trabajado
-          const minuteValue = totalSalaryBeforeAdjustments / (30 * 8 * 60)
-          
-          // Procesar asistencias
-          attendanceData.forEach(attendance => {
-            // Sumar balance de minutos
-            totalMinutesBalance += attendance.totalMinutesBalance || 0
-            
-            // Ausencias injustificadas
-            if (attendance.isAbsent && !attendance.isJustified) {
-              const dailyRate = totalSalaryBeforeAdjustments / 30
-              deductions += dailyRate
-            }
-            
-            // Minutos tarde
-            if (attendance.lateMinutes > 0) {
-              deductions += attendance.lateMinutes * minuteValue
-            }
-            
-            // Salida anticipada
-            if (attendance.earlyDepartureMinutes > 0) {
-              deductions += attendance.earlyDepartureMinutes * minuteValue
-            }
-            
-            // Horas extra
-            if (attendance.extraMinutes > 0) {
-              additions += attendance.extraMinutes * minuteValue * 1.5
-            }
-          })
-          
-          // Redondear valores
-          deductions = Math.round(deductions * 100) / 100
-          additions = Math.round(additions * 100) / 100
-          
-          // Calcular valores finales
-          const finalHandSalary = handSalary - deductions + additions
-          const totalSalary = bankSalary + finalHandSalary
-          
-          // Guardar resultados del diagnóstico
-          setDiagnosticResults({
-            baseSalary,
-            bankSalary,
-            handSalary,
-            deductions,
-            additions,
-            finalHandSalary,
-            totalSalary,
-            totalMinutesBalance,
-            minuteValue
-          })
-        }
+        // Esperar un momento para que los estados se actualicen
+        setTimeout(() => {
+          calculateResults();
+        }, 100);
       }
     } catch (error) {
       console.error("Error al buscar datos:", error)
@@ -402,160 +439,324 @@ export default function DiagnosticPage() {
                   </tbody>
                 </table>
               </div>
+              
+              {/* Botón para calcular manualmente si es necesario */}
+              {attendances.length > 0 && !diagnosticResults && (
+                <div className="mt-4 flex justify-end">
+                  <Button onClick={calculateResults}>
+                    <Calculator className="mr-2 h-4 w-4" />
+                    Calcular Resultados
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
 
-        {diagnosticResults && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Diagnóstico de Nómina</CardTitle>
-              <CardDescription>
-                Cálculos basados en las asistencias del período
-              </CardDescription>
+        {attendances.length > 0 && (
+          <Card className="bg-blue-50 border-blue-200">
+            <CardHeader className="bg-blue-100">
+              <CardTitle>Resultados del Cálculo para {
+                (() => {
+                  const employee = employees.find(e => e.id === selectedEmployee);
+                  return employee ? `${employee.firstName} ${employee.lastName}` : "Empleado";
+                })()
+              }</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-6">
               <div className="grid gap-6 md:grid-cols-2">
                 <div>
-                  <h3 className="font-medium mb-4">Cálculos Realizados</h3>
-                  <div className="space-y-2">
+                  <h3 className="font-medium mb-4 text-blue-800">Valores Base</h3>
+                  <div className="space-y-3">
                     <p>
-                      <span className="font-medium">Sueldo Base:</span>{" "}
-                      {formatCurrency(diagnosticResults.baseSalary)}
+                      <span className="font-medium">Sueldo Base:</span><br />
+                      {formatCurrency(employees.find(e => e.id === selectedEmployee)?.baseSalary || 0)}
                     </p>
                     <p>
-                      <span className="font-medium">Sueldo Banco:</span>{" "}
-                      {formatCurrency(diagnosticResults.bankSalary)}
+                      <span className="font-medium">Sueldo en Banco:</span><br />
+                      {formatCurrency(employees.find(e => e.id === selectedEmployee)?.bankSalary || 0)}
                     </p>
                     <p>
-                      <span className="font-medium">Sueldo en Mano Original:</span>{" "}
-                      {formatCurrency(diagnosticResults.handSalary)}
+                      <span className="font-medium">Sueldo en Mano Original:</span><br />
+                      {formatCurrency(
+                        (() => {
+                          const employee = employees.find(e => e.id === selectedEmployee);
+                          if (!employee) return 0;
+                          const baseSalary = employee.baseSalary || 0;
+                          const bankSalary = employee.bankSalary || 0;
+                          return bankSalary > baseSalary ? baseSalary : baseSalary - bankSalary;
+                        })()
+                      )}
                     </p>
                     <p>
-                      <span className="font-medium">Deducciones:</span>{" "}
-                      {formatCurrency(diagnosticResults.deductions)}
-                    </p>
-                    <p>
-                      <span className="font-medium">Adiciones:</span>{" "}
-                      {formatCurrency(diagnosticResults.additions)}
-                    </p>
-                    <p>
-                      <span className="font-medium">Sueldo Final en Mano:</span>{" "}
-                      {formatCurrency(diagnosticResults.finalHandSalary)}
-                    </p>
-                    <p>
-                      <span className="font-medium">Total a Pagar:</span>{" "}
-                      {formatCurrency(diagnosticResults.totalSalary)}
+                      <span className="font-medium">Valor del Minuto:</span><br />
+                      {formatCurrency(
+                        (() => {
+                          const employee = employees.find(e => e.id === selectedEmployee);
+                          if (!employee) return 0;
+                          const baseSalary = employee.baseSalary || 0;
+                          const bankSalary = employee.bankSalary || 0;
+                          const totalSalary = bankSalary > baseSalary ? bankSalary + baseSalary : baseSalary;
+                          return totalSalary / (30 * 8 * 60);
+                        })()
+                      )}
                     </p>
                   </div>
                   
-                  <div className="mt-4">
+                  <h3 className="font-medium mb-4 mt-6 text-blue-800">Ajustes</h3>
+                  <div className="space-y-3">
                     <p>
-                      <span className="font-medium">Balance Total de Minutos:</span>{" "}
-                      {diagnosticResults.totalMinutesBalance} minutos
+                      <span className="font-medium">Total Deducciones:</span><br />
+                      <span className="text-red-600">-{formatCurrency(
+                        (() => {
+                          let deductions = 0;
+                          const employee = employees.find(e => e.id === selectedEmployee);
+                          if (!employee) return 0;
+                          
+                          const baseSalary = employee.baseSalary || 0;
+                          const bankSalary = employee.bankSalary || 0;
+                          const totalSalary = bankSalary > baseSalary ? bankSalary + baseSalary : baseSalary;
+                          const minuteValue = totalSalary / (30 * 8 * 60);
+                          
+                          attendances.forEach(attendance => {
+                            // Ausencias injustificadas
+                            if (attendance.isAbsent && !attendance.isJustified) {
+                              deductions += totalSalary / 30;
+                            }
+                            
+                            // Minutos tarde
+                            if (attendance.lateMinutes > 0) {
+                              deductions += attendance.lateMinutes * minuteValue;
+                            }
+                            
+                            // Salida anticipada
+                            if (attendance.earlyDepartureMinutes > 0) {
+                              deductions += attendance.earlyDepartureMinutes * minuteValue;
+                            }
+                          });
+                          
+                          return Math.round(deductions * 100) / 100;
+                        })()
+                      )}</span>
                     </p>
                     <p>
-                      <span className="font-medium">Valor del Minuto:</span>{" "}
-                      {formatCurrency(diagnosticResults.minuteValue)}
+                      <span className="font-medium">Total Adiciones:</span><br />
+                      <span className="text-green-600">+{formatCurrency(
+                        (() => {
+                          let additions = 0;
+                          const employee = employees.find(e => e.id === selectedEmployee);
+                          if (!employee) return 0;
+                          
+                          const baseSalary = employee.baseSalary || 0;
+                          const bankSalary = employee.bankSalary || 0;
+                          const totalSalary = bankSalary > baseSalary ? bankSalary + baseSalary : baseSalary;
+                          const minuteValue = totalSalary / (30 * 8 * 60);
+                          
+                          attendances.forEach(attendance => {
+                            // Horas extra
+                            if (attendance.extraMinutes > 0) {
+                              additions += attendance.extraMinutes * minuteValue * 1.5;
+                            }
+                            
+                            // Feriados
+                            if (attendance.isHoliday && !attendance.isAbsent) {
+                              additions += 480 * minuteValue; // Una jornada completa adicional
+                            }
+                          });
+                          
+                          return Math.round(additions * 100) / 100;
+                        })()
+                      )}</span>
                     </p>
                   </div>
                 </div>
-
-                {payrollData && (
-                  <div>
-                    <h3 className="font-medium mb-4">Nómina en Base de Datos</h3>
-                    <div className="space-y-2">
-                      <p>
-                        <span className="font-medium">Período:</span>{" "}
-                        {payrollData.month}/{payrollData.year}
-                      </p>
-                      <p>
-                        <span className="font-medium">Sueldo Base:</span>{" "}
-                        {formatCurrency(payrollData.baseSalary)}
-                      </p>
-                      <p>
-                        <span className="font-medium">Sueldo Banco:</span>{" "}
-                        {formatCurrency(payrollData.bankSalary)}
-                      </p>
-                      <p>
-                        <span className="font-medium">Sueldo en Mano Original:</span>{" "}
-                        {formatCurrency(payrollData.handSalary)}
-                      </p>
-                      <p>
-                        <span className="font-medium">Deducciones:</span>{" "}
-                        {formatCurrency(payrollData.deductions)}
-                      </p>
-                      <p>
-                        <span className="font-medium">Adiciones:</span>{" "}
-                        {formatCurrency(payrollData.additions)}
-                      </p>
-                      <p>
-                        <span className="font-medium">Sueldo Final en Mano:</span>{" "}
-                        {formatCurrency(payrollData.finalHandSalary)}
-                      </p>
-                      <p>
-                        <span className="font-medium">Total a Pagar:</span>{" "}
-                        {formatCurrency(payrollData.totalSalary)}
-                      </p>
-                      <p>
-                        <span className="font-medium">Estado:</span>{" "}
-                        {payrollData.isPaid ? "Pagado" : "Pendiente"}
-                      </p>
-                    </div>
-                    
-                    <div className="mt-6 p-4 bg-yellow-50 rounded-md border border-yellow-200">
-                      <h4 className="font-medium text-yellow-800 mb-2">Comparación</h4>
-                      <ul className="space-y-1 text-sm text-yellow-800">
-                        {Math.abs(diagnosticResults.handSalary - payrollData.handSalary) > 0.1 && (
-                          <li className="text-red-600 font-medium">
-                            ⚠️ Diferencia en Sueldo en Mano Original: {formatCurrency(Math.abs(diagnosticResults.handSalary - payrollData.handSalary))}
-                          </li>
-                        )}
-                        {Math.abs(diagnosticResults.deductions - payrollData.deductions) > 0.1 && (
-                          <li>
-                            Diferencia en Deducciones: {formatCurrency(Math.abs(diagnosticResults.deductions - payrollData.deductions))}
-                          </li>
-                        )}
-                        {Math.abs(diagnosticResults.additions - payrollData.additions) > 0.1 && (
-                          <li>
-                            Diferencia en Adiciones: {formatCurrency(Math.abs(diagnosticResults.additions - payrollData.additions))}
-                          </li>
-                        )}
-                        {Math.abs(diagnosticResults.finalHandSalary - payrollData.finalHandSalary) > 0.1 && (
-                          <li>
-                            Diferencia en Sueldo Final en Mano: {formatCurrency(Math.abs(diagnosticResults.finalHandSalary - payrollData.finalHandSalary))}
-                          </li>
-                        )}
-                        {Math.abs(diagnosticResults.totalSalary - payrollData.totalSalary) > 0.1 && (
-                          <li>
-                            Diferencia en Total a Pagar: {formatCurrency(Math.abs(diagnosticResults.totalSalary - payrollData.totalSalary))}
-                          </li>
-                        )}
-                        {Math.abs(diagnosticResults.handSalary - payrollData.handSalary) <= 0.1 &&
-                         Math.abs(diagnosticResults.deductions - payrollData.deductions) <= 0.1 &&
-                         Math.abs(diagnosticResults.additions - payrollData.additions) <= 0.1 &&
-                         Math.abs(diagnosticResults.finalHandSalary - payrollData.finalHandSalary) <= 0.1 &&
-                         Math.abs(diagnosticResults.totalSalary - payrollData.totalSalary) <= 0.1 && (
-                          <li className="text-green-600 font-medium">
-                            ✅ Los cálculos coinciden correctamente
-                          </li>
-                        )}
-                      </ul>
-                    </div>
-                  </div>
-                )}
                 
-                {!payrollData && diagnosticResults && (
-                  <div>
-                    <h3 className="font-medium mb-4">Nómina en Base de Datos</h3>
-                    <p className="text-yellow-600">
-                      No se encontró una nómina para este empleado en el período seleccionado.
+                <div>
+                  <h3 className="font-medium mb-4 text-blue-800">Resultados Finales</h3>
+                  <div className="space-y-3">
+                    <p>
+                      <span className="font-medium">Sueldo Final en Mano:</span><br />
+                      <span className="text-lg font-bold">{formatCurrency(
+                        (() => {
+                          const employee = employees.find(e => e.id === selectedEmployee);
+                          if (!employee) return 0;
+                          
+                          const baseSalary = employee.baseSalary || 0;
+                          const bankSalary = employee.bankSalary || 0;
+                          const handSalary = bankSalary > baseSalary ? baseSalary : baseSalary - bankSalary;
+                          const totalSalary = bankSalary > baseSalary ? bankSalary + baseSalary : baseSalary;
+                          const minuteValue = totalSalary / (30 * 8 * 60);
+                          
+                          let deductions = 0;
+                          let additions = 0;
+                          
+                          attendances.forEach(attendance => {
+                            // Ausencias injustificadas
+                            if (attendance.isAbsent && !attendance.isJustified) {
+                              deductions += totalSalary / 30;
+                            }
+                            
+                            // Minutos tarde
+                            if (attendance.lateMinutes > 0) {
+                              deductions += attendance.lateMinutes * minuteValue;
+                            }
+                            
+                            // Salida anticipada
+                            if (attendance.earlyDepartureMinutes > 0) {
+                              deductions += attendance.earlyDepartureMinutes * minuteValue;
+                            }
+                            
+                            // Horas extra
+                            if (attendance.extraMinutes > 0) {
+                              additions += attendance.extraMinutes * minuteValue * 1.5;
+                            }
+                            
+                            // Feriados
+                            if (attendance.isHoliday && !attendance.isAbsent) {
+                              additions += 480 * minuteValue; // Una jornada completa adicional
+                            }
+                          });
+                          
+                          return Math.round((handSalary - deductions + additions) * 100) / 100;
+                        })()
+                      )}</span>
                     </p>
-                    <p className="mt-2">
-                      Puede generar una nueva nómina desde la página de Nómina.
+                    <p>
+                      <span className="font-medium">Total a Pagar:</span><br />
+                      <span className="text-lg font-bold">{formatCurrency(
+                        (() => {
+                          const employee = employees.find(e => e.id === selectedEmployee);
+                          if (!employee) return 0;
+                          
+                          const baseSalary = employee.baseSalary || 0;
+                          const bankSalary = employee.bankSalary || 0;
+                          const handSalary = bankSalary > baseSalary ? baseSalary : baseSalary - bankSalary;
+                          const totalSalary = bankSalary > baseSalary ? bankSalary + baseSalary : baseSalary;
+                          const minuteValue = totalSalary / (30 * 8 * 60);
+                          
+                          let deductions = 0;
+                          let additions = 0;
+                          
+                          attendances.forEach(attendance => {
+                            // Ausencias injustificadas
+                            if (attendance.isAbsent && !attendance.isJustified) {
+                              deductions += totalSalary / 30;
+                            }
+                            
+                            // Minutos tarde
+                            if (attendance.lateMinutes > 0) {
+                              deductions += attendance.lateMinutes * minuteValue;
+                            }
+                            
+                            // Salida anticipada
+                            if (attendance.earlyDepartureMinutes > 0) {
+                              deductions += attendance.earlyDepartureMinutes * minuteValue;
+                            }
+                            
+                            // Horas extra
+                            if (attendance.extraMinutes > 0) {
+                              additions += attendance.extraMinutes * minuteValue * 1.5;
+                            }
+                            
+                            // Feriados
+                            if (attendance.isHoliday && !attendance.isAbsent) {
+                              additions += 480 * minuteValue; // Una jornada completa adicional
+                            }
+                          });
+                          
+                          const finalHandSalary = handSalary - deductions + additions;
+                          return Math.round((bankSalary + finalHandSalary) * 100) / 100;
+                        })()
+                      )}</span>
                     </p>
                   </div>
-                )}
+                  
+                  <div className="mt-6 p-4 bg-white rounded-md border border-blue-200">
+                    <h4 className="font-medium text-blue-800 mb-2">Detalles de Cálculo</h4>
+                    <ul className="space-y-2 text-sm">
+                      {attendances.filter(a => a.isAbsent && !a.isJustified).length > 0 && (
+                        <li>
+                          <span className="font-medium">Ausencias Injustificadas:</span> {attendances.filter(a => a.isAbsent && !a.isJustified).length} días
+                        </li>
+                      )}
+                      
+                      {attendances.filter(a => a.lateMinutes > 0).length > 0 && (
+                        <li>
+                          <span className="font-medium">Llegadas Tarde:</span> {attendances.filter(a => a.lateMinutes > 0).length} días, total {attendances.reduce((sum, a) => sum + (a.lateMinutes || 0), 0)} minutos
+                        </li>
+                      )}
+                      
+                      {attendances.filter(a => a.earlyDepartureMinutes > 0).length > 0 && (
+                        <li>
+                          <span className="font-medium">Salidas Anticipadas:</span> {attendances.filter(a => a.earlyDepartureMinutes > 0).length} días, total {attendances.reduce((sum, a) => sum + (a.earlyDepartureMinutes || 0), 0)} minutos
+                        </li>
+                      )}
+                      
+                      {attendances.filter(a => a.extraMinutes > 0).length > 0 && (
+                        <li>
+                          <span className="font-medium">Horas Extra:</span> {attendances.filter(a => a.extraMinutes > 0).length} días, total {attendances.reduce((sum, a) => sum + (a.extraMinutes || 0), 0)} minutos
+                        </li>
+                      )}
+                      
+                      {attendances.filter(a => a.isHoliday && !a.isAbsent).length > 0 && (
+                        <li>
+                          <span className="font-medium">Días Feriados Trabajados:</span> {attendances.filter(a => a.isHoliday && !a.isAbsent).length} días
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {payrollData && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Nómina en Base de Datos</CardTitle>
+              <CardDescription>
+                Datos de la nómina existente para el período seleccionado
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <p>
+                  <span className="font-medium">Período:</span>{" "}
+                  {payrollData.month}/{payrollData.year}
+                </p>
+                <p>
+                  <span className="font-medium">Sueldo Base:</span>{" "}
+                  {formatCurrency(payrollData.baseSalary)}
+                </p>
+                <p>
+                  <span className="font-medium">Sueldo Banco:</span>{" "}
+                  {formatCurrency(payrollData.bankSalary)}
+                </p>
+                <p>
+                  <span className="font-medium">Sueldo en Mano Original:</span>{" "}
+                  {formatCurrency(payrollData.handSalary)}
+                </p>
+                <p>
+                  <span className="font-medium">Deducciones:</span>{" "}
+                  {formatCurrency(payrollData.deductions)}
+                </p>
+                <p>
+                  <span className="font-medium">Adiciones:</span>{" "}
+                  {formatCurrency(payrollData.additions)}
+                </p>
+                <p>
+                  <span className="font-medium">Sueldo Final en Mano:</span>{" "}
+                  {formatCurrency(payrollData.finalHandSalary)}
+                </p>
+                <p>
+                  <span className="font-medium">Total a Pagar:</span>{" "}
+                  {formatCurrency(payrollData.totalSalary)}
+                </p>
+                <p>
+                  <span className="font-medium">Estado:</span>{" "}
+                  {payrollData.isPaid ? "Pagado" : "Pendiente"}
+                </p>
               </div>
             </CardContent>
           </Card>
