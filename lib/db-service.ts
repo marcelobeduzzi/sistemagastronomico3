@@ -689,7 +689,16 @@ async generatePayrolls(month: number, year: number) {
       // Calcular valores base
       const baseSalary = employee.baseSalary || 0;
       const bankSalary = employee.bankSalary || 0;
-      const handSalary = baseSalary - bankSalary;
+      
+      // CORRECCIÓN: El sueldo en mano es una parte del sueldo base, no una resta
+      // Si bankSalary > baseSalary, asumimos que el sueldo total es la suma de ambos
+      const totalSalaryBeforeAdjustments = bankSalary > baseSalary ? bankSalary + baseSalary : baseSalary;
+      const handSalary = bankSalary > baseSalary ? baseSalary : baseSalary - bankSalary;
+      
+      console.log(`Calculando nómina para ${employee.firstName} ${employee.lastName}:`);
+      console.log(`- Sueldo base: ${baseSalary}`);
+      console.log(`- Sueldo banco: ${bankSalary}`);
+      console.log(`- Sueldo en mano original: ${handSalary}`);
       
       // Calcular deducciones basadas en asistencias
       let deductions = 0;
@@ -708,36 +717,60 @@ async generatePayrolls(month: number, year: number) {
       
       if (attendanceError) {
         console.error(`Error al obtener asistencias para ${employee.firstName} ${employee.lastName}:`, attendanceError);
-      } else if (attendances) {
+      } else if (attendances && attendances.length > 0) {
+        console.log(`Encontradas ${attendances.length} asistencias para el período`);
+        
+        // Calcular el valor del minuto trabajado (basado en 30 días de 8 horas)
+        const minuteValue = totalSalaryBeforeAdjustments / (30 * 8 * 60);
+        console.log(`Valor del minuto trabajado: ${minuteValue}`);
+        
         // Procesar asistencias para calcular deducciones/adiciones
         for (const attendance of attendances) {
           // Ausencias injustificadas: deducción
           if (attendance.is_absent && !attendance.is_justified) {
-            const dailyRate = baseSalary / 30; // Valor diario aproximado
+            const dailyRate = totalSalaryBeforeAdjustments / 30; // Valor diario aproximado
             deductions += dailyRate;
+            console.log(`- Deducción por ausencia injustificada: ${dailyRate}`);
           }
           
           // Minutos tarde: deducción proporcional
           if (attendance.late_minutes > 0) {
-            const minuteRate = (baseSalary / 30) / (8 * 60); // Valor por minuto
-            deductions += attendance.late_minutes * minuteRate;
+            const lateDeduction = attendance.late_minutes * minuteValue;
+            deductions += lateDeduction;
+            console.log(`- Deducción por ${attendance.late_minutes} minutos tarde: ${lateDeduction}`);
+          }
+          
+          // Salida anticipada: deducción proporcional
+          if (attendance.early_departure_minutes > 0) {
+            const earlyDeduction = attendance.early_departure_minutes * minuteValue;
+            deductions += earlyDeduction;
+            console.log(`- Deducción por ${attendance.early_departure_minutes} minutos de salida anticipada: ${earlyDeduction}`);
           }
           
           // Horas extra: adición
           if (attendance.extra_minutes > 0) {
-            const minuteRate = (baseSalary / 30) / (8 * 60) * 1.5; // Valor por minuto extra (50% más)
-            additions += attendance.extra_minutes * minuteRate;
+            const extraAddition = attendance.extra_minutes * minuteValue * 1.5; // 50% más por hora extra
+            additions += extraAddition;
+            console.log(`- Adición por ${attendance.extra_minutes} minutos extra: ${extraAddition}`);
           }
         }
+      } else {
+        console.log(`No se encontraron asistencias para el período`);
       }
       
       // Redondear valores a 2 decimales
       deductions = Math.round(deductions * 100) / 100;
       additions = Math.round(additions * 100) / 100;
       
+      console.log(`Total deducciones: ${deductions}`);
+      console.log(`Total adiciones: ${additions}`);
+      
       // Calcular valores finales
       const finalHandSalary = handSalary - deductions + additions;
       const totalSalary = bankSalary + finalHandSalary;
+      
+      console.log(`Sueldo final en mano: ${finalHandSalary}`);
+      console.log(`Total a pagar: ${totalSalary}`);
       
       // Crear la nómina
       const payrollData = {
@@ -751,9 +784,9 @@ async generatePayrolls(month: number, year: number) {
         additions,
         final_hand_salary: finalHandSalary,
         total_salary: totalSalary,
-        is_paid_hand: false,
-        is_paid_bank: false,
-        // Eliminar is_paid ya que es generado automáticamente
+        is_paid: false,
+        hand_salary_paid: false,
+        bank_salary_paid: false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
