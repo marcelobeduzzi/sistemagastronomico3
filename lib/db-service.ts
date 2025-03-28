@@ -179,6 +179,25 @@ async getAttendances({ date, employeeId }: { date: string; employeeId?: string }
   }
 }
 
+// NUEVO: Obtener asistencias por rango de fechas
+async getAttendancesByDateRange(employeeId: string, startDate: string, endDate: string) {
+  try {
+    const { data, error } = await this.supabase
+      .from("attendance")
+      .select("*")
+      .eq("employee_id", employeeId)
+      .gte("date", startDate)
+      .lte("date", endDate)
+      .order("date");
+
+    if (error) throw error;
+    return data.map((item) => objectToCamelCase(item));
+  } catch (error) {
+    console.error("Error al obtener asistencias por rango de fechas:", error);
+    throw error;
+  }
+}
+
 // NUEVO: Obtener una asistencia específica por ID
 async getAttendanceById(id: string) {
   try {
