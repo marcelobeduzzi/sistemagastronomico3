@@ -2,148 +2,174 @@
 
 import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/app/dashboard-layout"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { dbService } from "@/lib/db-service"
-import { formatCurrency } from "@/lib/export-utils"
-import type { Employee } from "@/types"
+import { formatCurrency, formatDate } from "@/lib/export-utils"
+import { useToast } from "@/components/ui/use-toast"
+import { Calendar, Search } from 'lucide-react'
+import type { Employee, Attendance } from "@/types"
 
-export default function DiagnosticoPage() {
+export default function DiagnosticPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [selectedEmployee, setSelectedEmployee] = useState<string>("")
-  const [isLoading, setIsLoading] = useState(true)
-  const [calculationResults, setCalculationResults] = useState<any>(null)
-  const [month, setMonth] = useState<number>(new Date().getMonth() + 1)
-  const [year, setYear] = useState<number>(new Date().getFullYear())
+  const [startDate, setStartDate] = useState<string>("")
+  const [endDate, setEndDate] = useState<string>("")
+  const [attendances, setAttendances] = useState<Attendance[]>([])
+  const [isLoading, setIsLoading] = useState<boolean>(false)
+  const [payrollData, setPayrollData] = useState<any>(null)
+  const [diagnosticResults, setDiagnosticResults] = useState<any>(null)
+  const { toast } = useToast()
 
+  // Cargar empleados al iniciar
   useEffect(() => {
-    loadEmployees()
-  }, [])
-
-  const loadEmployees = async () => {
-    try {
-      const employeesData = await dbService.getEmployees()
-      setEmployees(employeesData.filter(emp => emp.status === 'active'))
-      setIsLoading(false)
-    } catch (error) {
-      console.error("Error al cargar empleados:", error)
-      setIsLoading(false)
-    }
-  }
-
-  const calculatePayroll = async () => {
-    if (!selectedEmployee) return
-
-    setIsLoading(true)
-    try {
-      const employee = employees.find(emp => emp.id === selectedEmployee)
-      if (!employee) return
-
-      // Obtener asistencias del mes
-      const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0]
-      const endDate = new Date(year, month, 0).toISOString().split('T')[0]
-      
-      // Usar el nuevo método para obtener asistencias
-      const attendances = await dbService.getAttendancesByDateRange(employee.id, startDate, endDate)
-
-      // Calcular valores base
-      const baseSalary = employee.baseSalary || 0
-      const bankSalary = employee.bankSalary || 0
-      
-      // Cálculo corregido
-      const totalSalaryBeforeAdjustments = bankSalary > baseSalary ? bankSalary + baseSalary : baseSalary
-      const handSalary = bankSalary > baseSalary ? baseSalary : baseSalary - bankSalary
-      
-      // Calcular deducciones y adiciones
-      let deductions = 0
-      let additions = 0
-      
-      if (attendances && attendances.length > 0) {
-        // Calcular el valor del minuto trabajado
-        const minuteValue = totalSalaryBeforeAdjustments / (30 * 8 * 60)
+    const loadEmployees = async () => {
+      try {
+        const data = await dbService.getEmployees()
+        setEmployees(data)
         
-        // Procesar asistencias
-        const attendanceDetails = attendances.map(att => {
-          let attDeductions = 0
-          let attAdditions = 0
-          
-          // Ausencias injustificadas
-          if (att.isAbsent && !att.isJustified) {
-            const dailyRate = totalSalaryBeforeAdjustments / 30
-            attDeductions += dailyRate
-          }
-          
-          // Minutos tarde
-          if (att.lateMinutes > 0) {
-            const lateDeduction = att.lateMinutes * minuteValue
-            attDeductions += lateDeduction
-          }
-          
-          // Salida anticipada
-          if (att.earlyDepartureMinutes > 0) {
-            const earlyDeduction = att.earlyDepartureMinutes * minuteValue
-            attDeductions += earlyDeduction
-          }
-          
-          // Horas extra
-          if (att.extraMinutes > 0) {
-            const extraAddition = att.extraMinutes * minuteValue * 1.5
-            attAdditions += extraAddition
-          }
-          
-          deductions += attDeductions
-          additions += attAdditions
-          
-          return {
-            date: att.date,
-            isAbsent: att.isAbsent,
-            isJustified: att.isJustified,
-            lateMinutes: att.lateMinutes,
-            earlyDepartureMinutes: att.earlyDepartureMinutes,
-            extraMinutes: att.extraMinutes,
-            deductions: attDeductions,
-            additions: attAdditions
-          }
-        })
+        // Establecer fechas predeterminadas (mes actual en 2025)
+        const today = new Date()
+        today.setFullYear(2025) // Forzar el año a 2025
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1)
+        const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0)
         
-        // Redondear valores
-        deductions = Math.round(deductions * 100) / 100
-        additions = Math.round(additions * 100) / 100
-        
-        // Calcular valores finales
-        const finalHandSalary = handSalary - deductions + additions
-        const totalSalary = bankSalary + finalHandSalary
-        
-        setCalculationResults({
-          employee: `${employee.firstName} ${employee.lastName}`,
-          baseSalary,
-          bankSalary,
-          handSalary,
-          deductions,
-          additions,
-          finalHandSalary,
-          totalSalary,
-          minuteValue: totalSalaryBeforeAdjustments / (30 * 8 * 60),
-          attendanceDetails
-        })
-      } else {
-        // Sin asistencias, solo mostrar valores base
-        setCalculationResults({
-          employee: `${employee.firstName} ${employee.lastName}`,
-          baseSalary,
-          bankSalary,
-          handSalary,
-          deductions: 0,
-          additions: 0,
-          finalHandSalary: handSalary,
-          totalSalary: bankSalary + handSalary,
-          minuteValue: totalSalaryBeforeAdjustments / (30 * 8 * 60),
-          attendanceDetails: []
+        setStartDate(firstDay.toISOString().split('T')[0])
+        setEndDate(lastDay.toISOString().split('T')[0])
+      } catch (error) {
+        console.error("Error al cargar empleados:", error)
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar los empleados",
+          variant: "destructive",
         })
       }
+    }
+    
+    loadEmployees()
+  }, [toast])
+
+  // Función para buscar asistencias
+  const handleSearch = async () => {
+    if (!selectedEmployee || !startDate || !endDate) {
+      toast({
+        title: "Datos incompletos",
+        description: "Por favor seleccione un empleado y un rango de fechas",
+        variant: "destructive",
+      })
+      return
+    }
+    
+    setIsLoading(true)
+    setAttendances([])
+    setPayrollData(null)
+    setDiagnosticResults(null)
+    
+    try {
+      // Obtener asistencias para el rango de fechas
+      const attendanceData = await dbService.getAttendancesByDateRange(
+        selectedEmployee,
+        startDate,
+        endDate
+      )
+      setAttendances(attendanceData)
+      
+      // Obtener datos de nómina para el empleado
+      // Extraer mes y año de la fecha de inicio para buscar la nómina correspondiente
+      const startDateObj = new Date(startDate)
+      const month = startDateObj.getMonth() + 1
+      const year = startDateObj.getFullYear()
+      
+      // Buscar nóminas para el empleado
+      const payrolls = await dbService.getPayrollByEmployeeId(selectedEmployee)
+      
+      // Filtrar por mes y año
+      const matchingPayroll = payrolls.find(
+        p => p.month === month && p.year === year
+      )
+      
+      setPayrollData(matchingPayroll || null)
+      
+      // Realizar diagnóstico
+      if (attendanceData.length > 0) {
+        const employee = employees.find(e => e.id === selectedEmployee)
+        
+        if (employee) {
+          // Calcular valores basados en asistencias
+          const baseSalary = employee.baseSalary || 0
+          const bankSalary = employee.bankSalary || 0
+          
+          // Calcular sueldo en mano (debe ser positivo)
+          const totalSalaryBeforeAdjustments = bankSalary > baseSalary ? bankSalary + baseSalary : baseSalary
+          const handSalary = bankSalary > baseSalary ? baseSalary : baseSalary - bankSalary
+          
+          // Calcular deducciones y adiciones
+          let deductions = 0
+          let additions = 0
+          let totalMinutesBalance = 0
+          
+          // Valor del minuto trabajado
+          const minuteValue = totalSalaryBeforeAdjustments / (30 * 8 * 60)
+          
+          // Procesar asistencias
+          attendanceData.forEach(attendance => {
+            // Sumar balance de minutos
+            totalMinutesBalance += attendance.totalMinutesBalance || 0
+            
+            // Ausencias injustificadas
+            if (attendance.isAbsent && !attendance.isJustified) {
+              const dailyRate = totalSalaryBeforeAdjustments / 30
+              deductions += dailyRate
+            }
+            
+            // Minutos tarde
+            if (attendance.lateMinutes > 0) {
+              deductions += attendance.lateMinutes * minuteValue
+            }
+            
+            // Salida anticipada
+            if (attendance.earlyDepartureMinutes > 0) {
+              deductions += attendance.earlyDepartureMinutes * minuteValue
+            }
+            
+            // Horas extra
+            if (attendance.extraMinutes > 0) {
+              additions += attendance.extraMinutes * minuteValue * 1.5
+            }
+          })
+          
+          // Redondear valores
+          deductions = Math.round(deductions * 100) / 100
+          additions = Math.round(additions * 100) / 100
+          
+          // Calcular valores finales
+          const finalHandSalary = handSalary - deductions + additions
+          const totalSalary = bankSalary + finalHandSalary
+          
+          // Guardar resultados del diagnóstico
+          setDiagnosticResults({
+            baseSalary,
+            bankSalary,
+            handSalary,
+            deductions,
+            additions,
+            finalHandSalary,
+            totalSalary,
+            totalMinutesBalance,
+            minuteValue
+          })
+        }
+      }
     } catch (error) {
-      console.error("Error al calcular nómina:", error)
+      console.error("Error al buscar datos:", error)
+      toast({
+        title: "Error",
+        description: "No se pudieron obtener los datos solicitados",
+        variant: "destructive",
+      })
     } finally {
       setIsLoading(false)
     }
@@ -155,180 +181,381 @@ export default function DiagnosticoPage() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-3xl font-bold tracking-tight">Diagnóstico de Nómina</h2>
-            <p className="text-muted-foreground">Verificar cálculos de nómina sin guardar en la base de datos</p>
+            <p className="text-muted-foreground">
+              Herramienta para verificar cálculos de nómina basados en asistencias
+            </p>
           </div>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Seleccionar Empleado y Período</CardTitle>
+            <CardTitle>Parámetros de Búsqueda</CardTitle>
+            <CardDescription>
+              Seleccione un empleado y un rango de fechas para analizar
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Empleado</label>
+            <div className="grid gap-4 md:grid-cols-4">
+              <div className="space-y-2">
+                <Label htmlFor="employee">Empleado</Label>
                 <Select
                   value={selectedEmployee}
                   onValueChange={setSelectedEmployee}
-                  disabled={isLoading}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="employee">
                     <SelectValue placeholder="Seleccionar empleado" />
                   </SelectTrigger>
                   <SelectContent>
-                    {employees.map(emp => (
-                      <SelectItem key={emp.id} value={emp.id}>
-                        {emp.firstName} {emp.lastName}
+                    {employees.map((employee) => (
+                      <SelectItem key={employee.id} value={employee.id}>
+                        {employee.firstName} {employee.lastName}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-1">Mes</label>
-                <Select
-                  value={month.toString()}
-                  onValueChange={(value) => setMonth(parseInt(value))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar mes" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">Enero</SelectItem>
-                    <SelectItem value="2">Febrero</SelectItem>
-                    <SelectItem value="3">Marzo</SelectItem>
-                    <SelectItem value="4">Abril</SelectItem>
-                    <SelectItem value="5">Mayo</SelectItem>
-                    <SelectItem value="6">Junio</SelectItem>
-                    <SelectItem value="7">Julio</SelectItem>
-                    <SelectItem value="8">Agosto</SelectItem>
-                    <SelectItem value="9">Septiembre</SelectItem>
-                    <SelectItem value="10">Octubre</SelectItem>
-                    <SelectItem value="11">Noviembre</SelectItem>
-                    <SelectItem value="12">Diciembre</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="space-y-2">
+                <Label htmlFor="startDate">Fecha Inicio</Label>
+                <div className="flex items-center">
+                  <Calendar className="mr-2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="startDate"
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-1">Año</label>
-                <Select
-                  value={year.toString()}
-                  onValueChange={(value) => setYear(parseInt(value))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar año" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="2023">2023</SelectItem>
-                    <SelectItem value="2024">2024</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="space-y-2">
+                <Label htmlFor="endDate">Fecha Fin</Label>
+                <div className="flex items-center">
+                  <Calendar className="mr-2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="endDate"
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                  />
+                </div>
               </div>
-            </div>
 
-            <div className="mt-4">
-              <Button 
-                onClick={calculatePayroll} 
-                disabled={isLoading || !selectedEmployee}
-              >
-                {isLoading ? "Calculando..." : "Calcular Nómina"}
-              </Button>
+              <div className="flex items-end">
+                <Button
+                  onClick={handleSearch}
+                  disabled={isLoading}
+                  className="w-full"
+                >
+                  <Search className="mr-2 h-4 w-4" />
+                  {isLoading ? "Buscando..." : "Buscar"}
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        {calculationResults && (
+        {selectedEmployee && employees.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle>Resultados del Cálculo para {calculationResults.employee}</CardTitle>
+              <CardTitle>Información del Empleado</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {(() => {
+                const employee = employees.find(
+                  (e) => e.id === selectedEmployee
+                )
+                if (!employee) return <p>Empleado no encontrado</p>
+
+                return (
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div>
+                      <h3 className="font-medium mb-2">Datos Personales</h3>
+                      <p>
+                        <span className="font-medium">Nombre:</span>{" "}
+                        {employee.firstName} {employee.lastName}
+                      </p>
+                      <p>
+                        <span className="font-medium">DNI:</span>{" "}
+                        {employee.documentId}
+                      </p>
+                      <p>
+                        <span className="font-medium">Fecha de Ingreso:</span>{" "}
+                        {formatDate(employee.hireDate)}
+                      </p>
+                    </div>
+                    <div>
+                      <h3 className="font-medium mb-2">Datos Laborales</h3>
+                      <p>
+                        <span className="font-medium">Cargo:</span>{" "}
+                        {employee.position}
+                      </p>
+                      <p>
+                        <span className="font-medium">Local:</span>{" "}
+                        {employee.local}
+                      </p>
+                      <p>
+                        <span className="font-medium">Estado:</span>{" "}
+                        {employee.status}
+                      </p>
+                    </div>
+                    <div>
+                      <h3 className="font-medium mb-2">Datos Salariales</h3>
+                      <p>
+                        <span className="font-medium">Sueldo Base:</span>{" "}
+                        {formatCurrency(employee.baseSalary || 0)}
+                      </p>
+                      <p>
+                        <span className="font-medium">Sueldo Banco:</span>{" "}
+                        {formatCurrency(employee.bankSalary || 0)}
+                      </p>
+                      <p>
+                        <span className="font-medium">Sueldo en Mano (calculado):</span>{" "}
+                        {formatCurrency(
+                          (employee.bankSalary || 0) > (employee.baseSalary || 0)
+                            ? (employee.baseSalary || 0)
+                            : (employee.baseSalary || 0) - (employee.bankSalary || 0)
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })()}
+            </CardContent>
+          </Card>
+        )}
+
+        {attendances.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Asistencias en el Período</CardTitle>
+              <CardDescription>
+                Se encontraron {attendances.length} registros de asistencia
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-md border">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Fecha
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Entrada
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Salida
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Min. Tarde
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Min. Salida Ant.
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Min. Extra
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Balance Min.
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Estado
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {attendances.map((attendance) => (
+                      <tr key={attendance.id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {formatDate(attendance.date)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {attendance.checkIn || "-"}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {attendance.checkOut || "-"}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {attendance.lateMinutes || 0}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {attendance.earlyDepartureMinutes || 0}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {attendance.extraMinutes || 0}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {attendance.totalMinutesBalance || 0}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {attendance.isAbsent
+                            ? attendance.isJustified
+                              ? "Ausente Justificado"
+                              : "Ausente Injustificado"
+                            : attendance.isHoliday
+                            ? "Feriado"
+                            : "Normal"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {diagnosticResults && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Diagnóstico de Nómina</CardTitle>
+              <CardDescription>
+                Cálculos basados en las asistencias del período
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-6 md:grid-cols-2">
                 <div>
-                  <h3 className="text-lg font-medium mb-2">Valores Base</h3>
+                  <h3 className="font-medium mb-4">Cálculos Realizados</h3>
                   <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span>Sueldo Base:</span>
-                      <span className="font-medium">{formatCurrency(calculationResults.baseSalary)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Sueldo en Banco:</span>
-                      <span className="font-medium">{formatCurrency(calculationResults.bankSalary)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Sueldo en Mano Original:</span>
-                      <span className="font-medium">{formatCurrency(calculationResults.handSalary)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Valor del Minuto:</span>
-                      <span className="font-medium">{formatCurrency(calculationResults.minuteValue)}</span>
-                    </div>
+                    <p>
+                      <span className="font-medium">Sueldo Base:</span>{" "}
+                      {formatCurrency(diagnosticResults.baseSalary)}
+                    </p>
+                    <p>
+                      <span className="font-medium">Sueldo Banco:</span>{" "}
+                      {formatCurrency(diagnosticResults.bankSalary)}
+                    </p>
+                    <p>
+                      <span className="font-medium">Sueldo en Mano Original:</span>{" "}
+                      {formatCurrency(diagnosticResults.handSalary)}
+                    </p>
+                    <p>
+                      <span className="font-medium">Deducciones:</span>{" "}
+                      {formatCurrency(diagnosticResults.deductions)}
+                    </p>
+                    <p>
+                      <span className="font-medium">Adiciones:</span>{" "}
+                      {formatCurrency(diagnosticResults.additions)}
+                    </p>
+                    <p>
+                      <span className="font-medium">Sueldo Final en Mano:</span>{" "}
+                      {formatCurrency(diagnosticResults.finalHandSalary)}
+                    </p>
+                    <p>
+                      <span className="font-medium">Total a Pagar:</span>{" "}
+                      {formatCurrency(diagnosticResults.totalSalary)}
+                    </p>
                   </div>
-
-                  <h3 className="text-lg font-medium mt-4 mb-2">Ajustes</h3>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span>Total Deducciones:</span>
-                      <span className="font-medium text-red-600">-{formatCurrency(calculationResults.deductions)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Total Adiciones:</span>
-                      <span className="font-medium text-green-600">+{formatCurrency(calculationResults.additions)}</span>
-                    </div>
-                  </div>
-
-                  <h3 className="text-lg font-medium mt-4 mb-2">Resultados Finales</h3>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span>Sueldo Final en Mano:</span>
-                      <span className="font-medium">{formatCurrency(calculationResults.finalHandSalary)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Total a Pagar:</span>
-                      <span className="font-bold text-lg">{formatCurrency(calculationResults.totalSalary)}</span>
-                    </div>
+                  
+                  <div className="mt-4">
+                    <p>
+                      <span className="font-medium">Balance Total de Minutos:</span>{" "}
+                      {diagnosticResults.totalMinutesBalance} minutos
+                    </p>
+                    <p>
+                      <span className="font-medium">Valor del Minuto:</span>{" "}
+                      {formatCurrency(diagnosticResults.minuteValue)}
+                    </p>
                   </div>
                 </div>
 
-                <div>
-                  <h3 className="text-lg font-medium mb-2">Detalle de Asistencias</h3>
-                  {calculationResults.attendanceDetails.length > 0 ? (
-                    <div className="border rounded-md overflow-hidden">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Fecha</th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Estado</th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Deducciones</th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Adiciones</th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {calculationResults.attendanceDetails.map((att: any, index: number) => (
-                            <tr key={index}>
-                              <td className="px-3 py-2 whitespace-nowrap text-sm">{att.date}</td>
-                              <td className="px-3 py-2 whitespace-nowrap text-sm">
-                                {att.isAbsent 
-                                  ? (att.isJustified ? "Ausente (Justificado)" : "Ausente (No Justificado)") 
-                                  : "Presente"}
-                              </td>
-                              <td className="px-3 py-2 whitespace-nowrap text-sm text-red-600">
-                                {att.deductions > 0 ? `-${formatCurrency(att.deductions)}` : "-"}
-                              </td>
-                              <td className="px-3 py-2 whitespace-nowrap text-sm text-green-600">
-                                {att.additions > 0 ? `+${formatCurrency(att.additions)}` : "-"}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                {payrollData && (
+                  <div>
+                    <h3 className="font-medium mb-4">Nómina en Base de Datos</h3>
+                    <div className="space-y-2">
+                      <p>
+                        <span className="font-medium">Período:</span>{" "}
+                        {payrollData.month}/{payrollData.year}
+                      </p>
+                      <p>
+                        <span className="font-medium">Sueldo Base:</span>{" "}
+                        {formatCurrency(payrollData.baseSalary)}
+                      </p>
+                      <p>
+                        <span className="font-medium">Sueldo Banco:</span>{" "}
+                        {formatCurrency(payrollData.bankSalary)}
+                      </p>
+                      <p>
+                        <span className="font-medium">Sueldo en Mano Original:</span>{" "}
+                        {formatCurrency(payrollData.handSalary)}
+                      </p>
+                      <p>
+                        <span className="font-medium">Deducciones:</span>{" "}
+                        {formatCurrency(payrollData.deductions)}
+                      </p>
+                      <p>
+                        <span className="font-medium">Adiciones:</span>{" "}
+                        {formatCurrency(payrollData.additions)}
+                      </p>
+                      <p>
+                        <span className="font-medium">Sueldo Final en Mano:</span>{" "}
+                        {formatCurrency(payrollData.finalHandSalary)}
+                      </p>
+                      <p>
+                        <span className="font-medium">Total a Pagar:</span>{" "}
+                        {formatCurrency(payrollData.totalSalary)}
+                      </p>
+                      <p>
+                        <span className="font-medium">Estado:</span>{" "}
+                        {payrollData.isPaid ? "Pagado" : "Pendiente"}
+                      </p>
                     </div>
-                  ) : (
-                    <p className="text-muted-foreground">No hay registros de asistencia para este período</p>
-                  )}
-                </div>
+                    
+                    <div className="mt-6 p-4 bg-yellow-50 rounded-md border border-yellow-200">
+                      <h4 className="font-medium text-yellow-800 mb-2">Comparación</h4>
+                      <ul className="space-y-1 text-sm text-yellow-800">
+                        {Math.abs(diagnosticResults.handSalary - payrollData.handSalary) > 0.1 && (
+                          <li className="text-red-600 font-medium">
+                            ⚠️ Diferencia en Sueldo en Mano Original: {formatCurrency(Math.abs(diagnosticResults.handSalary - payrollData.handSalary))}
+                          </li>
+                        )}
+                        {Math.abs(diagnosticResults.deductions - payrollData.deductions) > 0.1 && (
+                          <li>
+                            Diferencia en Deducciones: {formatCurrency(Math.abs(diagnosticResults.deductions - payrollData.deductions))}
+                          </li>
+                        )}
+                        {Math.abs(diagnosticResults.additions - payrollData.additions) > 0.1 && (
+                          <li>
+                            Diferencia en Adiciones: {formatCurrency(Math.abs(diagnosticResults.additions - payrollData.additions))}
+                          </li>
+                        )}
+                        {Math.abs(diagnosticResults.finalHandSalary - payrollData.finalHandSalary) > 0.1 && (
+                          <li>
+                            Diferencia en Sueldo Final en Mano: {formatCurrency(Math.abs(diagnosticResults.finalHandSalary - payrollData.finalHandSalary))}
+                          </li>
+                        )}
+                        {Math.abs(diagnosticResults.totalSalary - payrollData.totalSalary) > 0.1 && (
+                          <li>
+                            Diferencia en Total a Pagar: {formatCurrency(Math.abs(diagnosticResults.totalSalary - payrollData.totalSalary))}
+                          </li>
+                        )}
+                        {Math.abs(diagnosticResults.handSalary - payrollData.handSalary) <= 0.1 &&
+                         Math.abs(diagnosticResults.deductions - payrollData.deductions) <= 0.1 &&
+                         Math.abs(diagnosticResults.additions - payrollData.additions) <= 0.1 &&
+                         Math.abs(diagnosticResults.finalHandSalary - payrollData.finalHandSalary) <= 0.1 &&
+                         Math.abs(diagnosticResults.totalSalary - payrollData.totalSalary) <= 0.1 && (
+                          <li className="text-green-600 font-medium">
+                            ✅ Los cálculos coinciden correctamente
+                          </li>
+                        )}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+                
+                {!payrollData && diagnosticResults && (
+                  <div>
+                    <h3 className="font-medium mb-4">Nómina en Base de Datos</h3>
+                    <p className="text-yellow-600">
+                      No se encontró una nómina para este empleado en el período seleccionado.
+                    </p>
+                    <p className="mt-2">
+                      Puede generar una nueva nómina desde la página de Nómina.
+                    </p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
