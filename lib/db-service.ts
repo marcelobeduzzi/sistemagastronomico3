@@ -539,32 +539,29 @@ async createPayrollDetail(detail: Omit<PayrollDetail, "id">) {
 }
 
 // Método para obtener nóminas por período (mes/año)
-// MODIFICADO: No filtrar por is_paid para mostrar todas las nóminas
-async getPayrollsByPeriod(month: number, year: number, isPaid?: boolean) {
+async getPayrollsByPeriod(month: number, year: number, isPaid = false) {
   try {
-    console.log(`Obteniendo nóminas para ${month}/${year}, isPaid:`, isPaid)
-    
     // Construir la consulta base
     let query = this.supabase
       .from("payroll")
       .select("*, details:payroll_details(*)")
-      .eq("month", month)
-      .eq("year", year)
-      .order("created_at", { ascending: false })
-    
-    // Solo aplicar el filtro is_paid si se especifica explícitamente
-    if (isPaid !== undefined) {
-      query = query.eq("is_paid", isPaid)
+      
+    // Si estamos buscando nóminas pagadas, filtrar por is_paid = true
+    if (isPaid) {
+      query = query.eq("is_paid", true)
     }
-
+    
+    // Filtrar por mes y año solo si se proporcionan valores válidos
+    if (month > 0 && year > 0) {
+      query = query.eq("month", month).eq("year", year)
+    }
+    
+    // Ordenar por fecha de creación descendente
+    query = query.order("created_at", { ascending: false })
+    
     const { data, error } = await query
 
-    if (error) {
-      console.error("Error al obtener nóminas:", error)
-      throw error
-    }
-
-    console.log(`Nóminas encontradas: ${data?.length || 0}`)
+    if (error) throw error
 
     // Convertir de snake_case a camelCase
     return (data || []).map((item) => {
