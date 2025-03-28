@@ -148,9 +148,9 @@ class DatabaseService {
 
       // Construir la consulta base
       let query = this.supabase.from("attendance").select(`
-      *,
-      employees (id, first_name, last_name)
-    `)
+    *,
+    employees (id, first_name, last_name)
+  `)
 
       // Filtrar por fecha exacta (sin manipulación)
       if (date) {
@@ -203,9 +203,9 @@ class DatabaseService {
       const { data, error } = await this.supabase
         .from("attendance")
         .select(`
-          *,
-          employees (id, first_name, last_name)
-        `)
+        *,
+        employees (id, first_name, last_name)
+      `)
         .order("date", { ascending: false })
         .limit(limit)
 
@@ -240,9 +240,9 @@ class DatabaseService {
       const query = this.supabase
         .from("attendance")
         .select(`
-        *,
-        employees (id, first_name, last_name)
-      `)
+      *,
+      employees (id, first_name, last_name)
+    `)
         .eq("employee_id", employeeId)
         .gte("date", startDate)
         .lte("date", endDate)
@@ -280,9 +280,9 @@ class DatabaseService {
       const { data, error } = await this.supabase
         .from("attendance")
         .select(`
-      *,
-      employees (id, first_name, last_name)
-    `)
+    *,
+    employees (id, first_name, last_name)
+  `)
         .eq("id", id)
         .single()
 
@@ -990,8 +990,244 @@ class DatabaseService {
    */
   async createAudit(auditData: any): Promise<Audit> {
     try {
+      // Asegurarse de que categories sea un array
+      if (!auditData.categories || !Array.isArray(auditData.categories)) {
+        // Si no hay categorías, inicializar con la estructura predefinida
+        auditData.categories = [
+          {
+            id: "limpieza",
+            name: "Limpieza y Orden",
+            maxScore: 25,
+            score: 0,
+            items: [
+              {
+                id: "limpieza_general",
+                name: "Limpieza general del local",
+                maxScore: 5,
+                score: 0,
+                observations: "",
+              },
+              {
+                id: "orden_cocina",
+                name: "Orden en la cocina",
+                maxScore: 5,
+                score: 0,
+                observations: "",
+              },
+              {
+                id: "limpieza_banos",
+                name: "Limpieza de baños",
+                maxScore: 5,
+                score: 0,
+                observations: "",
+              },
+              {
+                id: "manejo_residuos",
+                name: "Manejo de residuos",
+                maxScore: 5,
+                score: 0,
+                observations: "",
+              },
+              {
+                id: "orden_almacen",
+                name: "Orden en almacén",
+                maxScore: 5,
+                score: 0,
+                observations: "",
+              },
+            ],
+          },
+          {
+            id: "seguridad_alimentaria",
+            name: "Seguridad Alimentaria",
+            maxScore: 25,
+            score: 0,
+            items: [
+              {
+                id: "control_temperatura",
+                name: "Control de temperatura de alimentos",
+                maxScore: 5,
+                score: 0,
+                observations: "",
+              },
+              {
+                id: "almacenamiento",
+                name: "Almacenamiento adecuado",
+                maxScore: 5,
+                score: 0,
+                observations: "",
+              },
+              {
+                id: "fechas_vencimiento",
+                name: "Control de fechas de vencimiento",
+                maxScore: 5,
+                score: 0,
+                observations: "",
+              },
+              {
+                id: "manipulacion",
+                name: "Manipulación de alimentos",
+                maxScore: 5,
+                score: 0,
+                observations: "",
+              },
+              {
+                id: "contaminacion_cruzada",
+                name: "Prevención de contaminación cruzada",
+                maxScore: 5,
+                score: 0,
+                observations: "",
+              },
+            ],
+          },
+          {
+            id: "atencion_cliente",
+            name: "Atención al Cliente",
+            maxScore: 20,
+            score: 0,
+            items: [
+              {
+                id: "presentacion_personal",
+                name: "Presentación del personal",
+                maxScore: 5,
+                score: 0,
+                observations: "",
+              },
+              {
+                id: "amabilidad",
+                name: "Amabilidad y cortesía",
+                maxScore: 5,
+                score: 0,
+                observations: "",
+              },
+              {
+                id: "rapidez",
+                name: "Rapidez en el servicio",
+                maxScore: 5,
+                score: 0,
+                observations: "",
+              },
+              {
+                id: "conocimiento_menu",
+                name: "Conocimiento del menú",
+                maxScore: 5,
+                score: 0,
+                observations: "",
+              },
+            ],
+          },
+          {
+            id: "calidad_producto",
+            name: "Calidad del Producto",
+            maxScore: 20,
+            score: 0,
+            items: [
+              {
+                id: "presentacion_platos",
+                name: "Presentación de platos",
+                maxScore: 5,
+                score: 0,
+                observations: "",
+              },
+              {
+                id: "sabor",
+                name: "Sabor y temperatura adecuados",
+                maxScore: 5,
+                score: 0,
+                observations: "",
+              },
+              {
+                id: "consistencia",
+                name: "Consistencia en la calidad",
+                maxScore: 5,
+                score: 0,
+                observations: "",
+              },
+              {
+                id: "frescura",
+                name: "Frescura de ingredientes",
+                maxScore: 5,
+                score: 0,
+                observations: "",
+              },
+            ],
+          },
+          {
+            id: "procesos_operativos",
+            name: "Procesos Operativos",
+            maxScore: 10,
+            score: 0,
+            items: [
+              {
+                id: "seguimiento_recetas",
+                name: "Seguimiento de recetas estándar",
+                maxScore: 5,
+                score: 0,
+                observations: "",
+              },
+              {
+                id: "eficiencia",
+                name: "Eficiencia en procesos",
+                maxScore: 5,
+                score: 0,
+                observations: "",
+              },
+            ],
+          },
+        ]
+      }
+
+      // Calcular puntajes para cada categoría
+      let totalScore = 0
+      let maxScore = 0
+
+      auditData.categories = auditData.categories.map((category: any) => {
+        let categoryScore = 0
+        const categoryMaxScore = category.maxScore || 0
+
+        // Calcular puntaje de la categoría basado en los ítems
+        if (category.items && Array.isArray(category.items)) {
+          category.items = category.items.map((item: any) => {
+            // Asegurarse de que el puntaje no exceda el máximo del ítem
+            if (item.score > item.maxScore) {
+              item.score = item.maxScore
+            }
+            categoryScore += item.score || 0
+            return item
+          })
+        }
+
+        // Asegurarse de que el puntaje de la categoría no exceda el máximo
+        if (categoryScore > categoryMaxScore) {
+          categoryScore = categoryMaxScore
+        }
+
+        // Actualizar el puntaje de la categoría
+        category.score = categoryScore
+
+        // Acumular para el total
+        totalScore += categoryScore
+        maxScore += categoryMaxScore
+
+        return category
+      })
+
+      // Actualizar puntajes totales
+      auditData.totalScore = totalScore
+      auditData.maxScore = maxScore
+
+      // Añadir timestamps si no existen
+      if (!auditData.createdAt) {
+        auditData.createdAt = new Date().toISOString()
+      }
+      if (!auditData.updatedAt) {
+        auditData.updatedAt = new Date().toISOString()
+      }
+
       // Convertir de camelCase a snake_case
       const snakeCaseData = objectToSnakeCase(auditData)
+
+      console.log("Datos de auditoría a insertar:", snakeCaseData)
 
       const { data, error } = await this.supabase.from("audits").insert([snakeCaseData]).select().single()
 
@@ -1141,6 +1377,42 @@ class DatabaseService {
     }
   }
 
+  /**
+   * Obtiene un pedido por su ID
+   * @param id ID del pedido
+   * @returns El pedido encontrado o null si no existe
+   */
+  async getOrderById(id: string): Promise<Order | null> {
+    try {
+      const { data, error } = await this.supabase.from("orders").select("*").eq("id", id).single()
+
+      if (error) {
+        console.error("Error en getOrderById:", error)
+        throw error
+      }
+
+      return objectToCamelCase(data)
+    } catch (error) {
+      console.error("Error en getOrderById:", error)
+      return null
+    }
+  }
+
+  async getAllOrders() {
+    try {
+      const { data, error } = await this.supabase.from("orders").select("*")
+
+      if (error) {
+        console.error("Error en getAllOrders:", error)
+        throw error
+      }
+
+      return data.map((item) => objectToCamelCase(item))
+    } catch (error) {
+      console.error("Error en getAllOrders:", error)
+      return []
+    }
+  }
   // UPDATED: Simplified getDashboardStats method to fix the error
   async getDashboardStats() {
     try {
@@ -1317,9 +1589,14 @@ export const db = {
     create: async ({ data }: { data: any }) => {
       return await dbService.saveOrder(data)
     },
+    findUnique: async ({ where }: { where: { id: string } }) => {
+      return await dbService.getOrderById(where.id)
+    },
   },
 }
 
 // Exportar también el servicio original para mantener compatibilidad
 export { dbService }
+
+
 

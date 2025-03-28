@@ -5,7 +5,24 @@ import type React from "react"
 import { useState, useEffect, useCallback, memo, useMemo } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { BarChart3, Users, DollarSign, Calendar, Settings, ChevronDown, Menu, TrendingUp, LogOut, ClipboardCheck, ReceiptText, PieChart, LayoutDashboard, Star, MessageSquare } from 'lucide-react'
+import {
+  BarChart3,
+  Users,
+  DollarSign,
+  Calendar,
+  Settings,
+  ChevronDown,
+  Menu,
+  TrendingUp,
+  LogOut,
+  ClipboardCheck,
+  ReceiptText,
+  PieChart,
+  LayoutDashboard,
+  Star,
+  MessageSquare,
+  ShoppingCart,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
@@ -182,6 +199,11 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         icon: ClipboardCheck,
       },
       {
+        title: "Pedidos Brozziano",
+        href: "/pedidos-brozziano",
+        icon: ShoppingCart,
+      },
+      {
         title: "Facturación",
         href: "/facturacion",
         icon: ReceiptText,
@@ -351,6 +373,8 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
     </div>
   )
 }
+
+
 
 
 
