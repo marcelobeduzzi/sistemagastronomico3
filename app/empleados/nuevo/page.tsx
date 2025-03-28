@@ -48,7 +48,8 @@ export default function NuevoEmpleadoPage() {
 
     if (type === "number") {
       setFormData((prev) => {
-        // Asegurar que valores vacíos se conviertan a 0
+        // Permitir explícitamente el valor 0
+        // El valor puede ser vacío (que se convierte a 0) o un número
         const numValue = value === "" ? 0 : Number.parseFloat(value)
         const newData = { ...prev, [name]: numValue }
 
@@ -346,7 +347,7 @@ export default function NuevoEmpleadoPage() {
                         min="0"
                         step="0.01"
                         placeholder="0.00"
-                        value={formData.baseSalary || ""}
+                        value={formData.baseSalary === 0 ? "0" : formData.baseSalary || ""}
                         onChange={handleChange}
                         required
                       />
@@ -360,7 +361,7 @@ export default function NuevoEmpleadoPage() {
                         min="0"
                         step="0.01"
                         placeholder="0.00"
-                        value={formData.bankSalary || ""}
+                        value={formData.bankSalary === 0 ? "0" : formData.bankSalary || ""}
                         onChange={handleChange}
                         required
                       />
@@ -375,7 +376,7 @@ export default function NuevoEmpleadoPage() {
                         name="totalSalary"
                         type="number"
                         placeholder="0.00"
-                        value={formData.totalSalary || ""}
+                        value={formData.totalSalary === 0 ? "0" : formData.totalSalary || ""}
                         readOnly
                         className="bg-muted"
                       />

@@ -46,7 +46,8 @@ export function EditarEmpleadoForm({ empleado }: EditarEmpleadoFormProps) {
 
     if (type === "number") {
       setFormData((prev) => {
-        // Asegurar que valores vacíos se conviertan a "0"
+        // Permitir explícitamente el valor 0
+        // Si el valor es vacío, usar "0"
         const newValue = value === "" ? "0" : value
         const newData = { ...prev, [name]: newValue }
 
@@ -266,7 +267,7 @@ export function EditarEmpleadoForm({ empleado }: EditarEmpleadoFormProps) {
                 type="number"
                 min="0"
                 step="0.01"
-                value={formData.baseSalary}
+                value={formData.baseSalary === "0" ? "0" : formData.baseSalary}
                 onChange={handleChange}
                 required
               />
@@ -280,7 +281,7 @@ export function EditarEmpleadoForm({ empleado }: EditarEmpleadoFormProps) {
                 type="number"
                 min="0"
                 step="0.01"
-                value={formData.bankSalary}
+                value={formData.bankSalary === "0" ? "0" : formData.bankSalary}
                 onChange={handleChange}
                 required
               />
@@ -295,7 +296,7 @@ export function EditarEmpleadoForm({ empleado }: EditarEmpleadoFormProps) {
                 id="totalSalary"
                 name="totalSalary"
                 type="number"
-                value={formData.totalSalary}
+                value={formData.totalSalary === "0" ? "0" : formData.totalSalary}
                 readOnly
                 className="bg-muted"
               />
