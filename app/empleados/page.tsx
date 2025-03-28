@@ -8,28 +8,34 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { dbService } from "@/lib/db-service"
-import { formatDate } from "@/lib/export-utils" // Corregido: importar desde export-utils en lugar de utils
 import { StatusBadge } from "@/components/status-badge"
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
-import { Plus, Search, Filter } from 'lucide-react'
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination"
+import { Plus, Search, Filter } from "lucide-react"
 import Link from "next/link"
 import type { Employee } from "@/types"
 
 // Función de respaldo por si formatDate no está disponible
 const formatDateFallback = (dateString: string) => {
-  if (!dateString) return "-";
+  if (!dateString) return "-"
   try {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('es-AR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    });
+    const date = new Date(dateString)
+    return date.toLocaleDateString("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    })
   } catch (error) {
-    console.error("Error al formatear fecha:", error);
-    return dateString.split('T')[0] || dateString;
+    console.error("Error al formatear fecha:", error)
+    return dateString.split("T")[0] || dateString
   }
-};
+}
 
 export default function EmpleadosPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -39,12 +45,12 @@ export default function EmpleadosPage() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [localFilter, setLocalFilter] = useState("all")
   const [positionFilter, setPositionFilter] = useState("all")
-  
+
   // Paginación
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const itemsPerPage = 10
-  
+
   // Obtener lista de locales y posiciones únicas para los filtros
   const [uniqueLocals, setUniqueLocals] = useState<string[]>([])
   const [uniquePositions, setUniquePositions] = useState<string[]>([])
@@ -55,61 +61,62 @@ export default function EmpleadosPage() {
       try {
         const data = await dbService.getEmployees()
         setEmployees(data)
-        
+
         // Extraer locales y posiciones únicas para los filtros
-        const locals = Array.from(new Set(data.map(emp => emp.local)))
-        const positions = Array.from(new Set(data.map(emp => emp.position)))
-        
+        const locals = Array.from(new Set(data.map((emp) => emp.local)))
+        const positions = Array.from(new Set(data.map((emp) => emp.position)))
+
         setUniqueLocals(locals)
         setUniquePositions(positions)
-        
+
         setIsLoading(false)
       } catch (error) {
         console.error("Error al cargar empleados:", error)
         setIsLoading(false)
       }
     }
-    
+
     loadEmployees()
   }, [])
 
   // Aplicar filtros y búsqueda
   useEffect(() => {
     let result = [...employees]
-    
+
     // Aplicar filtro de búsqueda
     if (searchTerm) {
       const term = searchTerm.toLowerCase()
-      result = result.filter(emp => 
-        emp.firstName.toLowerCase().includes(term) || 
-        emp.lastName.toLowerCase().includes(term) || 
-        emp.documentId.toLowerCase().includes(term)
+      result = result.filter(
+        (emp) =>
+          emp.firstName.toLowerCase().includes(term) ||
+          emp.lastName.toLowerCase().includes(term) ||
+          emp.documentId.toLowerCase().includes(term),
       )
     }
-    
+
     // Aplicar filtro de estado
     if (statusFilter !== "all") {
-      result = result.filter(emp => emp.status === statusFilter)
+      result = result.filter((emp) => emp.status === statusFilter)
     }
-    
+
     // Aplicar filtro de local
     if (localFilter !== "all") {
-      result = result.filter(emp => emp.local === localFilter)
+      result = result.filter((emp) => emp.local === localFilter)
     }
-    
+
     // Aplicar filtro de posición
     if (positionFilter !== "all") {
-      result = result.filter(emp => emp.position === positionFilter)
+      result = result.filter((emp) => emp.position === positionFilter)
     }
-    
+
     // Calcular total de páginas
     setTotalPages(Math.ceil(result.length / itemsPerPage))
-    
+
     // Asegurarse de que la página actual es válida
     if (currentPage > Math.ceil(result.length / itemsPerPage)) {
       setCurrentPage(1)
     }
-    
+
     setFilteredEmployees(result)
   }, [employees, searchTerm, statusFilter, localFilter, positionFilter])
 
@@ -124,7 +131,7 @@ export default function EmpleadosPage() {
   const getPageNumbers = () => {
     const pages = []
     const maxVisiblePages = 5
-    
+
     if (totalPages <= maxVisiblePages) {
       // Mostrar todas las páginas si hay menos que el máximo visible
       for (let i = 1; i <= totalPages; i++) {
@@ -134,17 +141,17 @@ export default function EmpleadosPage() {
       // Mostrar un subconjunto de páginas con la actual en el centro
       let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2))
       let endPage = startPage + maxVisiblePages - 1
-      
+
       if (endPage > totalPages) {
         endPage = totalPages
         startPage = Math.max(1, endPage - maxVisiblePages + 1)
       }
-      
+
       for (let i = startPage; i <= endPage; i++) {
         pages.push(i)
       }
     }
-    
+
     return pages
   }
 
@@ -163,13 +170,11 @@ export default function EmpleadosPage() {
             </Link>
           </Button>
         </div>
-        
+
         <Card>
           <CardHeader>
             <CardTitle>Lista de Empleados</CardTitle>
-            <CardDescription>
-              {filteredEmployees.length} empleados encontrados
-            </CardDescription>
+            <CardDescription>{filteredEmployees.length} empleados encontrados</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -187,7 +192,7 @@ export default function EmpleadosPage() {
                     />
                   </div>
                 </div>
-                
+
                 <div className="flex flex-wrap gap-2">
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
                     <SelectTrigger className="w-[180px]">
@@ -202,7 +207,7 @@ export default function EmpleadosPage() {
                       <SelectItem value="vacation">Vacaciones</SelectItem>
                     </SelectContent>
                   </Select>
-                  
+
                   <Select value={localFilter} onValueChange={setLocalFilter}>
                     <SelectTrigger className="w-[180px]">
                       <Filter className="mr-2 h-4 w-4" />
@@ -210,12 +215,14 @@ export default function EmpleadosPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos los locales</SelectItem>
-                      {uniqueLocals.map(local => (
-                        <SelectItem key={local} value={local}>{local}</SelectItem>
+                      {uniqueLocals.map((local) => (
+                        <SelectItem key={local} value={local}>
+                          {local}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  
+
                   <Select value={positionFilter} onValueChange={setPositionFilter}>
                     <SelectTrigger className="w-[180px]">
                       <Filter className="mr-2 h-4 w-4" />
@@ -223,14 +230,16 @@ export default function EmpleadosPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos los puestos</SelectItem>
-                      {uniquePositions.map(position => (
-                        <SelectItem key={position} value={position}>{position}</SelectItem>
+                      {uniquePositions.map((position) => (
+                        <SelectItem key={position} value={position}>
+                          {position}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
-              
+
               {/* Tabla de Empleados */}
               <div className="rounded-md border">
                 <Table>
@@ -280,14 +289,10 @@ export default function EmpleadosPage() {
                           <TableCell className="text-right">
                             <div className="flex justify-end space-x-2">
                               <Button variant="outline" size="sm" asChild>
-                                <Link href={`/empleados/${employee.id}`}>
-                                  Ver
-                                </Link>
+                                <Link href={`/empleados/${employee.id}/ver`}>Ver</Link>
                               </Button>
                               <Button variant="outline" size="sm" asChild>
-                                <Link href={`/empleados/${employee.id}/editar`}>
-                                  Editar
-                                </Link>
+                                <Link href={`/empleados/${employee.id}/editar`}>Editar</Link>
                               </Button>
                             </div>
                           </TableCell>
@@ -297,19 +302,19 @@ export default function EmpleadosPage() {
                   </TableBody>
                 </Table>
               </div>
-              
+
               {/* Paginación */}
               {totalPages > 1 && (
                 <Pagination>
                   <PaginationContent>
                     <PaginationItem>
-                      <PaginationPrevious 
-                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      <PaginationPrevious
+                        onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                         className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
                       />
                     </PaginationItem>
-                    
-                    {getPageNumbers().map(page => (
+
+                    {getPageNumbers().map((page) => (
                       <PaginationItem key={page}>
                         <PaginationLink
                           onClick={() => setCurrentPage(page)}
@@ -320,10 +325,10 @@ export default function EmpleadosPage() {
                         </PaginationLink>
                       </PaginationItem>
                     ))}
-                    
+
                     <PaginationItem>
-                      <PaginationNext 
-                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      <PaginationNext
+                        onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
                         className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
                       />
                     </PaginationItem>
@@ -337,3 +342,5 @@ export default function EmpleadosPage() {
     </DashboardLayout>
   )
 }
+
+
