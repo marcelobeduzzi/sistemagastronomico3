@@ -148,9 +148,9 @@ class DatabaseService {
 
       // Construir la consulta base
       let query = this.supabase.from("attendance").select(`
-      *,
-      employees (id, first_name, last_name)
-    `)
+    *,
+    employees (id, first_name, last_name)
+  `)
 
       // Filtrar por fecha exacta (sin manipulación)
       if (date) {
@@ -203,9 +203,9 @@ class DatabaseService {
       const { data, error } = await this.supabase
         .from("attendance")
         .select(`
-          *,
-          employees (id, first_name, last_name)
-        `)
+        *,
+        employees (id, first_name, last_name)
+      `)
         .order("date", { ascending: false })
         .limit(limit)
 
@@ -240,9 +240,9 @@ class DatabaseService {
       const query = this.supabase
         .from("attendance")
         .select(`
-        *,
-        employees (id, first_name, last_name)
-      `)
+      *,
+      employees (id, first_name, last_name)
+    `)
         .eq("employee_id", employeeId)
         .gte("date", startDate)
         .lte("date", endDate)
@@ -280,9 +280,9 @@ class DatabaseService {
       const { data, error } = await this.supabase
         .from("attendance")
         .select(`
-      *,
-      employees (id, first_name, last_name)
-    `)
+    *,
+    employees (id, first_name, last_name)
+  `)
         .eq("id", id)
         .single()
 
@@ -990,238 +990,12 @@ class DatabaseService {
    */
   async createAudit(auditData: any): Promise<Audit> {
     try {
+      console.log("Datos recibidos en createAudit:", auditData)
+
       // Asegurarse de que categories sea un array
       if (!auditData.categories || !Array.isArray(auditData.categories)) {
-        // Si no hay categorías, inicializar con la estructura predefinida
-        auditData.categories = [
-          {
-            id: "limpieza",
-            name: "Limpieza y Orden",
-            maxScore: 25,
-            score: 0,
-            items: [
-              {
-                id: "limpieza_general",
-                name: "Limpieza general del local",
-                maxScore: 5,
-                score: 0,
-                observations: "",
-              },
-              {
-                id: "orden_cocina",
-                name: "Orden en la cocina",
-                maxScore: 5,
-                score: 0,
-                observations: "",
-              },
-              {
-                id: "limpieza_banos",
-                name: "Limpieza de baños",
-                maxScore: 5,
-                score: 0,
-                observations: "",
-              },
-              {
-                id: "manejo_residuos",
-                name: "Manejo de residuos",
-                maxScore: 5,
-                score: 0,
-                observations: "",
-              },
-              {
-                id: "orden_almacen",
-                name: "Orden en almacén",
-                maxScore: 5,
-                score: 0,
-                observations: "",
-              },
-            ],
-          },
-          {
-            id: "seguridad_alimentaria",
-            name: "Seguridad Alimentaria",
-            maxScore: 25,
-            score: 0,
-            items: [
-              {
-                id: "control_temperatura",
-                name: "Control de temperatura de alimentos",
-                maxScore: 5,
-                score: 0,
-                observations: "",
-              },
-              {
-                id: "almacenamiento",
-                name: "Almacenamiento adecuado",
-                maxScore: 5,
-                score: 0,
-                observations: "",
-              },
-              {
-                id: "fechas_vencimiento",
-                name: "Control de fechas de vencimiento",
-                maxScore: 5,
-                score: 0,
-                observations: "",
-              },
-              {
-                id: "manipulacion",
-                name: "Manipulación de alimentos",
-                maxScore: 5,
-                score: 0,
-                observations: "",
-              },
-              {
-                id: "contaminacion_cruzada",
-                name: "Prevención de contaminación cruzada",
-                maxScore: 5,
-                score: 0,
-                observations: "",
-              },
-            ],
-          },
-          {
-            id: "atencion_cliente",
-            name: "Atención al Cliente",
-            maxScore: 20,
-            score: 0,
-            items: [
-              {
-                id: "presentacion_personal",
-                name: "Presentación del personal",
-                maxScore: 5,
-                score: 0,
-                observations: "",
-              },
-              {
-                id: "amabilidad",
-                name: "Amabilidad y cortesía",
-                maxScore: 5,
-                score: 0,
-                observations: "",
-              },
-              {
-                id: "rapidez",
-                name: "Rapidez en el servicio",
-                maxScore: 5,
-                score: 0,
-                observations: "",
-              },
-              {
-                id: "conocimiento_menu",
-                name: "Conocimiento del menú",
-                maxScore: 5,
-                score: 0,
-                observations: "",
-              },
-            ],
-          },
-          {
-            id: "calidad_producto",
-            name: "Calidad del Producto",
-            maxScore: 20,
-            score: 0,
-            items: [
-              {
-                id: "presentacion_platos",
-                name: "Presentación de platos",
-                maxScore: 5,
-                score: 0,
-                observations: "",
-              },
-              {
-                id: "sabor",
-                name: "Sabor y temperatura adecuados",
-                maxScore: 5,
-                score: 0,
-                observations: "",
-              },
-              {
-                id: "consistencia",
-                name: "Consistencia en la calidad",
-                maxScore: 5,
-                score: 0,
-                observations: "",
-              },
-              {
-                id: "frescura",
-                name: "Frescura de ingredientes",
-                maxScore: 5,
-                score: 0,
-                observations: "",
-              },
-            ],
-          },
-          {
-            id: "procesos_operativos",
-            name: "Procesos Operativos",
-            maxScore: 10,
-            score: 0,
-            items: [
-              {
-                id: "seguimiento_recetas",
-                name: "Seguimiento de recetas estándar",
-                maxScore: 5,
-                score: 0,
-                observations: "",
-              },
-              {
-                id: "eficiencia",
-                name: "Eficiencia en procesos",
-                maxScore: 5,
-                score: 0,
-                observations: "",
-              },
-            ],
-          },
-        ]
-      }
-
-      // Calcular puntajes para cada categoría
-      let totalScore = 0
-      let maxScore = 0
-
-      auditData.categories = auditData.categories.map((category: any) => {
-        let categoryScore = 0
-        const categoryMaxScore = category.maxScore || 0
-
-        // Calcular puntaje de la categoría basado en los ítems
-        if (category.items && Array.isArray(category.items)) {
-          category.items = category.items.map((item: any) => {
-            // Asegurarse de que el puntaje no exceda el máximo del ítem
-            if (item.score > item.maxScore) {
-              item.score = item.maxScore
-            }
-            categoryScore += item.score || 0
-            return item
-          })
-        }
-
-        // Asegurarse de que el puntaje de la categoría no exceda el máximo
-        if (categoryScore > categoryMaxScore) {
-          categoryScore = categoryMaxScore
-        }
-
-        // Actualizar el puntaje de la categoría
-        category.score = categoryScore
-
-        // Acumular para el total
-        totalScore += categoryScore
-        maxScore += categoryMaxScore
-
-        return category
-      })
-
-      // Actualizar puntajes totales
-      auditData.totalScore = totalScore
-      auditData.maxScore = maxScore
-
-      // Añadir timestamps si no existen
-      if (!auditData.createdAt) {
-        auditData.createdAt = new Date().toISOString()
-      }
-      if (!auditData.updatedAt) {
-        auditData.updatedAt = new Date().toISOString()
+        console.error("Error: categories no es un array o está vacío")
+        throw new Error("Las categorías de la auditoría deben ser un array")
       }
 
       // Convertir de camelCase a snake_case
@@ -1236,6 +1010,7 @@ class DatabaseService {
         throw error
       }
 
+      console.log("Auditoría creada con éxito:", data)
       return objectToCamelCase(data)
     } catch (error) {
       console.error("Error en createAudit:", error)
@@ -1260,72 +1035,6 @@ class DatabaseService {
       return objectToCamelCase(data)
     } catch (error) {
       console.error("Error en getAuditById:", error)
-      return null
-    }
-  }
-
-  /**
-   * Obtiene la configuración de auditorías
-   * @returns Configuración de categorías e ítems para auditorías
-   */
-  async getAuditConfig() {
-    try {
-      const { data, error } = await this.supabase.from("audit_config").select("*").single()
-
-      if (error) {
-        console.error("Error al obtener configuración de auditorías:", error)
-        // En lugar de lanzar un error, devolvemos null para que el cliente pueda manejarlo
-        return null
-      }
-
-      return data
-    } catch (error) {
-      console.error("Error en getAuditConfig:", error)
-      return null
-    }
-  }
-
-  /**
-   * Guarda la configuración de auditorías
-   * @param config Configuración de categorías e ítems para auditorías
-   * @returns Resultado de la operación
-   */
-  async saveAuditConfig(config: any) {
-    try {
-      // Verificar si ya existe una configuración
-      const { data: existingConfig, error: checkError } = await this.supabase.from("audit_config").select("id").limit(1)
-
-      if (checkError) {
-        console.error("Error al verificar configuración existente:", checkError)
-        return null
-      }
-
-      if (existingConfig && existingConfig.length > 0) {
-        // Actualizar configuración existente
-        const { data, error } = await this.supabase
-          .from("audit_config")
-          .update(config)
-          .eq("id", existingConfig[0].id)
-          .select()
-          .single()
-
-        if (error) {
-          console.error("Error al actualizar configuración:", error)
-          return null
-        }
-        return data
-      } else {
-        // Crear nueva configuración
-        const { data, error } = await this.supabase.from("audit_config").insert([config]).select().single()
-
-        if (error) {
-          console.error("Error al crear configuración:", error)
-          return null
-        }
-        return data
-      }
-    } catch (error) {
-      console.error("Error en saveAuditConfig:", error)
       return null
     }
   }
@@ -1580,6 +1289,136 @@ class DatabaseService {
       throw error
     }
   }
+
+  // Añadir el método getAuditConfig mejorado en la clase DatabaseService
+
+  /**
+   * Obtiene la configuración de auditorías
+   * @returns Configuración de categorías e ítems para auditorías
+   */
+  async getAuditConfig() {
+    try {
+      console.log("Obteniendo configuración de auditorías")
+      const { data, error } = await this.supabase.from("audit_config").select("*").single()
+
+      if (error) {
+        console.error("Error al obtener configuración de auditorías:", error)
+
+        // Si el error es porque no existe la tabla o no hay registros, devolver configuración por defecto
+        if (error.code === "PGRST116" || error.code === "22P02") {
+          console.log("No se encontró configuración, devolviendo valores por defecto")
+          return {
+            categories: [
+              {
+                id: "limpieza",
+                name: "Limpieza y Orden",
+                maxScore: 25,
+                items: [
+                  { id: "limpieza_general", name: "Limpieza general del local", maxScore: 5 },
+                  { id: "orden_cocina", name: "Orden en la cocina", maxScore: 5 },
+                  { id: "limpieza_banos", name: "Limpieza de baños", maxScore: 5 },
+                  { id: "manejo_residuos", name: "Manejo de residuos", maxScore: 5 },
+                  { id: "orden_almacen", name: "Orden en almacén", maxScore: 5 },
+                ],
+              },
+              {
+                id: "seguridad_alimentaria",
+                name: "Seguridad Alimentaria",
+                maxScore: 25,
+                items: [
+                  { id: "control_temperatura", name: "Control de temperatura de alimentos", maxScore: 5 },
+                  { id: "almacenamiento", name: "Almacenamiento adecuado", maxScore: 5 },
+                  { id: "fechas_vencimiento", name: "Control de fechas de vencimiento", maxScore: 5 },
+                  { id: "manipulacion", name: "Manipulación de alimentos", maxScore: 5 },
+                  { id: "contaminacion_cruzada", name: "Prevención de contaminación cruzada", maxScore: 5 },
+                ],
+              },
+              {
+                id: "atencion_cliente",
+                name: "Atención al Cliente",
+                maxScore: 20,
+                items: [
+                  { id: "presentacion_personal", name: "Presentación del personal", maxScore: 5 },
+                  { id: "amabilidad", name: "Amabilidad y cortesía", maxScore: 5 },
+                  { id: "rapidez", name: "Rapidez en el servicio", maxScore: 5 },
+                  { id: "conocimiento_menu", name: "Conocimiento del menú", maxScore: 5 },
+                ],
+              },
+              {
+                id: "calidad_producto",
+                name: "Calidad del Producto",
+                maxScore: 20,
+                items: [
+                  { id: "presentacion_platos", name: "Presentación de platos", maxScore: 5 },
+                  { id: "sabor", name: "Sabor y temperatura adecuados", maxScore: 5 },
+                  { id: "consistencia", name: "Consistencia en la calidad", maxScore: 5 },
+                  { id: "frescura", name: "Frescura de ingredientes", maxScore: 5 },
+                ],
+              },
+              {
+                id: "procesos_operativos",
+                name: "Procesos Operativos",
+                maxScore: 10,
+                items: [
+                  { id: "seguimiento_recetas", name: "Seguimiento de recetas estándar", maxScore: 5 },
+                  { id: "eficiencia", name: "Eficiencia en procesos", maxScore: 5 },
+                ],
+              },
+            ],
+          }
+        }
+
+        throw error
+      }
+
+      console.log("Configuración obtenida:", data)
+      return data
+    } catch (error) {
+      console.error("Error en getAuditConfig:", error)
+      throw error
+    }
+  }
+
+  /**
+   * Guarda la configuración de auditorías
+   * @param config Configuración de categorías e ítems para auditorías
+   * @returns Resultado de la operación
+   */
+  async saveAuditConfig(config: any) {
+    try {
+      // Verificar si ya existe una configuración
+      const { data: existingConfig, error: checkError } = await this.supabase.from("audit_config").select("id").single()
+
+      if (checkError && checkError.code !== "PGRST116") {
+        console.error("Error al verificar configuración existente:", checkError)
+        throw checkError
+      }
+
+      if (existingConfig) {
+        // Actualizar configuración existente
+        console.log("Actualizando configuración existente:", existingConfig.id)
+        const { data, error } = await this.supabase
+          .from("audit_config")
+          .update(config)
+          .eq("id", existingConfig.id)
+          .select()
+          .single()
+
+        if (error) throw error
+        return data
+      } else {
+        // Crear nueva configuración
+        console.log("Creando nueva configuración")
+        const { data, error } = await this.supabase.from("audit_config").insert([config]).select().single()
+
+        if (error) throw error
+        return data
+      }
+    } catch (error) {
+      console.error("Error en saveAuditConfig:", error)
+      throw error
+    }
+  }
 }
 
 // Función auxiliar para calcular la jornada laboral esperada en minutos
@@ -1659,10 +1498,20 @@ export const db = {
       return await dbService.getOrderById(where.id)
     },
   },
+  auditConfig: {
+    get: async () => {
+      return await dbService.getAuditConfig()
+    },
+    save: async (data: any) => {
+      return await dbService.saveAuditConfig(data)
+    },
+  },
 }
 
 // Exportar también el servicio original para mantener compatibilidad
 export { dbService }
+
+
 
 
 
