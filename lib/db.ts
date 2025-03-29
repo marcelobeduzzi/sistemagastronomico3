@@ -976,7 +976,24 @@ class DatabaseService {
       const { data, error } = await query
 
       if (error) throw error
-      return data.map((item) => objectToCamelCase(item))
+
+      // Convertir de snake_case a camelCase y asegurar que localName esté disponible
+      return (data || []).map((item) => {
+        const audit = objectToCamelCase(item)
+
+        // Si no hay localName pero hay local_name, usar ese valor
+        if (!audit.localName && item.local_name) {
+          audit.localName = item.local_name
+        }
+
+        // Si no hay auditorName pero hay auditor_name, usar ese valor
+        if (!audit.auditorName && item.auditor_name) {
+          audit.auditorName = item.auditor_name
+        }
+
+        console.log("Audit después de procesamiento:", audit)
+        return audit
+      })
     } catch (error) {
       console.error("Error en getAudits:", error)
       return []
@@ -995,7 +1012,7 @@ class DatabaseService {
       }
 
       // Mapear los campos para que coincidan con lo que espera la base de datos
-      // Usar auditor_name como nombre de la columna y observations en lugar de general_observations
+      // Usar auditor_name como nombre de la columna y notes en lugar de general_observations
       const dataToSave = {
         local_id: auditData.localId || "",
         local_name: auditData.localName || "",
@@ -1041,7 +1058,21 @@ class DatabaseService {
         throw error
       }
 
-      return objectToCamelCase(data)
+      // Convertir de snake_case a camelCase y asegurar que localName y auditorName estén disponibles
+      const audit = objectToCamelCase(data)
+
+      // Si no hay localName pero hay local_name, usar ese valor
+      if (!audit.localName && data.local_name) {
+        audit.localName = data.local_name
+      }
+
+      // Si no hay auditorName pero hay auditor_name, usar ese valor
+      if (!audit.auditorName && data.auditor_name) {
+        audit.auditorName = data.auditor_name
+      }
+
+      console.log("Audit por ID después de procesamiento:", audit)
+      return audit
     } catch (error) {
       console.error("Error en getAuditById:", error)
       return null
@@ -1519,6 +1550,8 @@ export const db = {
 
 // Exportar también el servicio original para mantener compatibilidad
 export { dbService }
+
+
 
 
 

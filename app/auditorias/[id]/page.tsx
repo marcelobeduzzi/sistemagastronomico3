@@ -8,14 +8,11 @@ import { DashboardLayout } from "@/app/dashboard-layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AuditDetail } from "@/components/auditorias/audit-detail"
 import { db } from "@/lib/db"
-import { toast } from "@/components/ui/use-toast"
-import { ArrowLeft, Printer } from "lucide-react"
-// Importa la función de exportación
 import { generateAuditReport } from "@/lib/export-utils"
+import { ArrowLeft, Download, Printer } from "lucide-react"
 
-export default function AuditoriaDetailPage({ params }: { params: { id: string } }) {
+export default function AuditDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter()
   const [audit, setAudit] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -29,167 +26,343 @@ export default function AuditoriaDetailPage({ params }: { params: { id: string }
           where: { id: params.id },
         })
 
-        if (!auditData) {
-          toast({
-            title: "Error",
-            description: "No se encontró la auditoría solicitada",
-            variant: "destructive",
-          })
-          router.push("/auditorias")
-          return
+        console.log("Datos de auditoría cargados:", auditData)
+
+        // Asegurarse de que los datos estén completos
+        if (auditData) {
+          // Asegurarse de que categories sea un array
+          if (!auditData.categories) {
+            auditData.categories = []
+          }
+
+          // Asegurarse de que localName esté disponible
+          if (!auditData.localName && auditData.local_name) {
+            auditData.localName = auditData.local_name
+          }
+
+          // Asegurarse de que auditorName esté disponible
+          if (!auditData.auditorName && auditData.auditor_name) {
+            auditData.auditorName = auditData.auditor_name
+          }
+
+          // Si aún no hay auditorName, usar auditor
+          if (!auditData.auditorName && auditData.auditor) {
+            auditData.auditorName = auditData.auditor
+          }
         }
 
         setAudit(auditData)
       } catch (error) {
         console.error("Error al cargar la auditoría:", error)
-        toast({
-          title: "Error",
-          description: "Ocurrió un error al cargar la auditoría",
-          variant: "destructive",
-        })
       } finally {
         setIsLoading(false)
       }
     }
 
     fetchAudit()
-  }, [params.id, router])
+  }, [params.id])
 
-  // Reemplaza la función handlePrint
-  const handlePrint = () => {
+  const handleExportPDF = () => {
     if (audit) {
       generateAuditReport(audit)
     }
   }
 
+  const handlePrint = () => {
+    window.print()
+  }
+
   if (isLoading) {
-    return <DashboardLayout isLoading={true} />
+    return (
+      <DashboardLayout isLoading={true}>
+        <div className="container mx-auto py-6">
+          <p>Cargando datos de la auditoría...</p>
+        </div>
+      </DashboardLayout>
+    )
   }
 
   if (!audit) {
     return (
       <DashboardLayout>
         <div className="container mx-auto py-6">
-          <div className="flex flex-col items-center justify-center h-[60vh]">
-            <h2 className="text-2xl font-bold mb-2">Auditoría no encontrada</h2>
-            <p className="text-muted-foreground mb-4">La auditoría solicitada no existe o ha sido eliminada</p>
-            <Button onClick={() => router.push("/auditorias")}>Volver a Auditorías</Button>
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="text-3xl font-bold">Auditoría no encontrada</h1>
+            <Button variant="outline" onClick={() => router.push("/auditorias")}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Volver
+            </Button>
           </div>
+          <p>No se pudo encontrar la auditoría solicitada.</p>
         </div>
       </DashboardLayout>
     )
   }
 
-  const formattedDate = format(new Date(audit.date), "dd 'de' MMMM 'de' yyyy", { locale: es })
+  // Formatear fecha
+  const formattedDate = audit.date
+    ? format(new Date(audit.date), "dd 'de' MMMM 'de' yyyy", { locale: es })
+    : "Fecha desconocida"
+
+  // Asegurarse de que categories sea un array
+  const categories = Array.isArray(audit.categories) ? audit.categories : []
 
   return (
     <DashboardLayout>
-      <div className="container mx-auto py-6 print:py-2">
-        <div className="flex items-center justify-between mb-6 print:mb-2">
+      <div className="container mx-auto py-6">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-bold">Detalles de Auditoría</h1>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={() => router.push("/auditorias")} className="print:hidden">
-              <ArrowLeft className="h-4 w-4" />
+            <Button variant="outline" onClick={handlePrint}>
+              <Printer className="mr-2 h-4 w-4" />
+              Imprimir
             </Button>
-            <h1 className="text-3xl font-bold print:text-2xl">Auditoría: {audit.localName}</h1>
+            <Button variant="outline" onClick={handleExportPDF}>
+              <Download className="mr-2 h-4 w-4" />
+              Exportar PDF
+            </Button>
+            <Button variant="outline" onClick={() => router.push("/auditorias")}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Volver
+            </Button>
           </div>
-          <Button onClick={handlePrint} className="print:hidden">
-            <Printer className="h-4 w-4 mr-2" />
-            Imprimir
-          </Button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 print:gap-2 print:grid-cols-1">
-          {/* Información general */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           <Card className="md:col-span-1">
-            <CardHeader className="print:py-2">
+            <CardHeader>
               <CardTitle>Información General</CardTitle>
               <CardDescription>Datos básicos de la auditoría</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 print:space-y-2 print:pt-0">
-              <div className="grid grid-cols-2 gap-2">
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Local:</p>
-                  <p className="font-medium">{audit.localName}</p>
+                  <p className="text-sm font-medium text-muted-foreground">Local</p>
+                  <p className="text-lg font-medium">{audit.localName || audit.local_name || "No especificado"}</p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Fecha:</p>
-                  <p className="font-medium">{formattedDate}</p>
+                  <p className="text-sm font-medium text-muted-foreground">Fecha</p>
+                  <p className="text-lg font-medium">{formattedDate}</p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Auditor:</p>
-                  <p className="font-medium">{audit.auditor}</p>
+                  <p className="text-sm font-medium text-muted-foreground">Auditor</p>
+                  <p className="text-lg font-medium">
+                    {audit.auditorName || audit.auditor_name || audit.auditor || "No especificado"}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Puntaje:</p>
-                  <p className="font-medium">
-                    {audit.totalScore} / {audit.maxScore} ({audit.percentage}%)
+                  <p className="text-sm font-medium text-muted-foreground">Puntaje</p>
+                  <p className="text-lg font-medium">
+                    {audit.totalScore || 0} / {audit.maxScore || 0} ({audit.percentage || 0}%)
                   </p>
                 </div>
               </div>
 
-              {audit.generalObservations && (
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Observaciones Generales:</p>
-                  <p className="text-sm mt-1">{audit.generalObservations}</p>
-                </div>
-              )}
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Observaciones Generales</p>
+                <p className="text-sm mt-1">
+                  {audit.notes || audit.observations || audit.generalObservations || "Sin observaciones"}
+                </p>
+              </div>
 
-              <div className="w-full mt-2">
-                <div className="flex justify-between mb-1">
-                  <span className="text-sm font-medium">Resultado:</span>
-                  <span className="text-sm font-medium">{audit.percentage}%</span>
-                </div>
+              <div className="mt-4">
+                <p className="text-sm font-medium text-muted-foreground mb-2">Calificación General</p>
                 <div className="w-full bg-gray-200 rounded-full h-2.5">
                   <div
                     className={`h-2.5 rounded-full ${
-                      audit.percentage >= 80 ? "bg-green-500" : audit.percentage >= 60 ? "bg-yellow-500" : "bg-red-500"
+                      (audit.percentage || 0) >= 80
+                        ? "bg-green-500"
+                        : (audit.percentage || 0) >= 60
+                          ? "bg-yellow-500"
+                          : "bg-red-500"
                     }`}
-                    style={{ width: `${audit.percentage}%` }}
+                    style={{ width: `${audit.percentage || 0}%` }}
                   ></div>
                 </div>
+                <p className="text-xs text-right mt-1">{audit.percentage || 0}%</p>
               </div>
             </CardContent>
           </Card>
 
-          {/* Detalles de la auditoría */}
           <Card className="md:col-span-2">
-            <CardHeader className="print:py-2">
+            <CardHeader>
               <CardTitle>Resultados por Categoría</CardTitle>
-              <CardDescription>Detalle de la evaluación</CardDescription>
+              <CardDescription>Desglose de puntajes por categoría</CardDescription>
             </CardHeader>
-            <CardContent className="print:pt-0">
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="print:hidden">
-                <TabsList className="grid grid-cols-2 md:grid-cols-6 mb-4">
-                  <TabsTrigger value="resumen">Resumen</TabsTrigger>
-                  {audit.categories.map((category: any) => (
-                    <TabsTrigger key={category.id} value={category.id}>
-                      {category.name}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
+            <CardContent>
+              {categories.length === 0 ? (
+                <p className="text-muted-foreground">No hay datos de categorías disponibles.</p>
+              ) : (
+                <div className="space-y-6">
+                  {categories.map((category: any, index: number) => {
+                    if (!category) return null
 
-                <TabsContent value="resumen">
-                  <AuditDetail audit={audit} showAllCategories={false} />
-                </TabsContent>
+                    const categoryScore = category.score || 0
+                    const categoryMaxScore = category.maxScore || 1 // Evitar división por cero
+                    const percentage = Math.round((categoryScore / categoryMaxScore) * 100)
 
-                {audit.categories.map((category: any) => (
-                  <TabsContent key={category.id} value={category.id}>
-                    <AuditDetail audit={audit} categoryId={category.id} showAllCategories={false} />
-                  </TabsContent>
-                ))}
-              </Tabs>
-
-              {/* Versión para imprimir - siempre muestra todo */}
-              <div className="hidden print:block">
-                <AuditDetail audit={audit} showAllCategories={true} />
-              </div>
+                    return (
+                      <div key={index} className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <h3 className="font-medium">{category.name || `Categoría ${index + 1}`}</h3>
+                          <span className="text-sm">
+                            {categoryScore} / {categoryMaxScore} ({percentage}%)
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full ${
+                              percentage >= 80 ? "bg-green-500" : percentage >= 60 ? "bg-yellow-500" : "bg-red-500"
+                            }`}
+                            style={{ width: `${percentage}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Detalle por Categorías</CardTitle>
+            <CardDescription>Evaluación detallada de cada ítem</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {categories.length === 0 ? (
+              <p className="text-muted-foreground">No hay datos detallados disponibles.</p>
+            ) : (
+              <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <TabsList className="grid grid-cols-2 md:grid-cols-5 mb-4">
+                  <TabsTrigger value="resumen">Resumen</TabsTrigger>
+                  {categories.map((category: any, index: number) => {
+                    if (!category) return null
+                    return (
+                      <TabsTrigger key={index} value={`cat-${index}`}>
+                        {category.name || `Categoría ${index + 1}`}
+                      </TabsTrigger>
+                    )
+                  })}
+                </TabsList>
+
+                <TabsContent value="resumen" className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {categories.map((category: any, index: number) => {
+                      if (!category) return null
+
+                      const categoryScore = category.score || 0
+                      const categoryMaxScore = category.maxScore || 1
+                      const percentage = Math.round((categoryScore / categoryMaxScore) * 100)
+
+                      return (
+                        <Card key={index}>
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-lg">{category.name || `Categoría ${index + 1}`}</CardTitle>
+                            <CardDescription>
+                              {categoryScore} / {categoryMaxScore} puntos ({percentage}%)
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+                              <div
+                                className={`h-2 rounded-full ${
+                                  percentage >= 80 ? "bg-green-500" : percentage >= 60 ? "bg-yellow-500" : "bg-red-500"
+                                }`}
+                                style={{ width: `${percentage}%` }}
+                              ></div>
+                            </div>
+
+                            {Array.isArray(category.items) && category.items.length > 0 ? (
+                              <ul className="space-y-1 text-sm">
+                                {category.items.map((item: any, itemIndex: number) => {
+                                  if (!item) return null
+                                  return (
+                                    <li key={itemIndex} className="flex justify-between">
+                                      <span>{item.name || `Ítem ${itemIndex + 1}`}</span>
+                                      <span>
+                                        {item.score || 0} / {item.maxScore || 0}
+                                      </span>
+                                    </li>
+                                  )
+                                })}
+                              </ul>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">No hay ítems en esta categoría.</p>
+                            )}
+                          </CardContent>
+                        </Card>
+                      )
+                    })}
+                  </div>
+                </TabsContent>
+
+                {categories.map((category: any, index: number) => {
+                  if (!category) return null
+
+                  return (
+                    <TabsContent key={index} value={`cat-${index}`} className="space-y-6">
+                      <h3 className="text-xl font-bold">{category.name || `Categoría ${index + 1}`}</h3>
+
+                      {Array.isArray(category.items) && category.items.length > 0 ? (
+                        <div className="space-y-6">
+                          {category.items.map((item: any, itemIndex: number) => {
+                            if (!item) return null
+
+                            const itemScore = item.score || 0
+                            const itemMaxScore = item.maxScore || 1
+                            const itemPercentage = Math.round((itemScore / itemMaxScore) * 100)
+
+                            return (
+                              <div key={itemIndex} className="border-b pb-4">
+                                <div className="flex justify-between items-center mb-2">
+                                  <h4 className="font-medium">{item.name || `Ítem ${itemIndex + 1}`}</h4>
+                                  <span>
+                                    {itemScore} / {itemMaxScore} ({itemPercentage}%)
+                                  </span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                                  <div
+                                    className={`h-2 rounded-full ${
+                                      itemPercentage >= 80
+                                        ? "bg-green-500"
+                                        : itemPercentage >= 60
+                                          ? "bg-yellow-500"
+                                          : "bg-red-500"
+                                    }`}
+                                    style={{ width: `${itemPercentage}%` }}
+                                  ></div>
+                                </div>
+                                {item.observations && (
+                                  <div className="mt-2">
+                                    <p className="text-sm text-muted-foreground">Observaciones:</p>
+                                    <p className="text-sm">{item.observations}</p>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground">No hay ítems en esta categoría.</p>
+                      )}
+                    </TabsContent>
+                  )
+                })}
+              </Tabs>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
   )
 }
+
+
+
+
 
 
 
