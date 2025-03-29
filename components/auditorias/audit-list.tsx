@@ -19,6 +19,7 @@ interface Audit {
   totalScore: number
   maxScore: number
   percentage: number
+  categories?: any[]
 }
 
 interface AuditListProps {
@@ -29,9 +30,23 @@ export function AuditList({ audits }: AuditListProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [filterLocal, setFilterLocal] = useState("all")
 
+  // Verificar que audits sea un array antes de continuar
+  if (!audits || !Array.isArray(audits)) {
+    console.error("Error: audits no es un array", audits)
+    return (
+      <div className="space-y-4">
+        <div className="text-center p-4">
+          <p>No hay auditorías disponibles o hay un error en los datos.</p>
+        </div>
+      </div>
+    )
+  }
+
   // Obtener lista única de locales para el filtro
-  const uniqueLocals = Array.from(new Set(audits.map((audit) => audit.localId))).map((localId) => {
-    const audit = audits.find((a) => a.localId === localId)
+  const uniqueLocals = Array.from(
+    new Set(audits.filter((audit) => audit && audit.localId).map((audit) => audit.localId)),
+  ).map((localId) => {
+    const audit = audits.find((a) => a && a.localId === localId)
     return {
       id: localId,
       name: audit?.localName || localId,
@@ -40,9 +55,11 @@ export function AuditList({ audits }: AuditListProps) {
 
   // Filtrar auditorías
   const filteredAudits = audits.filter((audit) => {
+    if (!audit) return false
+
     const matchesSearch =
-      audit.localName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      audit.auditor.toLowerCase().includes(searchTerm.toLowerCase())
+      (audit.localName && audit.localName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (audit.auditor && audit.auditor.toLowerCase().includes(searchTerm.toLowerCase()))
 
     const matchesLocal = filterLocal === "all" || audit.localId === filterLocal
 
@@ -50,7 +67,10 @@ export function AuditList({ audits }: AuditListProps) {
   })
 
   // Ordenar por fecha (más reciente primero)
-  const sortedAudits = [...filteredAudits].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  const sortedAudits = [...filteredAudits].sort((a, b) => {
+    if (!a.date || !b.date) return 0
+    return new Date(b.date).getTime() - new Date(a.date).getTime()
+  })
 
   return (
     <div className="space-y-4">
@@ -99,26 +119,30 @@ export function AuditList({ audits }: AuditListProps) {
               </TableRow>
             ) : (
               sortedAudits.map((audit) => {
-                const formattedDate = format(new Date(audit.date), "dd/MM/yyyy", { locale: es })
+                if (!audit || !audit.id) return null
+
+                const formattedDate = audit.date
+                  ? format(new Date(audit.date), "dd/MM/yyyy", { locale: es })
+                  : "Fecha desconocida"
 
                 return (
                   <TableRow key={audit.id}>
-                    <TableCell className="font-medium">{audit.localName}</TableCell>
+                    <TableCell className="font-medium">{audit.localName || "Local sin nombre"}</TableCell>
                     <TableCell>{formattedDate}</TableCell>
-                    <TableCell>{audit.auditor}</TableCell>
+                    <TableCell>{audit.auditor || "Auditor no especificado"}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <span className="text-sm">{audit.percentage}%</span>
+                        <span className="text-sm">{audit.percentage || 0}%</span>
                         <div className="w-16 bg-gray-200 rounded-full h-2.5">
                           <div
                             className={`h-2.5 rounded-full ${
-                              audit.percentage >= 80
+                              (audit.percentage || 0) >= 80
                                 ? "bg-green-500"
-                                : audit.percentage >= 60
+                                : (audit.percentage || 0) >= 60
                                   ? "bg-yellow-500"
                                   : "bg-red-500"
                             }`}
-                            style={{ width: `${audit.percentage}%` }}
+                            style={{ width: `${audit.percentage || 0}%` }}
                           ></div>
                         </div>
                       </div>
@@ -141,4 +165,6 @@ export function AuditList({ audits }: AuditListProps) {
     </div>
   )
 }
+
+
 

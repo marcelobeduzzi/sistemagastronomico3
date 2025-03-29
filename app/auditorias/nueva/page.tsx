@@ -44,8 +44,6 @@ export default function NuevaAuditoriaPage() {
     categories: [],
   })
 
-  // Actualizar la función fetchAuditConfig para usar el nuevo método
-
   // Cargar categorías desde la base de datos
   useEffect(() => {
     const fetchAuditConfig = async () => {
@@ -252,38 +250,17 @@ export default function NuevaAuditoriaPage() {
       // Encontrar el nombre del local
       const localName = locales.find((local) => local.id === auditData.localId)?.name || ""
 
-      // Calcular puntajes para cada categoría
-      const categoriesWithScores = auditData.categories.map((category) => {
-        // Calcular puntaje total de la categoría
-        const categoryScore = category.items.reduce((sum, item) => sum + item.score, 0)
-
-        // Asegurarse de que no exceda el máximo
-        const finalScore = Math.min(categoryScore, category.maxScore)
-
-        return {
-          ...category,
-          score: finalScore,
-        }
-      })
-
-      // Calcular puntaje total y porcentaje
-      const totalScore = categoriesWithScores.reduce((sum, category) => sum + category.score, 0)
-      const maxScore = categoriesWithScores.reduce((sum, category) => sum + category.maxScore, 0)
-      const percentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0
-
       // Preparar datos para guardar
       const dataToSave = {
         localId: auditData.localId,
         localName,
-        auditor_name: auditData.auditor,
+        auditor: auditData.auditor,
         date: new Date(auditData.date).toISOString(),
         generalObservations: auditData.generalObservations,
-        categories: categoriesWithScores,
+        categories: auditData.categories,
         totalScore,
         maxScore,
         percentage,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
       }
 
       console.log("Guardando auditoría:", dataToSave)
@@ -471,6 +448,8 @@ export default function NuevaAuditoriaPage() {
     </DashboardLayout>
   )
 }
+
+
 
 
 
