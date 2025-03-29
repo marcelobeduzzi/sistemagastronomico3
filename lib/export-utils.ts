@@ -285,7 +285,7 @@ export const generateAuditReport = (audit: Audit) => {
     }
 
     // Observaciones generales
-    if (audit.generalObservations) {
+    if (audit.notes || audit.observations || audit.generalObservations) {
       // Verificar si hay espacio suficiente en la página
       if (yPos > 250) {
         doc.addPage()
@@ -299,7 +299,8 @@ export const generateAuditReport = (audit: Audit) => {
       yPos += 10
 
       doc.setFontSize(12)
-      const splitText = doc.splitTextToSize(audit.generalObservations, 180)
+      const observations = audit.notes || audit.observations || audit.generalObservations
+      const splitText = doc.splitTextToSize(observations, 180)
       doc.text(splitText, 14, yPos)
     }
 
@@ -710,6 +711,8 @@ export const generateOrderReport = (order: Order) => {
     alert("Ocurrió un error al generar el reporte de pedido. Por favor, intente nuevamente.")
   }
 }
+
+
 
 
 

@@ -995,13 +995,13 @@ class DatabaseService {
       }
 
       // Mapear los campos para que coincidan con lo que espera la base de datos
-      // Usar auditor_name como nombre de la columna
+      // Usar auditor_name como nombre de la columna y observations en lugar de general_observations
       const dataToSave = {
         local_id: auditData.localId || "",
         local_name: auditData.localName || "",
         auditor_name: auditData.auditor || "", // Cambiado a auditor_name
         date: auditData.date ? new Date(auditData.date).toISOString() : new Date().toISOString(),
-        general_observations: auditData.generalObservations || "",
+        notes: auditData.generalObservations || "", // Cambiado a notes que es el nombre correcto en la base de datos
         categories: auditData.categories,
         total_score: auditData.totalScore || 0,
         max_score: auditData.maxScore || 0,
@@ -1519,6 +1519,8 @@ export const db = {
 
 // Exportar también el servicio original para mantener compatibilidad
 export { dbService }
+
+
 
 
 
