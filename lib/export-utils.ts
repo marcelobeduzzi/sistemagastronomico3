@@ -110,7 +110,7 @@ export const generateAuditReport = (audit: Audit) => {
     doc.setFontSize(12)
     doc.text(`Local: ${audit.localName || audit.local || "No especificado"}`, 14, 30)
     doc.text(`Fecha: ${formatDate(audit.date) || "No especificada"}`, 14, 35)
-    doc.text(`Auditor: ${audit.auditor || audit.supervisorName || "No especificado"}`, 14, 40)
+    doc.text(`Auditor: ${audit.auditorName || audit.auditor || "No especificado"}`, 14, 40)
 
     // Verificar si existe el campo shift
     if (audit.shift) {
@@ -630,6 +630,13 @@ export const generateOrderReport = (order: Order) => {
     let yPos = 65
 
     // Tabla de productos
+    if (order.items && Array.isArray(order.items) && order.clientAddress) {
+      doc.text(`Dirección: ${order.clientAddress}`, 14, 60)
+    }
+
+    //let yPos = 65 // Remove redeclaration
+
+    // Tabla de productos
     if (order.items && Array.isArray(order.items) && order.items.length > 0) {
       doc.setFontSize(14)
       doc.text("PRODUCTOS", 14, yPos)
@@ -703,6 +710,8 @@ export const generateOrderReport = (order: Order) => {
     alert("Ocurrió un error al generar el reporte de pedido. Por favor, intente nuevamente.")
   }
 }
+
+
 
 
 

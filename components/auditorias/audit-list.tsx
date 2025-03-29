@@ -14,7 +14,8 @@ interface Audit {
   id: string
   localId: string
   localName: string
-  auditor: string
+  auditor?: string
+  auditorName?: string
   date: string
   totalScore: number
   maxScore: number
@@ -129,7 +130,7 @@ export function AuditList({ audits }: AuditListProps) {
                   <TableRow key={audit.id}>
                     <TableCell className="font-medium">{audit.localName || "Local sin nombre"}</TableCell>
                     <TableCell>{formattedDate}</TableCell>
-                    <TableCell>{audit.auditor || "Auditor no especificado"}</TableCell>
+                    <TableCell>{audit.auditorName || audit.auditor || "Auditor no especificado"}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
                         <span className="text-sm">{audit.percentage || 0}%</span>
@@ -165,6 +166,8 @@ export function AuditList({ audits }: AuditListProps) {
     </div>
   )
 }
+
+
 
 
 

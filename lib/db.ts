@@ -995,10 +995,11 @@ class DatabaseService {
       }
 
       // Mapear los campos para que coincidan con lo que espera la base de datos
+      // Usar auditor_name como nombre de la columna
       const dataToSave = {
         local_id: auditData.localId || "",
         local_name: auditData.localName || "",
-        auditor: auditData.auditor || "",
+        auditor_name: auditData.auditor || "", // Cambiado a auditor_name
         date: auditData.date ? new Date(auditData.date).toISOString() : new Date().toISOString(),
         general_observations: auditData.generalObservations || "",
         categories: auditData.categories,
@@ -1518,6 +1519,8 @@ export const db = {
 
 // Exportar también el servicio original para mantener compatibilidad
 export { dbService }
+
+
 
 
 
