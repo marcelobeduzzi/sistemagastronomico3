@@ -14,6 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Slider } from "@/components/ui/slider"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Switch } from "@/components/ui/switch"
+import { db } from "@/lib/db"
 import { toast } from "@/components/ui/use-toast"
 
 // Lista de locales para seleccionar
@@ -43,7 +45,7 @@ const defaultCategories = [
     ],
   },
   {
-    id: "seguridad_alimentaria",
+    id: "seguridad",
     name: "Seguridad",
     maxScore: 25,
     items: [
@@ -55,7 +57,7 @@ const defaultCategories = [
     ],
   },
   {
-    id: "atencion_cliente",
+    id: "atencion",
     name: "Atención",
     maxScore: 20,
     items: [
@@ -66,7 +68,7 @@ const defaultCategories = [
     ],
   },
   {
-    id: "calidad_producto",
+    id: "calidad",
     name: "Calidad",
     maxScore: 20,
     items: [
@@ -77,7 +79,7 @@ const defaultCategories = [
     ],
   },
   {
-    id: "procesos_operativos",
+    id: "procesos",
     name: "Procesos",
     maxScore: 10,
     items: [
@@ -92,30 +94,62 @@ export default function NuevaAuditoriaPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("limpieza")
   const [auditCategories, setAuditCategories] = useState([])
+  const [useDefault, setUseDefault] = useState(false)
 
   // Estado para los datos de la auditoría
   const [auditData, setAuditData] = useState({
     localId: "",
-    auditor: "",
+    localName: "",
+    auditorName: "",
     date: format(new Date(), "yyyy-MM-dd"),
-    generalObservations: "",
+    notes: "",
+    audited: false,
     categories: [],
   })
 
-  // Cargar categorías desde la API
+  // Función para usar categorías predeterminadas
+  const useDefaultCategories = () => {
+    setAuditCategories(defaultCategories)
+
+    // Inicializar el estado de la auditoría con las categorías predeterminadas
+    setAuditData({
+      ...auditData,
+      categories: defaultCategories.map((category) => ({
+        ...category,
+        score: 0,
+        items: category.items.map((item) => ({
+          ...item,
+          score: 0,
+          observations: "",
+        })),
+      })),
+    })
+
+    // Establecer la primera categoría como activa
+    if (defaultCategories.length > 0) {
+      setActiveTab(defaultCategories[0].id)
+    }
+
+    // Intentar crear la tabla y configuración si no existe
+    try {
+      createAuditConfigIfNotExists(defaultCategories)
+    } catch (createError) {
+      console.error("No se pudo crear la configuración:", createError)
+    }
+  }
+
+  // Cargar categorías desde la base de datos
   useEffect(() => {
     const fetchAuditConfig = async () => {
       try {
         setIsLoading(true)
 
-        // Intentar cargar desde la API
-        const response = await fetch('/api/auditorias/config')
-        
-        if (response.ok) {
-          const configData = await response.json()
-          
-          if (configData && configData.categories && Array.isArray(configData.categories)) {
-            // Usar la configuración de la API
+        try {
+          // Intentar cargar desde la base de datos
+          const { data: configData, error } = await db.supabase.from("audit_config").select("*").single()
+
+          if (!error && configData && configData.categories) {
+            // Usar la configuración de la base de datos
             setAuditCategories(configData.categories)
 
             // Inicializar el estado de la auditoría con las categorías cargadas
@@ -136,15 +170,16 @@ export default function NuevaAuditoriaPage() {
             if (configData.categories.length > 0) {
               setActiveTab(configData.categories[0].id)
             }
+            setUseDefault(false)
           } else {
-            // Si no hay datos válidos, usar valores predeterminados
-            console.log("Usando categorías predeterminadas debido a datos inválidos")
-            useDefaultCategories()
+            // Si hay error o no hay datos, usar valores predeterminados
+            console.log("Usando categorías predeterminadas debido a:", error || "No hay datos")
+            setUseDefault(true)
           }
-        } else {
-          // Si hay error, usar valores predeterminados
-          console.log("Usando categorías predeterminadas debido a error en la API")
-          useDefaultCategories()
+        } catch (dbError) {
+          // Si hay un error al acceder a la base de datos, usar valores predeterminados
+          console.error("Error al acceder a la base de datos:", dbError)
+          setUseDefault(true)
         }
       } catch (error) {
         console.error("Error al cargar configuración de auditoría:", error)
@@ -155,38 +190,45 @@ export default function NuevaAuditoriaPage() {
         })
 
         // En caso de error, usar valores predeterminados
-        useDefaultCategories()
+        setUseDefault(true)
       } finally {
         setIsLoading(false)
       }
     }
 
-    // Función para usar categorías predeterminadas
-    const useDefaultCategories = () => {
-      setAuditCategories(defaultCategories)
-
-      // Inicializar el estado de la auditoría con las categorías predeterminadas
-      setAuditData({
-        ...auditData,
-        categories: defaultCategories.map((category) => ({
-          ...category,
-          score: 0,
-          items: category.items.map((item) => ({
-            ...item,
-            score: 0,
-            observations: "",
-          })),
-        })),
-      })
-
-      // Establecer la primera categoría como activa
-      if (defaultCategories.length > 0) {
-        setActiveTab(defaultCategories[0].id)
-      }
-    }
-
     fetchAuditConfig()
   }, [])
+
+  // Usar categorías predeterminadas si es necesario
+  useEffect(() => {
+    if (useDefault) {
+      useDefaultCategories()
+    }
+  }, [useDefault])
+
+  // Función auxiliar para crear la configuración si no existe
+  const createAuditConfigIfNotExists = async (categories) => {
+    try {
+      // Verificar si la tabla existe
+      const { error: tableError } = await db.supabase.from("audit_config").select("id").limit(1)
+
+      if (tableError) {
+        console.log("La tabla audit_config no existe o no es accesible")
+        return
+      }
+
+      // Insertar configuración predeterminada
+      const { error: insertError } = await db.supabase.from("audit_config").insert([{ categories }])
+
+      if (insertError) {
+        console.error("Error al insertar configuración predeterminada:", insertError)
+      } else {
+        console.log("Configuración predeterminada creada correctamente")
+      }
+    } catch (error) {
+      console.error("Error al verificar/crear configuración:", error)
+    }
+  }
 
   // Calcular puntaje total
   const totalScore = auditData.categories.reduce((acc, category) => acc + category.score, 0)
@@ -199,6 +241,14 @@ export default function NuevaAuditoriaPage() {
     setAuditData((prev) => ({
       ...prev,
       [name]: value,
+    }))
+  }
+
+  // Manejar cambio en el campo auditado
+  const handleAuditedChange = (checked: boolean) => {
+    setAuditData((prev) => ({
+      ...prev,
+      audited: checked,
     }))
   }
 
@@ -265,7 +315,7 @@ export default function NuevaAuditoriaPage() {
       return
     }
 
-    if (!auditData.auditor) {
+    if (!auditData.auditorName) {
       toast({
         title: "Error",
         description: "Debes ingresar el nombre del auditor",
@@ -284,32 +334,29 @@ export default function NuevaAuditoriaPage() {
       const dataToSave = {
         localId: auditData.localId,
         localName,
-        auditor: auditData.auditor,
-        date: new Date(auditData.date).toISOString(),
-        generalObservations: auditData.generalObservations,
+        auditorName: auditData.auditorName,
+        date: new Date(auditData.date).toISOString().split("T")[0],
+        notes: auditData.notes,
+        audited: auditData.audited,
         categories: auditData.categories,
         totalScore,
         maxScore,
         percentage,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
       }
 
-      // Guardar en la API
-      const response = await fetch('/api/auditorias', {
-        method: 'POST',
+      // Guardar en la base de datos usando la API
+      const response = await fetch("/api/auditorias", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify(dataToSave),
       })
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(`Error al guardar auditoría: ${response.status} - ${errorData.error || 'Error desconocido'}`)
+        throw new Error(errorData.error || "Error al guardar la auditoría")
       }
-
-      const result = await response.json()
 
       toast({
         title: "Auditoría guardada",
@@ -358,7 +405,13 @@ export default function NuevaAuditoriaPage() {
                 <Select
                   name="localId"
                   value={auditData.localId}
-                  onValueChange={(value) => setAuditData((prev) => ({ ...prev, localId: value }))}
+                  onValueChange={(value) =>
+                    setAuditData((prev) => ({
+                      ...prev,
+                      localId: value,
+                      localName: locales.find((local) => local.id === value)?.name || "",
+                    }))
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Seleccionar local" />
@@ -374,11 +427,11 @@ export default function NuevaAuditoriaPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="auditor">Auditor</Label>
+                <Label htmlFor="auditorName">Auditor</Label>
                 <Input
-                  id="auditor"
-                  name="auditor"
-                  value={auditData.auditor}
+                  id="auditorName"
+                  name="auditorName"
+                  value={auditData.auditorName}
                   onChange={handleInputChange}
                   placeholder="Nombre del auditor"
                 />
@@ -389,12 +442,17 @@ export default function NuevaAuditoriaPage() {
                 <Input id="date" name="date" type="date" value={auditData.date} onChange={handleInputChange} />
               </div>
 
+              <div className="flex items-center space-x-2">
+                <Switch id="audited" checked={auditData.audited} onCheckedChange={handleAuditedChange} />
+                <Label htmlFor="audited">Auditado</Label>
+              </div>
+
               <div className="space-y-2">
-                <Label htmlFor="generalObservations">Observaciones Generales</Label>
+                <Label htmlFor="notes">Observaciones Generales</Label>
                 <Textarea
-                  id="generalObservations"
-                  name="generalObservations"
-                  value={auditData.generalObservations}
+                  id="notes"
+                  name="notes"
+                  value={auditData.notes}
                   onChange={handleInputChange}
                   placeholder="Observaciones generales de la auditoría"
                   rows={4}
@@ -430,13 +488,9 @@ export default function NuevaAuditoriaPage() {
                 </div>
               ) : (
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                  <TabsList className="grid grid-cols-5 mb-4 overflow-x-auto">
+                  <TabsList className="grid grid-cols-5 mb-4">
                     {auditData.categories.map((category) => (
-                      <TabsTrigger 
-                        key={category.id} 
-                        value={category.id}
-                        className="px-2 py-1 text-xs sm:text-sm whitespace-nowrap"
-                      >
+                      <TabsTrigger key={category.id} value={category.id}>
                         {category.name}
                       </TabsTrigger>
                     ))}
@@ -489,6 +543,8 @@ export default function NuevaAuditoriaPage() {
     </DashboardLayout>
   )
 }
+
+
 
 
 
