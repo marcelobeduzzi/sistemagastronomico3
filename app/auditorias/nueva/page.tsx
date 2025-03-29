@@ -275,7 +275,7 @@ export default function NuevaAuditoriaPage() {
       const dataToSave = {
         localId: auditData.localId,
         localName,
-        auditor: auditData.auditor,
+        auditor_name: auditData.auditor,
         date: new Date(auditData.date).toISOString(),
         generalObservations: auditData.generalObservations,
         categories: categoriesWithScores,
