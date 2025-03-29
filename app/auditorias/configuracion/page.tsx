@@ -1,3 +1,5 @@
+// Archivo: app/auditorias/configuracion/page.tsx
+
 "use client"
 
 import { useState, useEffect } from "react"
@@ -18,9 +20,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { db } from "@/lib/db"
 import { toast } from "@/components/ui/use-toast"
-import { Plus, Edit, Trash2, Save, ArrowLeft } from "lucide-react"
+import { Plus, Edit, Trash2, Save, ArrowLeft } from 'lucide-react'
 
 // Tipos para categorías e ítems
 interface AuditItem {
@@ -36,65 +37,6 @@ interface AuditCategory {
   maxScore: number
   items: AuditItem[]
 }
-
-// Definir categorías predeterminadas
-const defaultCategories = [
-  {
-    id: "limpieza",
-    name: "Limpieza y Orden",
-    maxScore: 25,
-    items: [
-      { id: "limpieza_general", name: "Limpieza general del local", maxScore: 5 },
-      { id: "orden_cocina", name: "Orden en la cocina", maxScore: 5 },
-      { id: "limpieza_banos", name: "Limpieza de baños", maxScore: 5 },
-      { id: "manejo_residuos", name: "Manejo de residuos", maxScore: 5 },
-      { id: "orden_almacen", name: "Orden en almacén", maxScore: 5 },
-    ],
-  },
-  {
-    id: "seguridad_alimentaria",
-    name: "Seguridad Alimentaria",
-    maxScore: 25,
-    items: [
-      { id: "control_temperatura", name: "Control de temperatura de alimentos", maxScore: 5 },
-      { id: "almacenamiento", name: "Almacenamiento adecuado", maxScore: 5 },
-      { id: "fechas_vencimiento", name: "Control de fechas de vencimiento", maxScore: 5 },
-      { id: "manipulacion", name: "Manipulación de alimentos", maxScore: 5 },
-      { id: "contaminacion_cruzada", name: "Prevención de contaminación cruzada", maxScore: 5 },
-    ],
-  },
-  {
-    id: "atencion_cliente",
-    name: "Atención al Cliente",
-    maxScore: 20,
-    items: [
-      { id: "presentacion_personal", name: "Presentación del personal", maxScore: 5 },
-      { id: "amabilidad", name: "Amabilidad y cortesía", maxScore: 5 },
-      { id: "rapidez", name: "Rapidez en el servicio", maxScore: 5 },
-      { id: "conocimiento_menu", name: "Conocimiento del menú", maxScore: 5 },
-    ],
-  },
-  {
-    id: "calidad_producto",
-    name: "Calidad del Producto",
-    maxScore: 20,
-    items: [
-      { id: "presentacion_platos", name: "Presentación de platos", maxScore: 5 },
-      { id: "sabor", name: "Sabor y temperatura adecuados", maxScore: 5 },
-      { id: "consistencia", name: "Consistencia en la calidad", maxScore: 5 },
-      { id: "frescura", name: "Frescura de ingredientes", maxScore: 5 },
-    ],
-  },
-  {
-    id: "procesos_operativos",
-    name: "Procesos Operativos",
-    maxScore: 10,
-    items: [
-      { id: "seguimiento_recetas", name: "Seguimiento de recetas estándar", maxScore: 5 },
-      { id: "eficiencia", name: "Eficiencia en procesos", maxScore: 5 },
-    ],
-  },
-]
 
 export default function ConfiguracionAuditoriaPage() {
   const router = useRouter()
@@ -140,47 +82,28 @@ export default function ConfiguracionAuditoriaPage() {
     try {
       setIsLoading(true)
 
-      try {
-        // Intentar cargar desde la base de datos
-        const { data: configData, error } = await db.supabase.from("audit_config").select("*").single()
-
-        if (!error && configData && configData.categories) {
-          // Usar la configuración de la base de datos
-          setCategories(configData.categories)
-        } else {
-          // Si hay error o no hay datos, usar valores predeterminados
-          console.log("Usando categorías predeterminadas debido a:", error || "No hay datos")
-          setCategories(defaultCategories)
-
-          // Intentar crear la configuración predeterminada
-          try {
-            const { error: insertError } = await db.supabase
-              .from("audit_config")
-              .insert([{ categories: defaultCategories }])
-            if (insertError) {
-              console.error("Error al insertar configuración predeterminada:", insertError)
-            } else {
-              console.log("Configuración predeterminada creada correctamente")
-            }
-          } catch (insertError) {
-            console.error("Error al crear configuración predeterminada:", insertError)
-          }
-        }
-      } catch (dbError) {
-        // Si hay un error al acceder a la base de datos, usar valores predeterminados
-        console.error("Error al acceder a la base de datos:", dbError)
-        setCategories(defaultCategories)
+      // Usar la API route en lugar de acceder directamente a Supabase
+      const response = await fetch('/api/auditorias/config')
+      
+      if (!response.ok) {
+        throw new Error(`Error al cargar configuración: ${response.status}`)
+      }
+      
+      const data = await response.json()
+      
+      if (data && data.categories && Array.isArray(data.categories)) {
+        setCategories(data.categories)
+      } else {
+        console.log("No se encontraron categorías, usando valores predeterminados")
+        // Si no hay categorías, se usarán las predeterminadas de la API
       }
     } catch (error) {
       console.error("Error al cargar configuración de auditoría:", error)
       toast({
         title: "Error",
-        description: "Se usará la configuración predeterminada",
+        description: "No se pudo cargar la configuración. Se usarán valores predeterminados.",
         variant: "destructive",
       })
-
-      // En caso de error, usar valores predeterminados
-      setCategories(defaultCategories)
     } finally {
       setIsLoading(false)
     }
@@ -195,59 +118,23 @@ export default function ConfiguracionAuditoriaPage() {
     try {
       setIsLoading(true)
 
-      // Verificar si la tabla existe y tiene datos
-      const { data: existingConfig, error: checkError } = await db.supabase.from("audit_config").select("id").limit(1)
-
-      if (checkError) {
-        console.error("Error al verificar la configuración existente:", checkError)
-        // Intentar crear la tabla (esto probablemente no funcionará desde el cliente)
-        toast({
-          title: "Error",
-          description: "No se pudo acceder a la tabla de configuración",
-          variant: "destructive",
-        })
-        setIsLoading(false)
-        return
+      // Usar la API route en lugar de acceder directamente a Supabase
+      const response = await fetch('/api/auditorias/config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ categories }),
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Error al guardar configuración: ${response.status}`)
       }
-
-      if (existingConfig && existingConfig.length > 0) {
-        // Actualizar configuración existente
-        const { error: updateError } = await db.supabase
-          .from("audit_config")
-          .update({ categories })
-          .eq("id", existingConfig[0].id)
-
-        if (updateError) {
-          console.error("Error al actualizar configuración:", updateError)
-          toast({
-            title: "Error",
-            description: "No se pudo guardar la configuración",
-            variant: "destructive",
-          })
-        } else {
-          toast({
-            title: "Configuración guardada",
-            description: "La configuración de auditoría se ha guardado correctamente",
-          })
-        }
-      } else {
-        // Insertar nueva configuración
-        const { error: insertError } = await db.supabase.from("audit_config").insert([{ categories }])
-
-        if (insertError) {
-          console.error("Error al insertar configuración:", insertError)
-          toast({
-            title: "Error",
-            description: "No se pudo guardar la configuración",
-            variant: "destructive",
-          })
-        } else {
-          toast({
-            title: "Configuración guardada",
-            description: "La configuración de auditoría se ha guardado correctamente",
-          })
-        }
-      }
+      
+      toast({
+        title: "Configuración guardada",
+        description: "La configuración de auditoría se ha guardado correctamente",
+      })
     } catch (error) {
       console.error("Error al guardar configuración:", error)
       toast({
