@@ -29,6 +29,65 @@ const locales = [
   { id: "dean_dennys", name: "Dean & Dennys" },
 ]
 
+// Definir categorías predeterminadas
+const defaultCategories = [
+  {
+    id: "limpieza",
+    name: "Limpieza y Orden",
+    maxScore: 25,
+    items: [
+      { id: "limpieza_general", name: "Limpieza general del local", maxScore: 5 },
+      { id: "orden_cocina", name: "Orden en la cocina", maxScore: 5 },
+      { id: "limpieza_banos", name: "Limpieza de baños", maxScore: 5 },
+      { id: "manejo_residuos", name: "Manejo de residuos", maxScore: 5 },
+      { id: "orden_almacen", name: "Orden en almacén", maxScore: 5 },
+    ],
+  },
+  {
+    id: "seguridad_alimentaria",
+    name: "Seguridad Alimentaria",
+    maxScore: 25,
+    items: [
+      { id: "control_temperatura", name: "Control de temperatura de alimentos", maxScore: 5 },
+      { id: "almacenamiento", name: "Almacenamiento adecuado", maxScore: 5 },
+      { id: "fechas_vencimiento", name: "Control de fechas de vencimiento", maxScore: 5 },
+      { id: "manipulacion", name: "Manipulación de alimentos", maxScore: 5 },
+      { id: "contaminacion_cruzada", name: "Prevención de contaminación cruzada", maxScore: 5 },
+    ],
+  },
+  {
+    id: "atencion_cliente",
+    name: "Atención al Cliente",
+    maxScore: 20,
+    items: [
+      { id: "presentacion_personal", name: "Presentación del personal", maxScore: 5 },
+      { id: "amabilidad", name: "Amabilidad y cortesía", maxScore: 5 },
+      { id: "rapidez", name: "Rapidez en el servicio", maxScore: 5 },
+      { id: "conocimiento_menu", name: "Conocimiento del menú", maxScore: 5 },
+    ],
+  },
+  {
+    id: "calidad_producto",
+    name: "Calidad del Producto",
+    maxScore: 20,
+    items: [
+      { id: "presentacion_platos", name: "Presentación de platos", maxScore: 5 },
+      { id: "sabor", name: "Sabor y temperatura adecuados", maxScore: 5 },
+      { id: "consistencia", name: "Consistencia en la calidad", maxScore: 5 },
+      { id: "frescura", name: "Frescura de ingredientes", maxScore: 5 },
+    ],
+  },
+  {
+    id: "procesos_operativos",
+    name: "Procesos Operativos",
+    maxScore: 10,
+    items: [
+      { id: "seguimiento_recetas", name: "Seguimiento de recetas estándar", maxScore: 5 },
+      { id: "eficiencia", name: "Eficiencia en procesos", maxScore: 5 },
+    ],
+  },
+]
+
 export default function NuevaAuditoriaPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
@@ -50,104 +109,109 @@ export default function NuevaAuditoriaPage() {
       try {
         setIsLoading(true)
 
-        // Intentar cargar desde la base de datos
-        const { data: configData, error } = await db.supabase.from("audit_config").select("*").single()
+        try {
+          // Intentar cargar desde la base de datos
+          const { data: configData, error } = await db.supabase.from("audit_config").select("*").single()
 
-        let categories = []
+          if (!error && configData && configData.categories) {
+            // Usar la configuración de la base de datos
+            setAuditCategories(configData.categories)
 
-        if (error || !configData) {
-          // Si no hay configuración, usar valores predeterminados
-          categories = [
-            {
-              id: "limpieza",
-              name: "Limpieza y Orden",
-              maxScore: 25,
-              items: [
-                { id: "limpieza_general", name: "Limpieza general del local", maxScore: 5 },
-                { id: "orden_cocina", name: "Orden en la cocina", maxScore: 5 },
-                { id: "limpieza_banos", name: "Limpieza de baños", maxScore: 5 },
-                { id: "manejo_residuos", name: "Manejo de residuos", maxScore: 5 },
-                { id: "orden_almacen", name: "Orden en almacén", maxScore: 5 },
-              ],
-            },
-            {
-              id: "seguridad_alimentaria",
-              name: "Seguridad Alimentaria",
-              maxScore: 25,
-              items: [
-                { id: "control_temperatura", name: "Control de temperatura de alimentos", maxScore: 5 },
-                { id: "almacenamiento", name: "Almacenamiento adecuado", maxScore: 5 },
-                { id: "fechas_vencimiento", name: "Control de fechas de vencimiento", maxScore: 5 },
-                { id: "manipulacion", name: "Manipulación de alimentos", maxScore: 5 },
-                { id: "contaminacion_cruzada", name: "Prevención de contaminación cruzada", maxScore: 5 },
-              ],
-            },
-            {
-              id: "atencion_cliente",
-              name: "Atención al Cliente",
-              maxScore: 20,
-              items: [
-                { id: "presentacion_personal", name: "Presentación del personal", maxScore: 5 },
-                { id: "amabilidad", name: "Amabilidad y cortesía", maxScore: 5 },
-                { id: "rapidez", name: "Rapidez en el servicio", maxScore: 5 },
-                { id: "conocimiento_menu", name: "Conocimiento del menú", maxScore: 5 },
-              ],
-            },
-            {
-              id: "calidad_producto",
-              name: "Calidad del Producto",
-              maxScore: 20,
-              items: [
-                { id: "presentacion_platos", name: "Presentación de platos", maxScore: 5 },
-                { id: "sabor", name: "Sabor y temperatura adecuados", maxScore: 5 },
-                { id: "consistencia", name: "Consistencia en la calidad", maxScore: 5 },
-                { id: "frescura", name: "Frescura de ingredientes", maxScore: 5 },
-              ],
-            },
-            {
-              id: "procesos_operativos",
-              name: "Procesos Operativos",
-              maxScore: 10,
-              items: [
-                { id: "seguimiento_recetas", name: "Seguimiento de recetas estándar", maxScore: 5 },
-                { id: "eficiencia", name: "Eficiencia en procesos", maxScore: 5 },
-              ],
-            },
-          ]
-        } else {
-          // Usar la configuración de la base de datos
-          categories = configData.categories || []
-        }
+            // Inicializar el estado de la auditoría con las categorías cargadas
+            setAuditData({
+              ...auditData,
+              categories: configData.categories.map((category) => ({
+                ...category,
+                score: 0,
+                items: category.items.map((item) => ({
+                  ...item,
+                  score: 0,
+                  observations: "",
+                })),
+              })),
+            })
 
-        setAuditCategories(categories)
-
-        // Inicializar el estado de la auditoría con las categorías cargadas
-        setAuditData({
-          ...auditData,
-          categories: categories.map((category) => ({
-            ...category,
-            score: 0,
-            items: category.items.map((item) => ({
-              ...item,
-              score: 0,
-              observations: "",
-            })),
-          })),
-        })
-
-        // Establecer la primera categoría como activa
-        if (categories.length > 0) {
-          setActiveTab(categories[0].id)
+            // Establecer la primera categoría como activa
+            if (configData.categories.length > 0) {
+              setActiveTab(configData.categories[0].id)
+            }
+          } else {
+            // Si hay error o no hay datos, usar valores predeterminados
+            console.log("Usando categorías predeterminadas debido a:", error || "No hay datos")
+            useDefaultCategories()
+          }
+        } catch (dbError) {
+          // Si hay un error al acceder a la base de datos, usar valores predeterminados
+          console.error("Error al acceder a la base de datos:", dbError)
+          useDefaultCategories()
         }
       } catch (error) {
         console.error("Error al cargar configuración de auditoría:", error)
         toast({
           title: "Error",
-          description: "No se pudo cargar la configuración de auditoría",
+          description: "Se usará la configuración predeterminada",
           variant: "destructive",
         })
+
+        // En caso de error, usar valores predeterminados
+        useDefaultCategories()
       } finally {
         setIsLoading(false)
+      }
+    }
+
+    // Función para usar categorías predeterminadas
+    const useDefaultCategories = () => {
+      setAuditCategories(defaultCategories)
+
+      // Inicializar el estado de la auditoría con las categorías predeterminadas
+      setAuditData({
+        ...auditData,
+        categories: defaultCategories.map((category) => ({
+          ...category,
+          score: 0,
+          items: category.items.map((item) => ({
+            ...item,
+            score: 0,
+            observations: "",
+          })),
+        })),
+      })
+
+      // Establecer la primera categoría como activa
+      if (defaultCategories.length > 0) {
+        setActiveTab(defaultCategories[0].id)
+      }
+
+      // Intentar crear la tabla y configuración si no existe
+      try {
+        createAuditConfigIfNotExists(defaultCategories)
+      } catch (createError) {
+        console.error("No se pudo crear la configuración:", createError)
+      }
+    }
+
+    // Función auxiliar para crear la configuración si no existe
+    const createAuditConfigIfNotExists = async (categories) => {
+      try {
+        // Verificar si la tabla existe
+        const { error: tableError } = await db.supabase.from("audit_config").select("id").limit(1)
+
+        if (tableError) {
+          console.log("La tabla audit_config no existe o no es accesible")
+          return
+        }
+
+        // Insertar configuración predeterminada
+        const { error: insertError } = await db.supabase.from("audit_config").insert([{ categories }])
+
+        if (insertError) {
+          console.error("Error al insertar configuración predeterminada:", insertError)
+        } else {
+          console.log("Configuración predeterminada creada correctamente")
+        }
+      } catch (error) {
+        console.error("Error al verificar/crear configuración:", error)
       }
     }
 
@@ -440,6 +504,8 @@ export default function NuevaAuditoriaPage() {
     </DashboardLayout>
   )
 }
+
+
 
 
 

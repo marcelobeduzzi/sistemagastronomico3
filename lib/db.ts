@@ -1274,7 +1274,8 @@ class DatabaseService {
 
       if (error) {
         console.error("Error al obtener configuración de auditorías:", error)
-        throw error
+        // En lugar de lanzar un error, devolvemos null para que el cliente pueda manejarlo
+        return null
       }
 
       return data
@@ -1292,29 +1293,40 @@ class DatabaseService {
   async saveAuditConfig(config: any) {
     try {
       // Verificar si ya existe una configuración
-      const { data: existingConfig } = await this.supabase.from("audit_config").select("id").single()
+      const { data: existingConfig, error: checkError } = await this.supabase.from("audit_config").select("id").limit(1)
 
-      if (existingConfig) {
+      if (checkError) {
+        console.error("Error al verificar configuración existente:", checkError)
+        return null
+      }
+
+      if (existingConfig && existingConfig.length > 0) {
         // Actualizar configuración existente
         const { data, error } = await this.supabase
           .from("audit_config")
           .update(config)
-          .eq("id", existingConfig.id)
+          .eq("id", existingConfig[0].id)
           .select()
           .single()
 
-        if (error) throw error
+        if (error) {
+          console.error("Error al actualizar configuración:", error)
+          return null
+        }
         return data
       } else {
         // Crear nueva configuración
         const { data, error } = await this.supabase.from("audit_config").insert([config]).select().single()
 
-        if (error) throw error
+        if (error) {
+          console.error("Error al crear configuración:", error)
+          return null
+        }
         return data
       }
     } catch (error) {
       console.error("Error en saveAuditConfig:", error)
-      throw error
+      return null
     }
   }
 
@@ -1651,6 +1663,8 @@ export const db = {
 
 // Exportar también el servicio original para mantener compatibilidad
 export { dbService }
+
+
 
 
 
