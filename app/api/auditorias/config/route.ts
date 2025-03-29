@@ -76,7 +76,7 @@ const defaultAuditConfig = {
     },
     {
       id: "temperaturas_equipamiento",
-      name: "Temperaturas y Equipamiento",
+      name: "Equipamiento",
       maxScore: 19,
       items: [
         { id: "temperatura_horno", name: "Temperatura correcta de Horno", maxScore: 5 },
@@ -88,7 +88,7 @@ const defaultAuditConfig = {
     },
     {
       id: "apps_delivery",
-      name: "Apps de Delivery",
+      name: "Delivery",
       maxScore: 15,
       items: [
         { id: "apps_prendidas", name: "Apps prendidas", maxScore: 5 },

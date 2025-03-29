@@ -1,5 +1,3 @@
-// Archivo: app/api/auditorias/route.ts
-
 import { NextResponse } from "next/server"
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
@@ -108,21 +106,38 @@ export async function POST(request: Request) {
       auditData.updatedAt = new Date().toISOString()
     }
     
+    // Depurar los datos antes de insertar
+    console.log('Datos a insertar:', JSON.stringify(auditData, null, 2))
+    
+    // Crear un objeto limpio para la inserción
+    const cleanAuditData = {
+      local_id: auditData.localId,
+      local_name: auditData.localName,
+      auditor: auditData.auditor,
+      date: auditData.date,
+      general_observations: auditData.generalObservations || '',
+      categories: auditData.categories,
+      total_score: auditData.totalScore,
+      max_score: auditData.maxScore,
+      percentage: auditData.percentage,
+      created_at: auditData.createdAt,
+      updated_at: auditData.updatedAt
+    }
+    
     // Insertar la auditoría
     const { data, error } = await supabase
       .from('audits')
-      .insert([auditData])
+      .insert([cleanAuditData])
       .select()
-      .single()
     
     if (error) {
       console.error('Error al crear auditoría:', error)
-      return NextResponse.json({ error: 'Error al crear auditoría' }, { status: 500 })
+      return NextResponse.json({ error: `Error al crear auditoría: ${error.message}` }, { status: 500 })
     }
     
-    return NextResponse.json(data)
+    return NextResponse.json(data[0] || {})
   } catch (error) {
     console.error('Error en API de auditorías:', error)
-    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
+    return NextResponse.json({ error: `Error interno del servidor: ${error.message}` }, { status: 500 })
   }
 }
