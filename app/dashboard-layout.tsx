@@ -22,6 +22,7 @@ import {
   Star,
   MessageSquare,
   ShoppingCart,
+  CreditCard,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -165,6 +166,11 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         title: "Control de Asistencias",
         href: "/asistencias",
         icon: Calendar,
+      },
+      {
+        title: "Control de Caja", // Nuevo elemento para Control de Caja
+        href: "/caja",
+        icon: CreditCard,
       },
       {
         title: "Delivery",
@@ -373,6 +379,8 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
     </div>
   )
 }
+
+
 
 
 

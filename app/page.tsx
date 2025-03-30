@@ -10,7 +10,7 @@ import { DashboardLayout } from "@/app/dashboard-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { DateRangePicker } from "@/components/date-range-picker"
-import { Users, ShoppingCart, DollarSign, Star, TrendingUp, TrendingDown, AlertCircle } from "lucide-react"
+import { Users, ShoppingCart, DollarSign, Star, TrendingUp, TrendingDown, AlertCircle, CreditCard } from "lucide-react"
 import { formatCurrency } from "@/lib/export-utils"
 import { BarChart, LineChart, PieChart } from "@/components/charts"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -272,7 +272,7 @@ export default function Dashboard() {
               <CardDescription>Accede rápidamente a las funciones más utilizadas</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <Link href="/empleados/nuevo" className="w-full">
                   <Button className="w-full justify-start" variant="outline">
                     <Users className="mr-2 h-4 w-4" />
@@ -291,6 +291,12 @@ export default function Dashboard() {
                     Ver Nómina
                   </Button>
                 </Link>
+                <Link href="/caja" className="w-full">
+                  <Button className="w-full justify-start" variant="outline">
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    Control de Caja
+                  </Button>
+                </Link>
                 <Link href="/delivery/pedidosya" className="w-full">
                   <Button className="w-full justify-start" variant="outline">
                     <TrendingUp className="mr-2 h-4 w-4" />
@@ -305,6 +311,8 @@ export default function Dashboard() {
     </DashboardLayout>
   )
 }
+
+
 
 
 
