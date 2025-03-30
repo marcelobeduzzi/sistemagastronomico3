@@ -162,16 +162,20 @@ export default function AuditoriasPage() {
   // Función para obtener el color de la barra de progreso según el puntaje
   const getProgressColor = (score: number, maxScore: number) => {
     const percentage = (score / maxScore) * 100
-    if (percentage >= 90) return "bg-green-500"
-    if (percentage >= 70) return "bg-yellow-500"
-    return "bg-red-500"
+    if (percentage >= 81) return "bg-green-700" // Verde oscuro
+    if (percentage >= 61) return "bg-green-500" // Verde claro
+    if (percentage >= 41) return "bg-yellow-500" // Amarillo
+    if (percentage >= 21) return "bg-orange-500" // Naranja
+    return "bg-red-500" // Rojo
   }
 
   // Función para obtener el color del badge según el puntaje
   const getBadgeColor = (score: number, maxScore: number) => {
     const percentage = (score / maxScore) * 100
-    if (percentage >= 90) return "bg-green-500 hover:bg-green-600"
-    if (percentage >= 70) return "bg-yellow-500 hover:bg-yellow-600"
+    if (percentage >= 81) return "bg-green-700 hover:bg-green-800"
+    if (percentage >= 61) return "bg-green-500 hover:bg-green-600"
+    if (percentage >= 41) return "bg-yellow-500 hover:bg-yellow-600"
+    if (percentage >= 21) return "bg-orange-500 hover:bg-orange-600"
     return "bg-red-500 hover:bg-red-600"
   }
 
@@ -390,10 +394,14 @@ export default function AuditoriasPage() {
                                   value={(item.score / item.maxScore) * 100}
                                   className={`h-1.5 ${
                                     (item.score / item.maxScore) * 100 >= 80
-                                      ? "bg-green-500"
+                                      ? "bg-green-700"
                                       : (item.score / item.maxScore) * 100 >= 60
-                                        ? "bg-yellow-500"
-                                        : "bg-red-500"
+                                        ? "bg-green-500"
+                                        : (item.score / item.maxScore) * 100 >= 40
+                                          ? "bg-yellow-500"
+                                          : (item.score / item.maxScore) * 100 >= 20
+                                            ? "bg-orange-500"
+                                            : "bg-red-500"
                                   }`}
                                 />
                                 {item.observations && (

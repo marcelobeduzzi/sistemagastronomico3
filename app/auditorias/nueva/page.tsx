@@ -77,6 +77,7 @@ const categoriasPredefinidas = [
     items: [
       { id: "presentacion_productos", name: "Presentación de productos", maxScore: 5 },
       { id: "frescura", name: "Frescura de ingredientes", maxScore: 5 },
+      { id: "temperatura", name: "Temperatura adec  name: "Frescura de ingredientes", maxScore: 5 },
       { id: "temperatura", name: "Temperatura adecuada", maxScore: 5 },
       { id: "sabor", name: "Sabor", maxScore: 5 },
       { id: "consistencia", name: "Consistencia", maxScore: 5 },
@@ -164,6 +165,15 @@ export default function NuevaAuditoriaPage() {
     acc + category.items.reduce((sum, item) => sum + item.maxScore, 0), 0)
   
   const percentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0
+
+  // Función para obtener el color de la barra según el porcentaje
+  const getProgressColor = (percentage) => {
+    if (percentage >= 81) return "bg-green-700" // Verde oscuro
+    if (percentage >= 61) return "bg-green-500" // Verde claro
+    if (percentage >= 41) return "bg-yellow-500" // Amarillo
+    if (percentage >= 21) return "bg-orange-500" // Naranja
+    return "bg-red-500" // Rojo
+  }
 
   // Manejar cambios en los campos generales
   const handleInputChange = (e) => {
@@ -590,13 +600,7 @@ export default function NuevaAuditoriaPage() {
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-2.5">
                           <div 
-                            className={`h-2.5 rounded-full ${
-                              category.maxScore > 0 && (category.score / category.maxScore) * 100 >= 80 
-                                ? "bg-green-500" 
-                                : category.maxScore > 0 && (category.score / category.maxScore) * 100 >= 60 
-                                  ? "bg-yellow-500" 
-                                  : "bg-red-500"
-                            }`} 
+                            className={`h-2.5 rounded-full ${getProgressColor(category.maxScore > 0 ? (category.score / category.maxScore) * 100 : 0)}`} 
                             style={{ width: `${category.maxScore > 0 ? (category.score / category.maxScore) * 100 : 0}%` }}
                           ></div>
                         </div>
@@ -614,13 +618,7 @@ export default function NuevaAuditoriaPage() {
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-3">
                         <div 
-                          className={`h-3 rounded-full ${
-                            percentage >= 80 
-                              ? "bg-green-500" 
-                              : percentage >= 60 
-                                ? "bg-yellow-500" 
-                                : "bg-red-500"
-                          }`} 
+                          className={`h-3 rounded-full ${getProgressColor(percentage)}`} 
                           style={{ width: `${percentage}%` }}
                         ></div>
                       </div>

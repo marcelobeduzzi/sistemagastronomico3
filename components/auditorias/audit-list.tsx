@@ -122,7 +122,16 @@ export function AuditList({ audits }: AuditListProps) {
     { value: "12", label: "Diciembre" },
   ]
 
-  // Filtrar auditorías
+  // Función para obtener el color de la barra según el porcentaje
+  const getProgressColor = (percentage) => {
+    if (percentage >= 81) return "bg-green-700" // Verde oscuro
+    if (percentage >= 61) return "bg-green-500" // Verde claro
+    if (percentage >= 41) return "bg-yellow-500" // Amarillo
+    if (percentage >= 21) return "bg-orange-500" // Naranja
+    return "bg-red-500" // Rojo
+  }
+
+  // Filtrar auditorías (lógica mejorada)
   const filteredAudits = processedAudits.filter((audit) => {
     if (!audit) return false
 
@@ -130,16 +139,19 @@ export function AuditList({ audits }: AuditListProps) {
     const auditMonth = auditDate.getMonth() + 1
     const auditYear = auditDate.getFullYear()
 
-    const matchesSearch =
-      (audit.localName && audit.localName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (audit.local && audit.local.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (audit.auditorName && audit.auditorName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (audit.auditor && audit.auditor.toLowerCase().includes(searchTerm.toLowerCase()))
+    // Mejorar la búsqueda para que sea más flexible
+    const searchLower = searchTerm.toLowerCase().trim()
+    const matchesSearch = searchTerm === "" || // Si no hay término de búsqueda, mostrar todo
+      (audit.localName && audit.localName.toLowerCase().includes(searchLower)) ||
+      (audit.local && audit.local.toLowerCase().includes(searchLower)) ||
+      (audit.auditorName && audit.auditorName.toLowerCase().includes(searchLower)) ||
+      (audit.auditor && audit.auditor.toLowerCase().includes(searchLower))
 
+    // Verificar si coincide con el local seleccionado
     const matchesLocal = filterLocal === "all" || 
-                         audit.localId === filterLocal || 
-                         audit.localName === filterLocal || 
-                         audit.local === filterLocal
+                        audit.localId === filterLocal || 
+                        audit.localName === filterLocal || 
+                        audit.local === filterLocal
     
     const matchesType = filterType === "all" || audit.type === filterType
     const matchesMonth = filterMonth === "all" || auditMonth.toString() === filterMonth
@@ -163,14 +175,14 @@ export function AuditList({ audits }: AuditListProps) {
     }
   }
 
-  // Función para mostrar el turno
+  // Función para mostrar el turno (corregida)
   const getTurnoText = (shift) => {
     if (!shift) return "No especificado"
     switch (shift) {
       case "morning": return "Mañana"
       case "afternoon": return "Tarde"
       case "night": return "Noche"
-      default: return shift
+      default: return shift // Mantener el valor original si no coincide con ninguno de los casos
     }
   }
 
@@ -179,9 +191,6 @@ export function AuditList({ audits }: AuditListProps) {
       <div className="flex flex-col sm:flex-row gap-4 mb-4">
         <div className="relative flex-1">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por local o auditor..."
-              />
           <Input
             placeholder="Buscar por local o auditor..."
             className="pl-8"
@@ -292,13 +301,7 @@ export function AuditList({ audits }: AuditListProps) {
                         <span className="text-sm">{audit.percentage || 0}%</span>
                         <div className="w-16 bg-gray-200 rounded-full h-2.5">
                           <div
-                            className={`h-2.5 rounded-full ${
-                              (audit.percentage || 0) >= 80
-                                ? "bg-green-500"
-                                : (audit.percentage || 0) >= 60
-                                  ? "bg-yellow-500"
-                                  : "bg-red-500"
-                            }`}
+                            className={`h-2.5 rounded-full ${getProgressColor(audit.percentage || 0)}`}
                             style={{ width: `${audit.percentage || 0}%` }}
                           ></div>
                         </div>
