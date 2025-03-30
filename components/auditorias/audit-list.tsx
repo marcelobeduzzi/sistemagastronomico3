@@ -8,13 +8,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Eye, Search } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Eye, Search } from 'lucide-react'
 
 interface Audit {
   id: string
   localId?: string
   localName?: string
   local_name?: string
+  local?: string
   auditor?: string
   auditorName?: string
   auditor_name?: string
@@ -23,6 +25,8 @@ interface Audit {
   maxScore: number
   percentage: number
   categories?: any[]
+  type?: string // Tipo de auditoría: 'rapida' o 'detallada'
+  shift?: string // Turno: 'morning', 'afternoon', 'night'
 }
 
 interface AuditListProps {
@@ -32,6 +36,9 @@ interface AuditListProps {
 export function AuditList({ audits }: AuditListProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [filterLocal, setFilterLocal] = useState("all")
+  const [filterType, setFilterType] = useState("all")
+  const [filterMonth, setFilterMonth] = useState("all")
+  const [filterYear, setFilterYear] = useState("all")
 
   // Verificar que audits sea un array antes de continuar
   if (!audits || !Array.isArray(audits)) {
@@ -57,6 +64,11 @@ export function AuditList({ audits }: AuditListProps) {
       if (!audit.localName && audit.local_name) {
         audit.localName = audit.local_name
       }
+      
+      // Si no hay localName pero hay local, usar local
+      if (!audit.localName && audit.local) {
+        audit.localName = audit.local
+      }
 
       // Asegurar que auditorName esté disponible
       if (!audit.auditorName && audit.auditor_name) {
@@ -68,6 +80,11 @@ export function AuditList({ audits }: AuditListProps) {
         audit.auditorName = audit.auditor
       }
 
+      // Si no hay tipo, asignar 'detallada' por defecto (para auditorías antiguas)
+      if (!audit.type) {
+        audit.type = 'detallada'
+      }
+
       return audit
     })
     .filter(Boolean)
@@ -76,29 +93,59 @@ export function AuditList({ audits }: AuditListProps) {
   const uniqueLocals = Array.from(
     new Set(
       processedAudits
-        .filter((audit) => audit && (audit.localId || audit.localName))
-        .map((audit) => audit.localId || audit.localName),
+        .filter((audit) => audit && (audit.localId || audit.localName || audit.local))
+        .map((audit) => audit.localId || audit.localName || audit.local),
     ),
   ).map((localIdentifier) => {
-    const audit = processedAudits.find((a) => a && (a.localId === localIdentifier || a.localName === localIdentifier))
+    const audit = processedAudits.find((a) => a && (a.localId === localIdentifier || a.localName === localIdentifier || a.local === localIdentifier))
     return {
       id: localIdentifier || "",
-      name: audit?.localName || localIdentifier || "Local sin nombre",
+      name: audit?.localName || audit?.local || localIdentifier || "Local sin nombre",
     }
   })
+
+  // Obtener años y meses únicos para los filtros
+  const dates = processedAudits.map(audit => new Date(audit.date))
+  const years = Array.from(new Set(dates.map(date => date.getFullYear()))).sort((a, b) => b - a)
+  const months = [
+    { value: "1", label: "Enero" },
+    { value: "2", label: "Febrero" },
+    { value: "3", label: "Marzo" },
+    { value: "4", label: "Abril" },
+    { value: "5", label: "Mayo" },
+    { value: "6", label: "Junio" },
+    { value: "7", label: "Julio" },
+    { value: "8", label: "Agosto" },
+    { value: "9", label: "Septiembre" },
+    { value: "10", label: "Octubre" },
+    { value: "11", label: "Noviembre" },
+    { value: "12", label: "Diciembre" },
+  ]
 
   // Filtrar auditorías
   const filteredAudits = processedAudits.filter((audit) => {
     if (!audit) return false
 
+    const auditDate = new Date(audit.date)
+    const auditMonth = auditDate.getMonth() + 1
+    const auditYear = auditDate.getFullYear()
+
     const matchesSearch =
       (audit.localName && audit.localName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (audit.local && audit.local.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (audit.auditorName && audit.auditorName.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (audit.auditor && audit.auditor.toLowerCase().includes(searchTerm.toLowerCase()))
 
-    const matchesLocal = filterLocal === "all" || audit.localId === filterLocal || audit.localName === filterLocal
+    const matchesLocal = filterLocal === "all" || 
+                         audit.localId === filterLocal || 
+                         audit.localName === filterLocal || 
+                         audit.local === filterLocal
+    
+    const matchesType = filterType === "all" || audit.type === filterType
+    const matchesMonth = filterMonth === "all" || auditMonth.toString() === filterMonth
+    const matchesYear = filterYear === "all" || auditYear.toString() === filterYear
 
-    return matchesSearch && matchesLocal
+    return matchesSearch && matchesLocal && matchesType && matchesMonth && matchesYear
   })
 
   // Ordenar por fecha (más reciente primero)
@@ -107,11 +154,34 @@ export function AuditList({ audits }: AuditListProps) {
     return new Date(b.date).getTime() - new Date(a.date).getTime()
   })
 
+  // Función para renderizar el badge de tipo
+  const renderTypeBadge = (type) => {
+    if (type === "rapida") {
+      return <Badge className="bg-blue-100 text-blue-800 border-blue-300">Rápida</Badge>
+    } else {
+      return <Badge className="bg-purple-100 text-purple-800 border-purple-300">Detallada</Badge>
+    }
+  }
+
+  // Función para mostrar el turno
+  const getTurnoText = (shift) => {
+    if (!shift) return "No especificado"
+    switch (shift) {
+      case "morning": return "Mañana"
+      case "afternoon": return "Tarde"
+      case "night": return "Noche"
+      default: return shift
+    }
+  }
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row gap-4">
+      <div className="flex flex-col sm:flex-row gap-4 mb-4">
         <div className="relative flex-1">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por local o auditor..."
+              />
           <Input
             placeholder="Buscar por local o auditor..."
             className="pl-8"
@@ -134,12 +204,55 @@ export function AuditList({ audits }: AuditListProps) {
         </Select>
       </div>
 
+      <div className="flex flex-col sm:flex-row gap-4 mb-4">
+        <Select value={filterType} onValueChange={setFilterType}>
+          <SelectTrigger className="w-full sm:w-[200px]">
+            <SelectValue placeholder="Filtrar por tipo" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los tipos</SelectItem>
+            <SelectItem value="rapida">Auditoría Rápida</SelectItem>
+            <SelectItem value="detallada">Auditoría Detallada</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={filterMonth} onValueChange={setFilterMonth}>
+          <SelectTrigger className="w-full sm:w-[200px]">
+            <SelectValue placeholder="Filtrar por mes" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los meses</SelectItem>
+            {months.map((month) => (
+              <SelectItem key={month.value} value={month.value}>
+                {month.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={filterYear} onValueChange={setFilterYear}>
+          <SelectTrigger className="w-full sm:w-[200px]">
+            <SelectValue placeholder="Filtrar por año" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los años</SelectItem>
+            {years.map((year) => (
+              <SelectItem key={year} value={year.toString()}>
+                {year}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Local</TableHead>
               <TableHead>Fecha</TableHead>
+              <TableHead>Turno</TableHead>
+              <TableHead>Tipo</TableHead>
               <TableHead>Auditor</TableHead>
               <TableHead className="text-right">Puntaje</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
@@ -148,7 +261,7 @@ export function AuditList({ audits }: AuditListProps) {
           <TableBody>
             {sortedAudits.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
                   No se encontraron auditorías
                 </TableCell>
               </TableRow>
@@ -156,15 +269,12 @@ export function AuditList({ audits }: AuditListProps) {
               sortedAudits.map((audit) => {
                 if (!audit || !audit.id) return null
 
-                // Depurar cada auditoría para ver qué datos contiene
-                console.log("Datos de auditoría en la lista:", audit)
-
                 const formattedDate = audit.date
                   ? format(new Date(audit.date), "dd/MM/yyyy", { locale: es })
                   : "Fecha desconocida"
 
                 // Asegurarse de mostrar el nombre del local correctamente
-                const localName = audit.localName || audit.local_name || "Local sin nombre"
+                const localName = audit.localName || audit.local || audit.local_name || "Local sin nombre"
 
                 // Asegurarse de mostrar el nombre del auditor correctamente
                 const auditorName =
@@ -174,6 +284,8 @@ export function AuditList({ audits }: AuditListProps) {
                   <TableRow key={audit.id}>
                     <TableCell className="font-medium">{localName}</TableCell>
                     <TableCell>{formattedDate}</TableCell>
+                    <TableCell>{getTurnoText(audit.shift)}</TableCell>
+                    <TableCell>{renderTypeBadge(audit.type)}</TableCell>
                     <TableCell>{auditorName}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">

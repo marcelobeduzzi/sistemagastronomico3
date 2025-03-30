@@ -2,6 +2,7 @@
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Progress } from "@/components/ui/progress"
+import { Badge } from "@/components/ui/badge"
 
 interface AuditDetailProps {
   audit: any
@@ -13,8 +14,39 @@ export function AuditDetail({ audit, categoryId, showAllCategories = false }: Au
   // Si se especifica una categoría, mostrar solo esa
   const categoriesToShow = categoryId ? audit.categories.filter((cat: any) => cat.id === categoryId) : audit.categories
 
+  // Función para renderizar el badge de tipo
+  const renderTypeBadge = (type) => {
+    if (type === "rapida") {
+      return <Badge className="bg-blue-100 text-blue-800 border-blue-300">Auditoría Rápida</Badge>
+    } else {
+      return <Badge className="bg-purple-100 text-purple-800 border-purple-300">Auditoría Detallada</Badge>
+    }
+  }
+
+  // Función para mostrar el turno
+  const getTurnoText = (shift) => {
+    if (!shift) return "No especificado"
+    switch (shift) {
+      case "morning": return "Mañana"
+      case "afternoon": return "Tarde"
+      case "night": return "Noche"
+      default: return shift
+    }
+  }
+
   return (
     <div className="space-y-6">
+      {/* Tipo de auditoría */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-medium">Detalles de Auditoría</h3>
+          <p className="text-sm text-muted-foreground">
+            Turno: {getTurnoText(audit.shift)}
+          </p>
+        </div>
+        {renderTypeBadge(audit.type || "detallada")}
+      </div>
+
       {/* Resumen de categorías */}
       {!categoryId && (
         <div className="space-y-4 mb-6">
@@ -96,4 +128,3 @@ export function AuditDetail({ audit, categoryId, showAllCategories = false }: Au
     </div>
   )
 }
-
