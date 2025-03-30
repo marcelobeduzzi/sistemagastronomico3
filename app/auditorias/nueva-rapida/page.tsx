@@ -408,7 +408,6 @@ export default function NuevaAuditoriaRapidaPage() {
             </CardHeader>
             <CardContent>
               <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid grid-cols-2 md:gri  onValueChange={setActiveTab}>
                 <TabsList className="grid grid-cols-2 md:grid-cols-5 mb-4">
                   {auditData.categories.map((category) => (
                     <TabsTrigger key={category.id} value={category.id}>
