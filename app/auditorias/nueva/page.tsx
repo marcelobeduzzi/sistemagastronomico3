@@ -490,7 +490,265 @@ export default function NuevaAuditoriaPage() {
                 <CardDescription>Datos básicos de la auditoría</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-col
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="localId">Local</Label>
+                    <Select
+                      value={auditData.localId}
+                      onValueChange={(value) => handleSelectChange("localId", value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar local" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {locales.map((local) => (
+                          <SelectItem key={local.id} value={local.id}>
+                            {local.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="date">Fecha</Label>
+                    <Input 
+                      id="date" 
+                      name="date" 
+                      type="date" 
+                      value={auditData.date} 
+                      onChange={handleInputChange} 
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="auditor">Auditor</Label>
+                    <Input
+                      id="auditor"
+                      name="auditor"
+                      value={auditData.auditor}
+                      onChange={handleInputChange}
+                      placeholder="Nombre del auditor"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="shift">Turno</Label>
+                    <Select
+                      value={auditData.shift}
+                      onValueChange={(value) => handleSelectChange("shift", value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar turno" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {turnos.map((turno) => (
+                          <SelectItem key={turno.id} value={turno.id}>
+                            {turno.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="managerName">Encargado del Local</Label>
+                    <Input
+                      id="managerName"
+                      name="managerName"
+                      value={auditData.managerName}
+                      onChange={handleInputChange}
+                      placeholder="Nombre del encargado"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="generalObservations">Observaciones Generales</Label>
+                  <Textarea
+                    id="generalObservations"
+                    name="generalObservations"
+                    value={auditData.generalObservations}
+                    onChange={handleInputChange}
+                    placeholder="Observaciones generales de la auditoría"
+                    rows={4}
+                  />
+                </div>
+
+                <Separator className="my-4" />
+
+                <div className="space-y-2">
+                  <h3 className="text-lg font-medium">Resumen de Puntajes</h3>
+                  <div className="space-y-4">
+                    {auditData.categories.map((category) => (
+                      <div key={category.id} className="space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-medium">{category.name}</span>
+                          <span className="text-sm">
+                            {category.score} / {category.maxScore} ({category.maxScore > 0 ? Math.round((category.score / category.maxScore) * 100) : 0}%)
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2.5">
+                          <div 
+                            className={`h-2.5 rounded-full ${
+                              category.maxScore > 0 && (category.score / category.maxScore) * 100 >= 80 
+                                ? "bg-green-500" 
+                                : category.maxScore > 0 && (category.score / category.maxScore) * 100 >= 60 
+                                  ? "bg-yellow-500" 
+                                  : "bg-red-500"
+                            }`} 
+                            style={{ width: `${category.maxScore > 0 ? (category.score / category.maxScore) * 100 : 0}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    ))}
+
+                    <Separator className="my-2" />
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center">
+                        <span className="text-base font-medium">Puntaje Total</span>
+                        <span className="text-base font-medium">
+                          {totalScore} / {maxScore} ({percentage}%)
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-3">
+                        <div 
+                          className={`h-3 rounded-full ${
+                            percentage >= 80 
+                              ? "bg-green-500" 
+                              : percentage >= 60 
+                                ? "bg-yellow-500" 
+                                : "bg-red-500"
+                          }`} 
+                          style={{ width: `${percentage}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {auditData.categories.map((category) => (
+            <TabsContent key={category.id} value={category.id}>
+              <Card>
+                <CardHeader className="flex flex-row items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={category.name}
+                        onChange={(e) => handleCategoryNameChange(category.id, e.target.value)}
+                        className="text-xl font-semibold h-auto py-1 px-2"
+                      />
+                      <Button 
+                        variant="destructive" 
+                        size="sm"
+                        onClick={() => handleDeleteCategory(category.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <CardDescription>
+                      Puntaje: {category.score} / {category.maxScore} ({category.maxScore > 0 ? Math.round((category.score / category.maxScore) * 100) : 0}%)
+                    </CardDescription>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => handleAddItem(category.id)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Agregar Ítem
+                  </Button>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {category.items.length === 0 ? (
+                    <div className="text-center py-8">
+                      <p className="text-muted-foreground">No hay ítems en esta categoría</p>
+                      <Button variant="outline" className="mt-4" onClick={() => handleAddItem(category.id)}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        Agregar Ítem
+                      </Button>
+                    </div>
+                  ) : (
+                    category.items.map((item) => (
+                      <div key={item.id} className="space-y-4 border-b pb-6">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <Input
+                              value={item.name}
+                              onChange={(e) => handleItemNameChange(category.id, item.id, e.target.value)}
+                              className="font-medium mb-2"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="flex flex-col items-end">
+                              <Label htmlFor={`maxScore-${item.id}`} className="mb-1 text-sm">
+                                Puntaje Máximo: {item.maxScore}
+                              </Label>
+                              <Select
+                                value={item.maxScore.toString()}
+                                onValueChange={(value) => handleItemMaxScoreChange(category.id, item.id, parseInt(value))}
+                              >
+                                <SelectTrigger className="w-20">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {[1, 2, 3, 4, 5, 10].map((value) => (
+                                    <SelectItem key={value} value={value.toString()}>
+                                      {value}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <Button 
+                              variant="destructive" 
+                              size="sm"
+                              onClick={() => handleDeleteItem(category.id, item.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <Label htmlFor={`score-${item.id}`}>Puntaje: {item.score} / {item.maxScore}</Label>
+                            <span className="text-sm font-medium">
+                              {Math.round((item.score / item.maxScore) * 100)}%
+                            </span>
+                          </div>
+                          <Slider
+                            id={`score-${item.id}`}
+                            min={0}
+                            max={item.maxScore}
+                            step={1}
+                            value={[item.score]}
+                            onValueChange={(value) => handleItemScoreChange(category.id, item.id, value[0])}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor={`observations-${item.id}`}>Observaciones</Label>
+                          <Textarea
+                            id={`observations-${item.id}`}
+                            value={item.observations}
+                            onChange={(e) => handleItemObservationsChange(category.id, item.id, e.target.value)}
+                            placeholder="Observaciones sobre este ítem"
+                            rows={3}
+                          />
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          ))}
+        </Tabs>
+      </div>
+    </DashboardLayout>
+  )
+}
 
 
 
