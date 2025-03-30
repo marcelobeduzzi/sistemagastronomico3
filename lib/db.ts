@@ -1334,87 +1334,230 @@ class DatabaseService {
 
   /**
    * Obtiene la configuración de auditorías
+   * @param type Tipo de auditoría ('rapida' o 'completa')
    * @returns Configuración de categorías e ítems para auditorías
    */
-  async getAuditConfig() {
+  async getAuditConfig(type = "completa") {
     try {
-      console.log("Obteniendo configuración de auditorías")
-      const { data, error } = await this.supabase.from("audit_config").select("*").single()
+      console.log(`Obteniendo configuración de auditorías tipo: ${type}`)
+      const { data, error } = await this.supabase.from("audit_config").select("*").eq("type", type).single()
 
       if (error) {
-        console.error("Error al obtener configuración de auditorías:", error)
+        console.error(`Error al obtener configuración de auditorías tipo ${type}:`, error)
 
         // Si el error es porque no existe la tabla o no hay registros, devolver configuración por defecto
         if (error.code === "PGRST116" || error.code === "22P02") {
           console.log("No se encontró configuración, devolviendo valores por defecto")
-          return {
-            categories: [
-              {
-                id: "limpieza",
-                name: "Limpieza y Orden",
-                maxScore: 25,
-                items: [
-                  { id: "limpieza_general", name: "Limpieza general del local", maxScore: 5 },
-                  { id: "orden_cocina", name: "Orden en la cocina", maxScore: 5 },
-                  { id: "limpieza_banos", name: "Limpieza de baños", maxScore: 5 },
-                  { id: "manejo_residuos", name: "Manejo de residuos", maxScore: 5 },
-                  { id: "orden_almacen", name: "Orden en almacén", maxScore: 5 },
-                ],
-              },
-              {
-                id: "seguridad_alimentaria",
-                name: "Seguridad Alimentaria",
-                maxScore: 25,
-                items: [
-                  { id: "control_temperatura", name: "Control de temperatura de alimentos", maxScore: 5 },
-                  { id: "almacenamiento", name: "Almacenamiento adecuado", maxScore: 5 },
-                  { id: "fechas_vencimiento", name: "Control de fechas de vencimiento", maxScore: 5 },
-                  { id: "manipulacion", name: "Manipulación de alimentos", maxScore: 5 },
-                  { id: "contaminacion_cruzada", name: "Prevención de contaminación cruzada", maxScore: 5 },
-                ],
-              },
-              {
-                id: "atencion_cliente",
-                name: "Atención al Cliente",
-                maxScore: 20,
-                items: [
-                  { id: "presentacion_personal", name: "Presentación del personal", maxScore: 5 },
-                  { id: "amabilidad", name: "Amabilidad y cortesía", maxScore: 5 },
-                  { id: "rapidez", name: "Rapidez en el servicio", maxScore: 5 },
-                  { id: "conocimiento_menu", name: "Conocimiento del menú", maxScore: 5 },
-                ],
-              },
-              {
-                id: "calidad_producto",
-                name: "Calidad del Producto",
-                maxScore: 20,
-                items: [
-                  { id: "presentacion_platos", name: "Presentación de platos", maxScore: 5 },
-                  { id: "sabor", name: "Sabor y temperatura adecuados", maxScore: 5 },
-                  { id: "consistencia", name: "Consistencia en la calidad", maxScore: 5 },
-                  { id: "frescura", name: "Frescura de ingredientes", maxScore: 5 },
-                ],
-              },
-              {
-                id: "procesos_operativos",
-                name: "Procesos Operativos",
-                maxScore: 10,
-                items: [
-                  { id: "seguimiento_recetas", name: "Seguimiento de recetas estándar", maxScore: 5 },
-                  { id: "eficiencia", name: "Eficiencia en procesos", maxScore: 5 },
-                ],
-              },
-            ],
+
+          // Configuración por defecto según el tipo
+          if (type === "rapida") {
+            return {
+              type: "rapida",
+              categories: [
+                {
+                  id: "limpieza",
+                  name: "Limpieza",
+                  maxScore: 20,
+                  items: [
+                    {
+                      id: "limpieza_pisos",
+                      name: "Pisos limpios",
+                      maxScore: 5,
+                      description: "Los pisos están limpios y sin residuos",
+                    },
+                    {
+                      id: "limpieza_mesas",
+                      name: "Mesas y sillas",
+                      maxScore: 5,
+                      description: "Mesas y sillas limpias y en buen estado",
+                    },
+                    {
+                      id: "limpieza_banos",
+                      name: "Baños",
+                      maxScore: 5,
+                      description: "Baños limpios y con insumos completos",
+                    },
+                    {
+                      id: "limpieza_cocina",
+                      name: "Cocina",
+                      maxScore: 5,
+                      description: "Área de cocina limpia y ordenada",
+                    },
+                  ],
+                },
+                {
+                  id: "presentacion",
+                  name: "Presentación",
+                  maxScore: 15,
+                  items: [
+                    {
+                      id: "uniforme",
+                      name: "Uniforme del personal",
+                      maxScore: 5,
+                      description: "Personal con uniforme completo y en buen estado",
+                    },
+                    {
+                      id: "higiene_personal",
+                      name: "Higiene personal",
+                      maxScore: 5,
+                      description: "Personal con buena higiene y presentación",
+                    },
+                    {
+                      id: "presentacion_productos",
+                      name: "Presentación de productos",
+                      maxScore: 5,
+                      description: "Productos bien presentados y etiquetados",
+                    },
+                  ],
+                },
+                {
+                  id: "atencion",
+                  name: "Atención al Cliente",
+                  maxScore: 15,
+                  items: [
+                    {
+                      id: "saludo",
+                      name: "Saludo y bienvenida",
+                      maxScore: 5,
+                      description: "Se saluda correctamente a los clientes",
+                    },
+                    {
+                      id: "tiempo_atencion",
+                      name: "Tiempo de atención",
+                      maxScore: 5,
+                      description: "Tiempo de espera adecuado",
+                    },
+                    {
+                      id: "resolucion_problemas",
+                      name: "Resolución de problemas",
+                      maxScore: 5,
+                      description: "Se resuelven adecuadamente los problemas",
+                    },
+                  ],
+                },
+                {
+                  id: "procesos",
+                  name: "Procesos",
+                  maxScore: 15,
+                  items: [
+                    {
+                      id: "preparacion",
+                      name: "Preparación de alimentos",
+                      maxScore: 5,
+                      description: "Se siguen los procedimientos de preparación",
+                    },
+                    {
+                      id: "manejo_caja",
+                      name: "Manejo de caja",
+                      maxScore: 5,
+                      description: "Procedimientos de caja correctos",
+                    },
+                    {
+                      id: "control_stock",
+                      name: "Control de stock",
+                      maxScore: 5,
+                      description: "Inventario actualizado y controlado",
+                    },
+                  ],
+                },
+                {
+                  id: "seguridad",
+                  name: "Seguridad",
+                  maxScore: 15,
+                  items: [
+                    {
+                      id: "extintores",
+                      name: "Extintores",
+                      maxScore: 5,
+                      description: "Extintores en buen estado y accesibles",
+                    },
+                    {
+                      id: "salidas_emergencia",
+                      name: "Salidas de emergencia",
+                      maxScore: 5,
+                      description: "Salidas de emergencia señalizadas y despejadas",
+                    },
+                    {
+                      id: "elementos_seguridad",
+                      name: "Elementos de seguridad",
+                      maxScore: 5,
+                      description: "Elementos de seguridad en buen estado",
+                    },
+                  ],
+                },
+              ],
+            }
+          } else {
+            return {
+              type: "completa",
+              categories: [
+                {
+                  id: "limpieza",
+                  name: "Limpieza y Orden",
+                  maxScore: 25,
+                  items: [
+                    { id: "limpieza_general", name: "Limpieza general del local", maxScore: 5 },
+                    { id: "orden_cocina", name: "Orden en la cocina", maxScore: 5 },
+                    { id: "limpieza_banos", name: "Limpieza de baños", maxScore: 5 },
+                    { id: "manejo_residuos", name: "Manejo de residuos", maxScore: 5 },
+                    { id: "orden_almacen", name: "Orden en almacén", maxScore: 5 },
+                  ],
+                },
+                {
+                  id: "seguridad_alimentaria",
+                  name: "Seguridad Alimentaria",
+                  maxScore: 25,
+                  items: [
+                    { id: "control_temperatura", name: "Control de temperatura de alimentos", maxScore: 5 },
+                    { id: "almacenamiento", name: "Almacenamiento adecuado", maxScore: 5 },
+                    { id: "fechas_vencimiento", name: "Control de fechas de vencimiento", maxScore: 5 },
+                    { id: "manipulacion", name: "Manipulación de alimentos", maxScore: 5 },
+                    { id: "contaminacion_cruzada", name: "Prevención de contaminación cruzada", maxScore: 5 },
+                  ],
+                },
+                {
+                  id: "atencion_cliente",
+                  name: "Atención al Cliente",
+                  maxScore: 20,
+                  items: [
+                    { id: "presentacion_personal", name: "Presentación del personal", maxScore: 5 },
+                    { id: "amabilidad", name: "Amabilidad y cortesía", maxScore: 5 },
+                    { id: "rapidez", name: "Rapidez en el servicio", maxScore: 5 },
+                    { id: "conocimiento_menu", name: "Conocimiento del menú", maxScore: 5 },
+                  ],
+                },
+                {
+                  id: "calidad_producto",
+                  name: "Calidad del Producto",
+                  maxScore: 20,
+                  items: [
+                    { id: "presentacion_platos", name: "Presentación de platos", maxScore: 5 },
+                    { id: "sabor", name: "Sabor y temperatura adecuados", maxScore: 5 },
+                    { id: "consistencia", name: "Consistencia en la calidad", maxScore: 5 },
+                    { id: "frescura", name: "Frescura de ingredientes", maxScore: 5 },
+                  ],
+                },
+                {
+                  id: "procesos_operativos",
+                  name: "Procesos Operativos",
+                  maxScore: 10,
+                  items: [
+                    { id: "seguimiento_recetas", name: "Seguimiento de recetas estándar", maxScore: 5 },
+                    { id: "eficiencia", name: "Eficiencia en procesos", maxScore: 5 },
+                  ],
+                },
+              ],
+            }
           }
         }
 
         throw error
       }
 
-      console.log("Configuración obtenida:", data)
+      console.log(`Configuración de auditoría ${type} obtenida:`, data)
       return data
     } catch (error) {
-      console.error("Error en getAuditConfig:", error)
+      console.error(`Error en getAuditConfig para tipo ${type}:`, error)
       throw error
     }
   }
@@ -1426,17 +1569,23 @@ class DatabaseService {
    */
   async saveAuditConfig(config: any) {
     try {
-      // Verificar si ya existe una configuración
-      const { data: existingConfig, error: checkError } = await this.supabase.from("audit_config").select("id").single()
+      const type = config.type || "completa"
+
+      // Verificar si ya existe una configuración para este tipo
+      const { data: existingConfig, error: checkError } = await this.supabase
+        .from("audit_config")
+        .select("id")
+        .eq("type", type)
+        .single()
 
       if (checkError && checkError.code !== "PGRST116") {
-        console.error("Error al verificar configuración existente:", checkError)
+        console.error(`Error al verificar configuración existente para tipo ${type}:`, checkError)
         throw checkError
       }
 
       if (existingConfig) {
         // Actualizar configuración existente
-        console.log("Actualizando configuración existente:", existingConfig.id)
+        console.log(`Actualizando configuración existente para tipo ${type}:`, existingConfig.id)
         const { data, error } = await this.supabase
           .from("audit_config")
           .update(config)
@@ -1448,7 +1597,7 @@ class DatabaseService {
         return data
       } else {
         // Crear nueva configuración
-        console.log("Creando nueva configuración")
+        console.log(`Creando nueva configuración para tipo ${type}`)
         const { data, error } = await this.supabase.from("audit_config").insert([config]).select().single()
 
         if (error) throw error
@@ -1539,8 +1688,8 @@ export const db = {
     },
   },
   auditConfig: {
-    get: async () => {
-      return await dbService.getAuditConfig()
+    get: async (type = "completa") => {
+      return await dbService.getAuditConfig(type)
     },
     save: async (data: any) => {
       return await dbService.saveAuditConfig(data)
@@ -1550,6 +1699,7 @@ export const db = {
 
 // Exportar también el servicio original para mantener compatibilidad
 export { dbService }
+
 
 
 

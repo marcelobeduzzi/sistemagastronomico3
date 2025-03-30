@@ -18,6 +18,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { db } from "@/lib/db"
 import { toast } from "@/components/ui/use-toast"
 import { Plus, Edit, Trash2, Save, ArrowLeft } from "lucide-react"
@@ -27,6 +28,7 @@ interface AuditItem {
   id: string
   name: string
   maxScore: number
+  description?: string
   observations?: string
 }
 
@@ -37,11 +39,15 @@ interface AuditCategory {
   items: AuditItem[]
 }
 
+// Tipos de auditoría
+type AuditType = "rapida" | "completa"
+
 export default function ConfiguracionAuditoriaPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
   const [categories, setCategories] = useState<AuditCategory[]>([])
   const [activeTab, setActiveTab] = useState<string>("categorias")
+  const [auditType, setAuditType] = useState<AuditType>("rapida")
 
   // Estados para diálogos
   const [isNewCategoryDialogOpen, setIsNewCategoryDialogOpen] = useState(false)
@@ -66,6 +72,7 @@ export default function ConfiguracionAuditoriaPage() {
     id: "",
     name: "",
     maxScore: 5,
+    description: "",
     categoryId: "",
   })
 
@@ -73,91 +80,230 @@ export default function ConfiguracionAuditoriaPage() {
     id: "",
     name: "",
     maxScore: 5,
+    description: "",
     categoryId: "",
   })
 
-  // Cargar categorías e ítems
+  // Configuraciones predeterminadas
+  const defaultRapidaConfig = [
+    {
+      id: "limpieza",
+      name: "Limpieza",
+      maxScore: 20,
+      items: [
+        {
+          id: "limpieza_pisos",
+          name: "Pisos limpios",
+          maxScore: 5,
+          description: "Los pisos están limpios y sin residuos",
+        },
+        {
+          id: "limpieza_mesas",
+          name: "Mesas y sillas",
+          maxScore: 5,
+          description: "Mesas y sillas limpias y en buen estado",
+        },
+        {
+          id: "limpieza_banos",
+          name: "Baños",
+          maxScore: 5,
+          description: "Baños limpios y con insumos completos",
+        },
+        {
+          id: "limpieza_cocina",
+          name: "Cocina",
+          maxScore: 5,
+          description: "Área de cocina limpia y ordenada",
+        },
+      ],
+    },
+    {
+      id: "presentacion",
+      name: "Presentación",
+      maxScore: 15,
+      items: [
+        {
+          id: "uniforme",
+          name: "Uniforme del personal",
+          maxScore: 5,
+          description: "Personal con uniforme completo y en buen estado",
+        },
+        {
+          id: "higiene_personal",
+          name: "Higiene personal",
+          maxScore: 5,
+          description: "Personal con buena higiene y presentación",
+        },
+        {
+          id: "presentacion_productos",
+          name: "Presentación de productos",
+          maxScore: 5,
+          description: "Productos bien presentados y etiquetados",
+        },
+      ],
+    },
+    {
+      id: "atencion",
+      name: "Atención al Cliente",
+      maxScore: 15,
+      items: [
+        {
+          id: "saludo",
+          name: "Saludo y bienvenida",
+          maxScore: 5,
+          description: "Se saluda correctamente a los clientes",
+        },
+        {
+          id: "tiempo_atencion",
+          name: "Tiempo de atención",
+          maxScore: 5,
+          description: "Tiempo de espera adecuado",
+        },
+        {
+          id: "resolucion_problemas",
+          name: "Resolución de problemas",
+          maxScore: 5,
+          description: "Se resuelven adecuadamente los problemas",
+        },
+      ],
+    },
+    {
+      id: "procesos",
+      name: "Procesos",
+      maxScore: 15,
+      items: [
+        {
+          id: "preparacion",
+          name: "Preparación de alimentos",
+          maxScore: 5,
+          description: "Se siguen los procedimientos de preparación",
+        },
+        {
+          id: "manejo_caja",
+          name: "Manejo de caja",
+          maxScore: 5,
+          description: "Procedimientos de caja correctos",
+        },
+        {
+          id: "control_stock",
+          name: "Control de stock",
+          maxScore: 5,
+          description: "Inventario actualizado y controlado",
+        },
+      ],
+    },
+    {
+      id: "seguridad",
+      name: "Seguridad",
+      maxScore: 15,
+      items: [
+        {
+          id: "extintores",
+          name: "Extintores",
+          maxScore: 5,
+          description: "Extintores en buen estado y accesibles",
+        },
+        {
+          id: "salidas_emergencia",
+          name: "Salidas de emergencia",
+          maxScore: 5,
+          description: "Salidas de emergencia señalizadas y despejadas",
+        },
+        {
+          id: "elementos_seguridad",
+          name: "Elementos de seguridad",
+          maxScore: 5,
+          description: "Elementos de seguridad en buen estado",
+        },
+      ],
+    },
+  ]
+
+  const defaultCompletaConfig = [
+    {
+      id: "limpieza",
+      name: "Limpieza y Orden",
+      maxScore: 25,
+      items: [
+        { id: "limpieza_general", name: "Limpieza general del local", maxScore: 5 },
+        { id: "orden_cocina", name: "Orden en la cocina", maxScore: 5 },
+        { id: "limpieza_banos", name: "Limpieza de baños", maxScore: 5 },
+        { id: "manejo_residuos", name: "Manejo de residuos", maxScore: 5 },
+        { id: "orden_almacen", name: "Orden en almacén", maxScore: 5 },
+      ],
+    },
+    {
+      id: "seguridad_alimentaria",
+      name: "Seguridad Alimentaria",
+      maxScore: 25,
+      items: [
+        { id: "control_temperatura", name: "Control de temperatura de alimentos", maxScore: 5 },
+        { id: "almacenamiento", name: "Almacenamiento adecuado", maxScore: 5 },
+        { id: "fechas_vencimiento", name: "Control de fechas de vencimiento", maxScore: 5 },
+        { id: "manipulacion", name: "Manipulación de alimentos", maxScore: 5 },
+        { id: "contaminacion_cruzada", name: "Prevención de contaminación cruzada", maxScore: 5 },
+      ],
+    },
+    {
+      id: "atencion_cliente",
+      name: "Atención al Cliente",
+      maxScore: 20,
+      items: [
+        { id: "presentacion_personal", name: "Presentación del personal", maxScore: 5 },
+        { id: "amabilidad", name: "Amabilidad y cortesía", maxScore: 5 },
+        { id: "rapidez", name: "Rapidez en el servicio", maxScore: 5 },
+        { id: "conocimiento_menu", name: "Conocimiento del menú", maxScore: 5 },
+      ],
+    },
+    {
+      id: "calidad_producto",
+      name: "Calidad del Producto",
+      maxScore: 20,
+      items: [
+        { id: "presentacion_platos", name: "Presentación de platos", maxScore: 5 },
+        { id: "sabor", name: "Sabor y temperatura adecuados", maxScore: 5 },
+        { id: "consistencia", name: "Consistencia en la calidad", maxScore: 5 },
+        { id: "frescura", name: "Frescura de ingredientes", maxScore: 5 },
+      ],
+    },
+    {
+      id: "procesos_operativos",
+      name: "Procesos Operativos",
+      maxScore: 10,
+      items: [
+        { id: "seguimiento_recetas", name: "Seguimiento de recetas estándar", maxScore: 5 },
+        { id: "eficiencia", name: "Eficiencia en procesos", maxScore: 5 },
+      ],
+    },
+  ]
+
+  // Cargar categorías e ítems según el tipo de auditoría
   useEffect(() => {
     const fetchAuditConfig = async () => {
       try {
         setIsLoading(true)
 
-        // Intentar cargar desde la base de datos usando el nuevo método
-        const configData = await db.auditConfig.get()
+        // Intentar cargar desde la base de datos
+        const configData = await db.auditConfig.get(auditType)
 
-        console.log("Configuración cargada:", configData)
+        console.log(`Configuración de auditoría ${auditType} cargada:`, configData)
 
         // Obtener las categorías de la configuración
         let categories = configData?.categories || []
 
         if (!categories || categories.length === 0) {
-          console.warn("No se encontraron categorías en la configuración, usando valores predeterminados")
-          // Si no hay categorías, usar valores predeterminados
-          categories = [
-            {
-              id: "limpieza",
-              name: "Limpieza y Orden",
-              maxScore: 25,
-              items: [
-                { id: "limpieza_general", name: "Limpieza general del local", maxScore: 5 },
-                { id: "orden_cocina", name: "Orden en la cocina", maxScore: 5 },
-                { id: "limpieza_banos", name: "Limpieza de baños", maxScore: 5 },
-                { id: "manejo_residuos", name: "Manejo de residuos", maxScore: 5 },
-                { id: "orden_almacen", name: "Orden en almacén", maxScore: 5 },
-              ],
-            },
-            {
-              id: "seguridad_alimentaria",
-              name: "Seguridad Alimentaria",
-              maxScore: 25,
-              items: [
-                { id: "control_temperatura", name: "Control de temperatura de alimentos", maxScore: 5 },
-                { id: "almacenamiento", name: "Almacenamiento adecuado", maxScore: 5 },
-                { id: "fechas_vencimiento", name: "Control de fechas de vencimiento", maxScore: 5 },
-                { id: "manipulacion", name: "Manipulación de alimentos", maxScore: 5 },
-                { id: "contaminacion_cruzada", name: "Prevención de contaminación cruzada", maxScore: 5 },
-              ],
-            },
-            {
-              id: "atencion_cliente",
-              name: "Atención al Cliente",
-              maxScore: 20,
-              items: [
-                { id: "presentacion_personal", name: "Presentación del personal", maxScore: 5 },
-                { id: "amabilidad", name: "Amabilidad y cortesía", maxScore: 5 },
-                { id: "rapidez", name: "Rapidez en el servicio", maxScore: 5 },
-                { id: "conocimiento_menu", name: "Conocimiento del menú", maxScore: 5 },
-              ],
-            },
-            {
-              id: "calidad_producto",
-              name: "Calidad del Producto",
-              maxScore: 20,
-              items: [
-                { id: "presentacion_platos", name: "Presentación de platos", maxScore: 5 },
-                { id: "sabor", name: "Sabor y temperatura adecuados", maxScore: 5 },
-                { id: "consistencia", name: "Consistencia en la calidad", maxScore: 5 },
-                { id: "frescura", name: "Frescura de ingredientes", maxScore: 5 },
-              ],
-            },
-            {
-              id: "procesos_operativos",
-              name: "Procesos Operativos",
-              maxScore: 10,
-              items: [
-                { id: "seguimiento_recetas", name: "Seguimiento de recetas estándar", maxScore: 5 },
-                { id: "eficiencia", name: "Eficiencia en procesos", maxScore: 5 },
-              ],
-            },
-          ]
+          console.warn(`No se encontraron categorías para auditoría ${auditType}, usando valores predeterminados`)
+
+          // Usar configuración predeterminada según el tipo
+          categories = auditType === "rapida" ? defaultRapidaConfig : defaultCompletaConfig
 
           // Guardar la configuración predeterminada en la base de datos
-          await db.auditConfig.save({ categories })
+          await db.auditConfig.save({ type: auditType, categories })
         }
 
         setCategories(categories)
       } catch (error) {
-        console.error("Error al cargar configuración de auditoría:", error)
+        console.error(`Error al cargar configuración de auditoría ${auditType}:`, error)
         toast({
           title: "Error",
           description: "No se pudo cargar la configuración de auditoría",
@@ -169,18 +315,18 @@ export default function ConfiguracionAuditoriaPage() {
     }
 
     fetchAuditConfig()
-  }, [])
+  }, [auditType])
 
   // Guardar cambios en la base de datos
   const saveConfiguration = async () => {
     try {
       setIsLoading(true)
 
-      await db.auditConfig.save({ categories })
+      await db.auditConfig.save({ type: auditType, categories })
 
       toast({
         title: "Configuración guardada",
-        description: "La configuración de auditoría se ha guardado correctamente",
+        description: `La configuración de auditoría ${auditType === "rapida" ? "rápida" : "completa"} se ha guardado correctamente`,
       })
     } catch (error) {
       console.error("Error al guardar configuración:", error)
@@ -283,13 +429,14 @@ export default function ConfiguracionAuditoriaPage() {
       id,
       name: newItem.name,
       maxScore: newItem.maxScore,
+      description: newItem.description,
     }
 
     setCategories(
       categories.map((cat) => (cat.id === newItem.categoryId ? { ...cat, items: [...cat.items, itemToAdd] } : cat)),
     )
 
-    setNewItem({ id: "", name: "", maxScore: 5, categoryId: newItem.categoryId })
+    setNewItem({ id: "", name: "", maxScore: 5, description: "", categoryId: newItem.categoryId })
     setIsNewItemDialogOpen(false)
 
     toast({
@@ -314,7 +461,14 @@ export default function ConfiguracionAuditoriaPage() {
           ? {
               ...cat,
               items: cat.items.map((item) =>
-                item.id === editItem.id ? { ...item, name: editItem.name, maxScore: editItem.maxScore } : item,
+                item.id === editItem.id
+                  ? {
+                      ...item,
+                      name: editItem.name,
+                      maxScore: editItem.maxScore,
+                      description: editItem.description,
+                    }
+                  : item,
               ),
             }
           : cat,
@@ -360,9 +514,38 @@ export default function ConfiguracionAuditoriaPage() {
           </Button>
         </div>
 
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Tipo de Auditoría</CardTitle>
+            <CardDescription>Selecciona el tipo de auditoría que deseas configurar</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-4">
+              <Select value={auditType} onValueChange={(value: AuditType) => setAuditType(value)}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Seleccionar tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="rapida">Auditoría Rápida</SelectItem>
+                  <SelectItem value="completa">Auditoría Completa</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="flex-1">
+                <p className="text-sm text-muted-foreground">
+                  {auditType === "rapida"
+                    ? "La auditoría rápida es una evaluación simplificada que se puede realizar en poco tiempo."
+                    : "La auditoría completa es una evaluación exhaustiva que cubre todos los aspectos del local."}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
-            <CardTitle>Administrar Categorías e Ítems</CardTitle>
+            <CardTitle>
+              Administrar Categorías e Ítems - {auditType === "rapida" ? "Auditoría Rápida" : "Auditoría Completa"}
+            </CardTitle>
             <CardDescription>Personaliza las categorías e ítems que se utilizarán en las auditorías</CardDescription>
           </CardHeader>
           <CardContent>
@@ -570,6 +753,17 @@ export default function ConfiguracionAuditoriaPage() {
                             onChange={(e) => setNewItem({ ...newItem, maxScore: Number.parseInt(e.target.value) || 0 })}
                           />
                         </div>
+                        {auditType === "rapida" && (
+                          <div className="space-y-2">
+                            <Label htmlFor="new-item-description">Descripción</Label>
+                            <Input
+                              id="new-item-description"
+                              value={newItem.description || ""}
+                              onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+                              placeholder="Ej: Los pisos están limpios y sin residuos"
+                            />
+                          </div>
+                        )}
                       </div>
                       <DialogFooter>
                         <Button variant="outline" onClick={() => setIsNewItemDialogOpen(false)}>
@@ -588,6 +782,7 @@ export default function ConfiguracionAuditoriaPage() {
                         <TableHead>Categoría</TableHead>
                         <TableHead>Nombre</TableHead>
                         <TableHead>Puntaje Máximo</TableHead>
+                        {auditType === "rapida" && <TableHead>Descripción</TableHead>}
                         <TableHead className="text-right">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -596,7 +791,7 @@ export default function ConfiguracionAuditoriaPage() {
                         cat.items.map((item) => ({ categoryId: cat.id, categoryName: cat.name, ...item })),
                       ).length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={4} className="h-24 text-center">
+                          <TableCell colSpan={auditType === "rapida" ? 5 : 4} className="h-24 text-center">
                             No hay ítems configurados
                           </TableCell>
                         </TableRow>
@@ -607,6 +802,7 @@ export default function ConfiguracionAuditoriaPage() {
                               <TableCell>{cat.name}</TableCell>
                               <TableCell className="font-medium">{item.name}</TableCell>
                               <TableCell>{item.maxScore}</TableCell>
+                              {auditType === "rapida" && <TableCell>{item.description || "-"}</TableCell>}
                               <TableCell className="text-right">
                                 <div className="flex justify-end gap-2">
                                   <Dialog
@@ -620,6 +816,7 @@ export default function ConfiguracionAuditoriaPage() {
                                           id: item.id,
                                           name: item.name,
                                           maxScore: item.maxScore,
+                                          description: item.description || "",
                                           categoryId: cat.id,
                                         })
                                     }}
@@ -659,6 +856,19 @@ export default function ConfiguracionAuditoriaPage() {
                                             }
                                           />
                                         </div>
+                                        {auditType === "rapida" && (
+                                          <div className="space-y-2">
+                                            <Label htmlFor="edit-item-description">Descripción</Label>
+                                            <Input
+                                              id="edit-item-description"
+                                              value={editItem.description || ""}
+                                              onChange={(e) =>
+                                                setEditItem({ ...editItem, description: e.target.value })
+                                              }
+                                              placeholder="Ej: Los pisos están limpios y sin residuos"
+                                            />
+                                          </div>
+                                        )}
                                       </div>
                                       <DialogFooter>
                                         <Button variant="outline" onClick={() => setIsEditItemDialogOpen(false)}>
@@ -693,6 +903,8 @@ export default function ConfiguracionAuditoriaPage() {
     </DashboardLayout>
   )
 }
+
+
 
 
 
