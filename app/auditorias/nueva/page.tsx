@@ -77,7 +77,6 @@ const categoriasPredefinidas = [
     items: [
       { id: "presentacion_productos", name: "Presentación de productos", maxScore: 5 },
       { id: "frescura", name: "Frescura de ingredientes", maxScore: 5 },
-      { id: "temperatura", name: "Temperatura adec  name: "Frescura de ingredientes", maxScore: 5 },
       { id: "temperatura", name: "Temperatura adecuada", maxScore: 5 },
       { id: "sabor", name: "Sabor", maxScore: 5 },
       { id: "consistencia", name: "Consistencia", maxScore: 5 },
