@@ -141,11 +141,24 @@ export function AuditList({ audits }: AuditListProps) {
 
     // Mejorar la búsqueda para que sea más flexible
     const searchLower = searchTerm.toLowerCase().trim()
-    const matchesSearch = searchTerm === "" || // Si no hay término de búsqueda, mostrar todo
-      (audit.localName && audit.localName.toLowerCase().includes(searchLower)) ||
-      (audit.local && audit.local.toLowerCase().includes(searchLower)) ||
-      (audit.auditorName && audit.auditorName.toLowerCase().includes(searchLower)) ||
-      (audit.auditor && audit.auditor.toLowerCase().includes(searchLower))
+    
+    // Verificar si coincide con el término de búsqueda
+    let matchesSearch = true
+    if (searchTerm !== "") {
+      matchesSearch = false
+      // Buscar en el nombre del local
+      if (audit.localName && audit.localName.toLowerCase().includes(searchLower)) {
+        matchesSearch = true
+      } else if (audit.local && audit.local.toLowerCase().includes(searchLower)) {
+        matchesSearch = true
+      }
+      // Buscar en el nombre del auditor
+      else if (audit.auditorName && audit.auditorName.toLowerCase().includes(searchLower)) {
+        matchesSearch = true
+      } else if (audit.auditor && audit.auditor.toLowerCase().includes(searchLower)) {
+        matchesSearch = true
+      }
+    }
 
     // Verificar si coincide con el local seleccionado
     const matchesLocal = filterLocal === "all" || 
@@ -178,12 +191,16 @@ export function AuditList({ audits }: AuditListProps) {
   // Función para mostrar el turno (corregida)
   const getTurnoText = (shift) => {
     if (!shift) return "No especificado"
-    switch (shift) {
-      case "morning": return "Mañana"
-      case "afternoon": return "Tarde"
-      case "night": return "Noche"
-      default: return shift // Mantener el valor original si no coincide con ninguno de los casos
-    }
+    
+    // Convertir a minúsculas para hacer la comparación más robusta
+    const shiftLower = shift.toLowerCase()
+    
+    if (shiftLower === "morning") return "Mañana"
+    if (shiftLower === "afternoon") return "Tarde"
+    if (shiftLower === "night") return "Noche"
+    
+    // Si no coincide con ninguno de los valores esperados, devolver el valor original
+    return shift
   }
 
   return (
@@ -299,7 +316,7 @@ export function AuditList({ audits }: AuditListProps) {
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
                         <span className="text-sm">{audit.percentage || 0}%</span>
-                        <div className="w-16 bg-gray-200 rounded-full h-2.5">
+                        <div className="w-16 bg-white rounded-full h-2.5 border">
                           <div
                             className={`h-2.5 rounded-full ${getProgressColor(audit.percentage || 0)}`}
                             style={{ width: `${audit.percentage || 0}%` }}

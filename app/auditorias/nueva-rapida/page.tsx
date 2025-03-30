@@ -389,7 +389,7 @@ export default function NuevaAuditoriaRapidaPage() {
                     {totalScore} / {maxScore} ({percentage}%)
                   </span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                <div className="w-full bg-white border rounded-full h-2.5">
                   <div 
                     className={`h-2.5 rounded-full ${getProgressColor(percentage)}`} 
                     style={{ width: `${percentage}%` }}
@@ -408,6 +408,7 @@ export default function NuevaAuditoriaRapidaPage() {
             </CardHeader>
             <CardContent>
               <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <TabsList className="grid grid-cols-2 md:gri  onValueChange={setActiveTab}>
                 <TabsList className="grid grid-cols-2 md:grid-cols-5 mb-4">
                   {auditData.categories.map((category) => (
                     <TabsTrigger key={category.id} value={category.id}>

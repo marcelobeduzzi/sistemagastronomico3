@@ -4,9 +4,10 @@ import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/app/dashboard-layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { AuditList } from "@/components/auditorias/audit-list"
 import { DataTable } from "@/components/data-table"
 import { db } from "@/lib/db"
-import { exportToCSV, formatDate, generateAuditReport } from "@/lib/export-utils"
+import { exportToCSV, formatDate } from "@/lib/export-utils"
 import type { Audit, AuditItem } from "@/types"
 import type { ColumnDef } from "@tanstack/react-table"
 import { Download, Plus, Calendar, FileText, List, Eye, Settings } from 'lucide-react'
@@ -27,6 +28,119 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/components/ui/use-toast"
 import Link from "next/link"
+import jsPDF from 'jspdf'
+import 'jspdf-autotable'
+
+// Función para generar el reporte de auditoría en PDF
+const generateAuditReport = (audit) => {
+  try {
+    if (!audit) {
+      console.error("No se proporcionó una auditoría para generar el reporte");
+      return;
+    }
+
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
+    // Título
+    doc.setFontSize(18);
+    doc.text("Reporte de Auditoría", pageWidth / 2, 15, { align: "center" });
+    
+    // Información general
+    doc.setFontSize(12);
+    doc.text(`Local: ${audit.localName || audit.local || "No especificado"}`, 14, 30);
+    doc.text(`Fecha: ${formatDate(audit.date)}`, 14, 37);
+    
+    const turnoText = audit.shift === "morning" 
+      ? "Mañana" 
+      : audit.shift === "afternoon" 
+        ? "Tarde" 
+        : audit.shift === "night" 
+          ? "Noche" 
+          : "No especificado";
+    
+    doc.text(`Turno: ${turnoText}`, 14, 44);
+    doc.text(`Auditor: ${audit.auditorName || audit.auditor || "No especificado"}`, 14, 51);
+    doc.text(`Tipo: ${audit.type === "rapida" ? "Auditoría Rápida" : "Auditoría Detallada"}`, 14, 58);
+    
+    // Puntaje total
+    doc.setFontSize(14);
+    doc.text("Puntaje Total", pageWidth / 2, 70, { align: "center" });
+    doc.setFontSize(12);
+    doc.text(`${audit.totalScore} / ${audit.maxScore} (${Math.round((audit.totalScore / audit.maxScore) * 100)}%)`, pageWidth / 2, 77, { align: "center" });
+    
+    // Línea separadora
+    doc.line(14, 85, pageWidth - 14, 85);
+    
+    // Categorías y puntajes
+    if (audit.categories && audit.categories.length > 0) {
+      doc.setFontSize(14);
+      doc.text("Detalle por Categorías", pageWidth / 2, 95, { align: "center" });
+      
+      let yPos = 105;
+      
+      for (const category of audit.categories) {
+        // Verificar si hay espacio suficiente en la página actual
+        if (yPos > 270) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(12);
+        doc.text(`${category.name}: ${category.score} / ${category.maxScore} (${Math.round((category.score / category.maxScore) * 100)}%)`, 14, yPos);
+        yPos += 10;
+        
+        // Tabla de items
+        if (category.items && category.items.length > 0) {
+          const tableData = category.items.map(item => [
+            item.name,
+            `${item.score} / ${item.maxScore}`,
+            item.observations || ""
+          ]);
+          
+          doc.autoTable({
+            startY: yPos,
+            head: [["Ítem", "Puntaje", "Observaciones"]],
+            body: tableData,
+            margin: { left: 14, right: 14 },
+            headStyles: { fillColor: [100, 100, 100] },
+            styles: { fontSize: 10 }
+          });
+          
+          yPos = doc.lastAutoTable.finalY + 15;
+        } else {
+          yPos += 5;
+        }
+      }
+    }
+    
+    // Observaciones generales
+    if (audit.generalObservations) {
+      // Verificar si hay espacio suficiente en la página actual
+      if (yPos > 240) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(14);
+      doc.text("Observaciones Generales", 14, yPos);
+      yPos += 10;
+      
+      doc.setFontSize(10);
+      const splitText = doc.splitTextToSize(audit.generalObservations, pageWidth - 28);
+      doc.text(splitText, 14, yPos);
+    }
+    
+    // Guardar el PDF
+    const fileName = `auditoria_${audit.localName || audit.local || "local"}_${formatDate(audit.date).replace(/\//g, "-")}.pdf`;
+    doc.save(fileName);
+    
+    return fileName;
+  } catch (error) {
+    console.error("Error al generar reporte de auditoría:", error);
+    throw error;
+  }
+};
 
 export default function AuditoriasPage() {
   const [audits, setAudits] = useState<Audit[]>([])
@@ -202,8 +316,13 @@ export default function AuditoriasPage() {
     {
       accessorKey: "shift",
       header: "Turno",
-      cell: ({ row }) =>
-        row.original.shift === "morning" ? "Mañana" : row.original.shift === "afternoon" ? "Tarde" : "Noche",
+      cell: ({ row }) => {
+        const shift = row.original.shift?.toLowerCase() || "";
+        if (shift === "morning") return "Mañana";
+        if (shift === "afternoon") return "Tarde";
+        if (shift === "night") return "Noche";
+        return row.original.shift || "No especificado";
+      },
     },
     {
       accessorKey: "type",
@@ -224,7 +343,12 @@ export default function AuditoriasPage() {
         return (
           <div className="flex items-center space-x-2">
             <Badge className={getBadgeColor(row.original.totalScore, maxScore)}>{percentage}%</Badge>
-            <Progress value={percentage} className={`w-24 ${getProgressColor(row.original.totalScore, maxScore)}`} />
+            <div className="w-24 bg-white border rounded-full h-2.5">
+              <div 
+                className={`h-2.5 rounded-full ${getProgressColor(row.original.totalScore, maxScore)}`} 
+                style={{ width: `${percentage}%` }}
+              ></div>
+            </div>
           </div>
         )
       },
@@ -238,12 +362,21 @@ export default function AuditoriasPage() {
             variant="ghost"
             size="sm"
             onClick={() => {
-              // Exportar auditoría
-              generateAuditReport(row.original)
-              toast({
-                title: "Reporte generado",
-                description: "El reporte de auditoría ha sido generado correctamente.",
-              })
+              try {
+                // Exportar auditoría
+                generateAuditReport(row.original)
+                toast({
+                  title: "Reporte generado",
+                  description: "El reporte de auditoría ha sido generado correctamente.",
+                })
+              } catch (error) {
+                console.error("Error al generar reporte:", error)
+                toast({
+                  title: "Error",
+                  description: "No se pudo generar el reporte. Intente nuevamente.",
+                  variant: "destructive",
+                })
+              }
             }}
           >
             <FileText className="mr-1 h-4 w-4" />
@@ -361,10 +494,12 @@ export default function AuditoriasPage() {
                       <span className="text-sm">{selectedAudit.totalScore}/{selectedAudit.maxScore || 150} puntos</span>
                     </div>
                   </div>
-                  <Progress
-                    value={(selectedAudit.totalScore / (selectedAudit.maxScore || 150)) * 100}
-                    className={`mt-2 ${getProgressColor(selectedAudit.totalScore, selectedAudit.maxScore || 150)}`}
-                  />
+                  <div className="mt-2 bg-white border rounded-full h-2.5">
+                    <div
+                      className={`h-2.5 rounded-full ${getProgressColor(selectedAudit.totalScore, selectedAudit.maxScore || 150)}`}
+                      style={{ width: `${(selectedAudit.totalScore / (selectedAudit.maxScore || 150)) * 100}%` }}
+                    ></div>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -390,20 +525,22 @@ export default function AuditoriasPage() {
                                     {item.score} / {item.maxScore}
                                   </span>
                                 </div>
-                                <Progress
-                                  value={(item.score / item.maxScore) * 100}
-                                  className={`h-1.5 ${
-                                    (item.score / item.maxScore) * 100 >= 80
-                                      ? "bg-green-700"
-                                      : (item.score / item.maxScore) * 100 >= 60
-                                        ? "bg-green-500"
-                                        : (item.score / item.maxScore) * 100 >= 40
-                                          ? "bg-yellow-500"
-                                          : (item.score / item.maxScore) * 100 >= 20
-                                            ? "bg-orange-500"
-                                            : "bg-red-500"
-                                  }`}
-                                />
+                                <div className="w-full bg-white border rounded-full h-1.5">
+                                  <div
+                                    className={`h-1.5 rounded-full ${
+                                      (item.score / item.maxScore) * 100 >= 80
+                                        ? "bg-green-700"
+                                        : (item.score / item.maxScore) * 100 >= 60
+                                          ? "bg-green-500"
+                                          : (item.score / item.maxScore) * 100 >= 40
+                                            ? "bg-yellow-500"
+                                            : (item.score / item.maxScore) * 100 >= 20
+                                              ? "bg-orange-500"
+                                              : "bg-red-500"
+                                    }`}
+                                    style={{ width: `${(item.score / item.maxScore) * 100}%` }}
+                                  ></div>
+                                </div>
                                 {item.observations && (
                                   <div className="mt-2">
                                     <p className="text-xs text-muted-foreground mb-1">Observaciones:</p>
@@ -425,11 +562,20 @@ export default function AuditoriasPage() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      generateAuditReport(selectedAudit)
-                      toast({
-                        title: "Reporte generado",
-                        description: "El reporte de auditoría ha sido generado correctamente.",
-                      })
+                      try {
+                        generateAuditReport(selectedAudit)
+                        toast({
+                          title: "Reporte generado",
+                          description: "El reporte de auditoría ha sido generado correctamente.",
+                        })
+                      } catch (error) {
+                        console.error("Error al generar reporte:", error)
+                        toast({
+                          title: "Error",
+                          description: "No se pudo generar el reporte. Intente nuevamente.",
+                          variant: "destructive",
+                        })
+                      }
                     }}
                   >
                     <FileText className="mr-2 h-4 w-4" />
@@ -468,13 +614,7 @@ export default function AuditoriasPage() {
                   </Button>
                 </div>
 
-                <DataTable
-                  columns={columns}
-                  data={recentAudits}
-                  searchColumn="local"
-                  searchPlaceholder="Buscar por local..."
-                  isLoading={isRecentLoading}
-                />
+                <AuditList audits={recentAudits} />
               </TabsContent>
 
               <TabsContent value="date">
@@ -514,13 +654,7 @@ export default function AuditoriasPage() {
                   </div>
                 </div>
 
-                <DataTable
-                  columns={columns}
-                  data={audits}
-                  searchColumn="local"
-                  searchPlaceholder="Buscar por local..."
-                  isLoading={isLoading}
-                />
+                <AuditList audits={audits} />
               </TabsContent>
             </Tabs>
           </CardContent>

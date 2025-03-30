@@ -597,7 +597,7 @@ export default function NuevaAuditoriaPage() {
                             {category.score} / {category.maxScore} ({category.maxScore > 0 ? Math.round((category.score / category.maxScore) * 100) : 0}%)
                           </span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2.5">
+                        <div className="w-full bg-white border rounded-full h-2.5">
                           <div 
                             className={`h-2.5 rounded-full ${getProgressColor(category.maxScore > 0 ? (category.score / category.maxScore) * 100 : 0)}`} 
                             style={{ width: `${category.maxScore > 0 ? (category.score / category.maxScore) * 100 : 0}%` }}
@@ -615,7 +615,7 @@ export default function NuevaAuditoriaPage() {
                           {totalScore} / {maxScore} ({percentage}%)
                         </span>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-3">
+                      <div className="w-full bg-white border rounded-full h-3">
                         <div 
                           className={`h-3 rounded-full ${getProgressColor(percentage)}`} 
                           style={{ width: `${percentage}%` }}
