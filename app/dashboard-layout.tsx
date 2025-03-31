@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect, useCallback, memo, useMemo } from "react"
+import { Shield } from 'lucide-react'
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
@@ -239,6 +240,11 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         href: "/reportes",
         icon: BarChart3,
       },
+	  {
+		title: "Panel de Administración",
+		href: "/admin",
+		icon: Shield, // Necesitarás importar Shield de lucide-react
+	  },
       {
         title: "Configuración",
         href: "/configuracion",
