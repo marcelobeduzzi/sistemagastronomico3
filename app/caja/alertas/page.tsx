@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "@/components/ui/use-toast"
-import { ArrowLeft, Search, Eye, AlertTriangle, CheckCircle, ArrowUpDown } from 'lucide-react'
+import { ArrowLeft, Search, Eye, CheckCircle, ArrowUpDown } from 'lucide-react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
 // Lista de locales para filtrar

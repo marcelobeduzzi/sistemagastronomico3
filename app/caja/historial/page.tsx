@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "@/components/ui/use-toast"
-import { ArrowLeft, Search, Eye, Calendar, ArrowUpDown, Filter } from 'lucide-react'
+import { ArrowLeft, Search, Eye, ArrowUpDown } from 'lucide-react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
 // Lista de locales para filtrar
@@ -110,12 +110,13 @@ export default function HistorialCajaPage() {
         
         // Aplicar filtros de fecha
         if (fechaDesde && fechaHasta) {
-          aperturasPromise = aperturasPromise.gte('fecha', fechaDesde).lte('fecha', fechaHasta)
-          cierresPromise = cierresPromise.gte('fecha', fechaDesde).lte('fecha', fechaHasta)
+          aperturasPromise = aperturasPromise.gte('date', fechaDesde).lte('date', fechaHasta)
+          cierresPromise = cierresPromise.gte('date', fechaDesde).lte('date', fechaHasta)
         }
         
         // Ejecutar consultas en paralelo
         let [aperturasResult, cierresResult] = await Promise.all([
+          filterTipo === "cierre" ? { data: [] } : aperturasPromise  = await Promise.all([
           filterTipo === "cierre" ? { data: [] } : aperturasPromise,
           filterTipo === "apertura" ? { data: [] } : cierresPromise
         ])
@@ -124,17 +125,17 @@ export default function HistorialCajaPage() {
         const aperturas = (aperturasResult.data || []).map(item => ({
           ...item,
           tipo: 'apertura',
-          monto: item.saldo_inicial,
-          responsable: item.responsable,
-          fecha_completa: item.fecha
+          monto: item.initial_amount,
+          responsable: item.responsible,
+          fecha_completa: item.date
         }))
         
         const cierres = (cierresResult.data || []).map(item => ({
           ...item,
           tipo: 'cierre',
-          monto: item.ventas_totales,
-          responsable: item.responsable,
-          fecha_completa: item.fecha
+          monto: item.total_sales,
+          responsable: item.responsible,
+          fecha_completa: item.date
         }))
         
         // Combinar resultados
@@ -182,7 +183,7 @@ export default function HistorialCajaPage() {
     return (
       operacion.responsable?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       operacion.local?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      operacion.turno?.toLowerCase().includes(searchTerm.toLowerCase())
+      operacion.shift?.toLowerCase().includes(searchTerm.toLowerCase())
     )
   })
 
@@ -331,7 +332,7 @@ export default function HistorialCajaPage() {
                         <TableCell>
                           {operacion.local?.name || locales.find(l => l.id === operacion.local_id)?.name || operacion.local_id}
                         </TableCell>
-                        <TableCell className="capitalize">{operacion.turno}</TableCell>
+                        <TableCell className="capitalize">{operacion.shift || operacion.turno}</TableCell>
                         <TableCell>{renderTipoBadge(operacion.tipo)}</TableCell>
                         <TableCell>{operacion.responsable}</TableCell>
                         <TableCell className="text-right">

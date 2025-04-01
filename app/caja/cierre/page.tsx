@@ -1,7 +1,5 @@
 "use client"
 
-import type React from "react"
-
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
@@ -14,10 +12,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/use-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowLeft, Save, AlertTriangle, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Save, AlertTriangle, Plus, Trash2, CheckCircle, XCircle } from 'lucide-react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { Checkbox } from "@/components/ui/checkbox"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
-// Lista de locales para seleccionar (esto podría venir de una API)
+// Lista de locales para seleccionar
 const locales = [
   { id: "cabildo", name: "BR Cabildo" },
   { id: "carranza", name: "BR Carranza" },
@@ -47,6 +47,19 @@ interface Retiro {
   autorizadoPor: string
 }
 
+// Interfaz para apertura
+interface Apertura {
+  id: string
+  local_id: string
+  local_name: string
+  date: string
+  shift: string
+  responsible: string
+  initial_amount: number
+  status: string
+  has_closing: boolean
+}
+
 export default function CierreCajaPage() {
   const router = useRouter()
   const supabase = createClientComponentClient()
@@ -58,6 +71,8 @@ export default function CierreCajaPage() {
   const [porcentajeDiferencia, setPorcentajeDiferencia] = useState(0)
   const [gastos, setGastos] = useState<Gasto[]>([])
   const [retiros, setRetiros] = useState<Retiro[]>([])
+  const [aperturasPendientes, setAperturasPendientes] = useState<Apertura[]>([])
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [nuevoGasto, setNuevoGasto] = useState<Gasto>({
     id: "",
     concepto: "",
@@ -73,94 +88,121 @@ export default function CierreCajaPage() {
 
   // Estado para los datos de cierre
   const [formData, setFormData] = useState({
-    aperturaId: "",
-    localId: "",
-    fecha: format(new Date(), "yyyy-MM-dd"),
-    turno: "mañana",
-    responsable: "",
+    opening_id: "",
+    local_id: "",
+    local_name: "",
+    date: format(new Date(), "yyyy-MM-dd"),
+    shift: "mañana",
+    responsible: "",
     supervisor: "",
-    supervisorPin: "",
+    supervisor_pin: "",
 
     // Ventas
-    ventasTotales: 0,
-    efectivo: 0,
-    tarjetaCredito: 0,
-    tarjetaDebito: 0,
-    transferencia: 0,
-    mercadoPago: 0,
-    otros: 0,
+    total_sales: 0,
+    cash_sales: 0,
+    credit_card_sales: 0,
+    debit_card_sales: 0,
+    transfer_sales: 0,
+    mercado_pago_sales: 0,
+    other_sales: 0,
 
     // Desglose de billetes
-    b1000: 0,
-    b500: 0,
-    b200: 0,
-    b100: 0,
-    b50: 0,
-    b20: 0,
-    b10: 0,
-    monedas: 0,
+    bills_1000: 0,
+    bills_500: 0,
+    bills_200: 0,
+    bills_100: 0,
+    bills_50: 0,
+    bills_20: 0,
+    bills_10: 0,
+    coins: 0,
 
     // Cálculos
-    saldoInicial: 5000, // Esto vendría de la apertura
-    totalGastos: 0,
-    totalRetiros: 0,
-    saldoEsperado: 0,
-    saldoReal: 0,
+    initial_balance: 0,
+    total_expenses: 0,
+    total_withdrawals: 0,
+    expected_balance: 0,
+    actual_balance: 0,
+    difference: 0,
+    difference_percentage: 0,
+    difference_justification: "",
 
-    // Justificación
-    justificacionDiferencia: "",
+    // Estado
+    status: "pendiente",
+    has_alert: false,
   })
+
+  // Cargar aperturas pendientes
+  useEffect(() => {
+    const fetchAperturasPendientes = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('cash_register_openings')
+          .select('*')
+          .eq('has_closing', false)
+          .eq('status', 'aprobado')
+          .order('date', { ascending: false })
+
+        if (error) throw error
+
+        setAperturasPendientes(data || [])
+      } catch (error) {
+        console.error("Error al cargar aperturas pendientes:", error)
+      }
+    }
+
+    fetchAperturasPendientes()
+  }, [supabase])
 
   // Calcular el total de ventas
   useEffect(() => {
     const totalVentas =
-      formData.efectivo +
-      formData.tarjetaCredito +
-      formData.tarjetaDebito +
-      formData.transferencia +
-      formData.mercadoPago +
-      formData.otros
+      formData.cash_sales +
+      formData.credit_card_sales +
+      formData.debit_card_sales +
+      formData.transfer_sales +
+      formData.mercado_pago_sales +
+      formData.other_sales
 
     setFormData((prev) => ({
       ...prev,
-      ventasTotales: totalVentas,
+      total_sales: totalVentas,
     }))
   }, [
-    formData.efectivo,
-    formData.tarjetaCredito,
-    formData.tarjetaDebito,
-    formData.transferencia,
-    formData.mercadoPago,
-    formData.otros,
+    formData.cash_sales,
+    formData.credit_card_sales,
+    formData.debit_card_sales,
+    formData.transfer_sales,
+    formData.mercado_pago_sales,
+    formData.other_sales,
   ])
 
   // Calcular el total de efectivo basado en el desglose de billetes
   useEffect(() => {
     const total =
-      formData.b1000 * 1000 +
-      formData.b500 * 500 +
-      formData.b200 * 200 +
-      formData.b100 * 100 +
-      formData.b50 * 50 +
-      formData.b20 * 20 +
-      formData.b10 * 10 +
-      formData.monedas
+      formData.bills_1000 * 1000 +
+      formData.bills_500 * 500 +
+      formData.bills_200 * 200 +
+      formData.bills_100 * 100 +
+      formData.bills_50 * 50 +
+      formData.bills_20 * 20 +
+      formData.bills_10 * 10 +
+      formData.coins
 
     setTotalEfectivoCalculado(total)
 
     setFormData((prev) => ({
       ...prev,
-      saldoReal: total,
+      actual_balance: total,
     }))
   }, [
-    formData.b1000,
-    formData.b500,
-    formData.b200,
-    formData.b100,
-    formData.b50,
-    formData.b20,
-    formData.b10,
-    formData.monedas,
+    formData.bills_1000,
+    formData.bills_500,
+    formData.bills_200,
+    formData.bills_100,
+    formData.bills_50,
+    formData.bills_20,
+    formData.bills_10,
+    formData.coins,
   ])
 
   // Calcular totales de gastos y retiros
@@ -170,32 +212,38 @@ export default function CierreCajaPage() {
 
     setFormData((prev) => ({
       ...prev,
-      totalGastos,
-      totalRetiros,
+      total_expenses: totalGastos,
+      total_withdrawals: totalRetiros,
     }))
   }, [gastos, retiros])
 
   // Calcular saldo esperado
   useEffect(() => {
-    const saldoEsperado = formData.saldoInicial + formData.efectivo - formData.totalGastos - formData.totalRetiros
+    const saldoEsperado = formData.initial_balance + formData.cash_sales - formData.total_expenses - formData.total_withdrawals
 
     setFormData((prev) => ({
       ...prev,
-      saldoEsperado,
+      expected_balance: saldoEsperado,
     }))
-  }, [formData.saldoInicial, formData.efectivo, formData.totalGastos, formData.totalRetiros])
+  }, [formData.initial_balance, formData.cash_sales, formData.total_expenses, formData.total_withdrawals])
 
   // Calcular diferencia y porcentaje
   useEffect(() => {
-    const diferencia = formData.saldoReal - formData.saldoEsperado
-    const porcentaje = formData.saldoEsperado !== 0 ? Math.abs((diferencia / formData.saldoEsperado) * 100) : 0
+    const diferencia = formData.actual_balance - formData.expected_balance
+    const porcentaje = formData.expected_balance !== 0 ? Math.abs((diferencia / formData.expected_balance) * 100) : 0
 
     setDiferencia(diferencia)
     setPorcentajeDiferencia(porcentaje)
 
+    setFormData((prev) => ({
+      ...prev,
+      difference: diferencia,
+      difference_percentage: porcentaje,
+    }))
+
     // Si la diferencia es significativa, requerir supervisor
     setNeedsSupervisor(porcentaje > 2)
-  }, [formData.saldoReal, formData.saldoEsperado])
+  }, [formData.actual_balance, formData.expected_balance])
 
   // Manejar cambios en los campos del formulario
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -211,7 +259,7 @@ export default function CierreCajaPage() {
     const { name, value } = e.target
     setFormData((prev) => ({
       ...prev,
-      [name]: value === "" ? 0 : Number.parseInt(value, 10),
+      [name]: value === "" ? 0 : Number(value),
     }))
   }
 
@@ -221,6 +269,33 @@ export default function CierreCajaPage() {
       ...prev,
       [name]: value,
     }))
+
+    // Si cambia el local, actualizar el nombre del local
+    if (name === "local_id") {
+      const selectedLocal = locales.find((local) => local.id === value)
+      if (selectedLocal) {
+        setFormData((prev) => ({
+          ...prev,
+          local_name: selectedLocal.name,
+        }))
+      }
+    }
+
+    // Si selecciona una apertura, cargar sus datos
+    if (name === "opening_id" && value) {
+      const selectedApertura = aperturasPendientes.find((apertura) => apertura.id === value)
+      if (selectedApertura) {
+        setFormData((prev) => ({
+          ...prev,
+          local_id: selectedApertura.local_id,
+          local_name: selectedApertura.local_name,
+          date: selectedApertura.date,
+          shift: selectedApertura.shift,
+          responsible: selectedApertura.responsible,
+          initial_balance: selectedApertura.initial_amount,
+        }))
+      }
+    }
   }
 
   // Manejar cambios en el nuevo gasto
@@ -228,7 +303,15 @@ export default function CierreCajaPage() {
     const { name, value, type } = e.target
     setNuevoGasto((prev) => ({
       ...prev,
-      [name]: type === "number" ? (value === "" ? 0 : Number.parseFloat(value)) : value,
+      [name]: type === "number" ? (value === "" ? 0 : Number(value)) : value,
+    }))
+  }
+
+  // Manejar cambio en checkbox
+  const handleCheckboxChange = (checked: boolean) => {
+    setNuevoGasto((prev) => ({
+      ...prev,
+      tieneComprobante: checked,
     }))
   }
 
@@ -237,7 +320,7 @@ export default function CierreCajaPage() {
     const { name, value, type } = e.target
     setNuevoRetiro((prev) => ({
       ...prev,
-      [name]: type === "number" ? (value === "" ? 0 : Number.parseFloat(value)) : value,
+      [name]: type === "number" ? (value === "" ? 0 : Number(value)) : value,
     }))
   }
 
@@ -303,7 +386,7 @@ export default function CierreCajaPage() {
 
   // Validar el formulario
   const validateForm = () => {
-    if (!formData.localId) {
+    if (!formData.local_id) {
       toast({
         title: "Error",
         description: "Debes seleccionar un local",
@@ -312,7 +395,7 @@ export default function CierreCajaPage() {
       return false
     }
 
-    if (!formData.responsable) {
+    if (!formData.responsible) {
       toast({
         title: "Error",
         description: "Debes ingresar el nombre del responsable",
@@ -321,7 +404,7 @@ export default function CierreCajaPage() {
       return false
     }
 
-    if (formData.ventasTotales <= 0) {
+    if (formData.total_sales <= 0) {
       toast({
         title: "Error",
         description: "El total de ventas debe ser mayor a cero",
@@ -330,7 +413,7 @@ export default function CierreCajaPage() {
       return false
     }
 
-    if (Math.abs(diferencia) > 0 && !formData.justificacionDiferencia) {
+    if (Math.abs(diferencia) > 0 && !formData.difference_justification) {
       toast({
         title: "Error",
         description: "Debes justificar la diferencia en el saldo",
@@ -339,7 +422,7 @@ export default function CierreCajaPage() {
       return false
     }
 
-    if (needsSupervisor && (!formData.supervisor || !formData.supervisorPin)) {
+    if (needsSupervisor && (!formData.supervisor || !formData.supervisor_pin)) {
       toast({
         title: "Error",
         description: "Se requiere autorización del supervisor para diferencias significativas",
@@ -351,38 +434,68 @@ export default function CierreCajaPage() {
     return true
   }
 
-  // Guardar el cierre de caja
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Mostrar diálogo de confirmación
+  const handleSubmitClick = (e: React.FormEvent) => {
     e.preventDefault()
-
+    
     if (!validateForm()) return
+    
+    setShowConfirmDialog(true)
+  }
 
+  // Guardar el cierre de caja
+  const handleSubmit = async () => {
     try {
       setIsLoading(true)
+      setShowConfirmDialog(false)
 
       // 1. Guardar el cierre de caja
       const cierreData = {
-        local_id: formData.localId,
-        fecha: formData.fecha,
-        turno: formData.turno,
-        responsable: formData.responsable,
-        ventas_totales: formData.ventasTotales,
-        efectivo: formData.efectivo,
-        tarjeta_credito: formData.tarjetaCredito,
-        tarjeta_debito: formData.tarjetaDebito,
-        transferencia: formData.transferencia,
-        mercado_pago: formData.mercadoPago,
-        otros: formData.otros,
-        saldo_inicial: formData.saldoInicial,
-        saldo_esperado: formData.saldoEsperado,
-        saldo_real: formData.saldoReal,
-        diferencia: diferencia,
-        porcentaje_diferencia: porcentajeDiferencia,
-        justificacion_diferencia: formData.justificacionDiferencia,
+        opening_id: formData.opening_id || null,
+        local_id: formData.local_id,
+        local_name: formData.local_name,
+        date: formData.date,
+        shift: formData.shift,
+        responsible: formData.responsible,
         supervisor: needsSupervisor ? formData.supervisor : null,
-        estado: needsSupervisor ? 'pendiente' : 'aprobado',
-        gastos: gastos,
-        retiros: retiros,
+        supervisor_pin: needsSupervisor ? formData.supervisor_pin : null,
+        
+        // Ventas
+        total_sales: formData.total_sales,
+        cash_sales: formData.cash_sales,
+        credit_card_sales: formData.credit_card_sales,
+        debit_card_sales: formData.debit_card_sales,
+        transfer_sales: formData.transfer_sales,
+        mercado_pago_sales: formData.mercado_pago_sales,
+        other_sales: formData.other_sales,
+        
+        // Desglose de billetes
+        bills_1000: formData.bills_1000,
+        bills_500: formData.bills_500,
+        bills_200: formData.bills_200,
+        bills_100: formData.bills_100,
+        bills_50: formData.bills_50,
+        bills_20: formData.bills_20,
+        bills_10: formData.bills_10,
+        coins: formData.coins,
+        
+        // Cálculos
+        initial_balance: formData.initial_balance,
+        total_expenses: formData.total_expenses,
+        total_withdrawals: formData.total_withdrawals,
+        expected_balance: formData.expected_balance,
+        actual_balance: formData.actual_balance,
+        difference: diferencia,
+        difference_percentage: porcentajeDiferencia,
+        difference_justification: formData.difference_justification,
+        
+        // Estado
+        status: needsSupervisor ? 'pendiente' : 'aprobado',
+        has_alert: Math.abs(porcentajeDiferencia) > 0.5,
+        
+        // Estos campos se pueden incluir como JSON si la tabla los acepta
+        expenses: JSON.stringify(gastos),
+        withdrawals: JSON.stringify(retiros),
       }
 
       // Insertar en la base de datos
@@ -394,14 +507,21 @@ export default function CierreCajaPage() {
 
       if (cierreError) throw cierreError
 
-      // 2. Generar alertas si es necesario
-      const alertas = []
+      // 2. Actualizar la apertura si existe
+      if (formData.opening_id) {
+        const { error: aperturaError } = await supabase
+          .from('cash_register_openings')
+          .update({ has_closing: true })
+          .eq('id', formData.opening_id)
 
-      // Alerta por diferencia significativa
+        if (aperturaError) console.error("Error al actualizar apertura:", aperturaError)
+      }
+
+      // 3. Generar alertas si es necesario
       if (Math.abs(porcentajeDiferencia) > 0.5) {
         const alertLevel = Math.abs(porcentajeDiferencia) > 2 ? 'high' : 'medium'
         
-        alertas.push({
+        const alertaData = {
           cash_register_id: cierreInsertado.id,
           type: 'diferencia_caja',
           alert_level: alertLevel,
@@ -409,46 +529,19 @@ export default function CierreCajaPage() {
           details: JSON.stringify({
             amount: Math.abs(diferencia),
             percentage: Math.abs(porcentajeDiferencia),
-            expected: formData.saldoEsperado,
-            actual: formData.saldoReal
+            expected: formData.expected_balance,
+            actual: formData.actual_balance
           }),
-          date: new Date().toISOString(),
-          status: 'pending',
-          local_id: formData.localId,
-          local_name: locales.find(l => l.id === formData.localId)?.name || formData.localId,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-      }
+          status: 'activa',
+          local_id: formData.local_id,
+          local_name: formData.local_name
+        }
 
-      // Alerta por gastos elevados (ejemplo)
-      if (formData.totalGastos > formData.efectivo * 0.1) {
-        alertas.push({
-          cash_register_id: cierreInsertado.id,
-          type: 'gastos_elevados',
-          alert_level: 'medium',
-          message: `Gastos representan más del 10% de las ventas en efectivo`,
-          details: JSON.stringify({
-            amount: formData.totalGastos,
-            percentage: (formData.totalGastos / formData.efectivo) * 100,
-            sales: formData.efectivo
-          }),
-          date: new Date().toISOString(),
-          status: 'pending',
-          local_id: formData.localId,
-          local_name: locales.find(l => l.id === formData.localId)?.name || formData.localId,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-      }
-
-      // Insertar alertas si existen
-      if (alertas.length > 0) {
-        const { error: alertasError } = await supabase
+        const { error: alertaError } = await supabase
           .from('cash_register_alerts')
-          .insert(alertas)
+          .insert(alertaData)
 
-        if (alertasError) console.error("Error al generar alertas:", alertasError)
+        if (alertaError) console.error("Error al generar alerta:", alertaError)
       }
 
       toast({
@@ -470,23 +563,6 @@ export default function CierreCajaPage() {
     }
   }
 
-  // Cargar datos de apertura
-  useEffect(() => {
-    const cargarApertura = async () => {
-      // Aquí iría la lógica para cargar la apertura correspondiente
-      // Por ahora, simulamos datos de apertura
-      setFormData((prev) => ({
-        ...prev,
-        saldoInicial: 5000, // Esto vendría de la apertura real
-        responsable: "Juan Pérez", // Esto vendría de la apertura real
-      }))
-    }
-
-    if (formData.localId && formData.fecha && formData.turno) {
-      cargarApertura()
-    }
-  }, [formData.localId, formData.fecha, formData.turno])
-
   return (
     <DashboardLayout isLoading={isLoading}>
       <div className="container mx-auto py-6">
@@ -498,7 +574,7 @@ export default function CierreCajaPage() {
           </Button>
         </div>
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmitClick}>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
             <TabsList className="grid grid-cols-4 mb-4">
               <TabsTrigger value="ventas">Ventas</TabsTrigger>
@@ -517,12 +593,36 @@ export default function CierreCajaPage() {
                     <CardDescription>Datos básicos del cierre</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
+                    {aperturasPendientes.length > 0 && (
+                      <div className="space-y-2">
+                        <Label htmlFor="opening_id">Apertura Pendiente</Label>
+                        <Select
+                          name="opening_id"
+                          value={formData.opening_id}
+                          onValueChange={(value) => handleSelectChange("opening_id", value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar apertura" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">Nueva apertura</SelectItem>
+                            {aperturasPendientes.map((apertura) => (
+                              <SelectItem key={apertura.id} value={apertura.id}>
+                                {apertura.local_name} - {apertura.date} ({apertura.shift})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
                     <div className="space-y-2">
-                      <Label htmlFor="localId">Local</Label>
+                      <Label htmlFor="local_id">Local</Label>
                       <Select
-                        name="localId"
-                        value={formData.localId}
-                        onValueChange={(value) => handleSelectChange("localId", value)}
+                        name="local_id"
+                        value={formData.local_id}
+                        onValueChange={(value) => handleSelectChange("local_id", value)}
+                        disabled={!!formData.opening_id}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Seleccionar local" />
@@ -538,16 +638,24 @@ export default function CierreCajaPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="fecha">Fecha</Label>
-                      <Input id="fecha" name="fecha" type="date" value={formData.fecha} onChange={handleInputChange} />
+                      <Label htmlFor="date">Fecha</Label>
+                      <Input 
+                        id="date" 
+                        name="date" 
+                        type="date" 
+                        value={formData.date} 
+                        onChange={handleInputChange} 
+                        disabled={!!formData.opening_id}
+                      />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="turno">Turno</Label>
+                      <Label htmlFor="shift">Turno</Label>
                       <Select
-                        name="turno"
-                        value={formData.turno}
-                        onValueChange={(value) => handleSelectChange("turno", value)}
+                        name="shift"
+                        value={formData.shift}
+                        onValueChange={(value) => handleSelectChange("shift", value)}
+                        disabled={!!formData.opening_id}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Seleccionar turno" />
@@ -560,13 +668,27 @@ export default function CierreCajaPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="responsable">Responsable de Caja</Label>
+                      <Label htmlFor="responsible">Responsable de Caja</Label>
                       <Input
-                        id="responsable"
-                        name="responsable"
-                        value={formData.responsable}
+                        id="responsible"
+                        name="responsible"
+                        value={formData.responsible}
                         onChange={handleInputChange}
                         placeholder="Nombre del responsable"
+                        disabled={!!formData.opening_id}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="initial_balance">Saldo Inicial</Label>
+                      <Input
+                        id="initial_balance"
+                        name="initial_balance"
+                        type="number"
+                        min="0"
+                        value={formData.initial_balance || ""}
+                        onChange={handleNumberChange}
+                        disabled={!!formData.opening_id}
                       />
                     </div>
                   </CardContent>
@@ -580,73 +702,73 @@ export default function CierreCajaPage() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="efectivo">Efectivo</Label>
+                      <Label htmlFor="cash_sales">Efectivo</Label>
                       <Input
-                        id="efectivo"
-                        name="efectivo"
+                        id="cash_sales"
+                        name="cash_sales"
                         type="number"
                         min="0"
-                        value={formData.efectivo || ""}
+                        value={formData.cash_sales || ""}
                         onChange={handleNumberChange}
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="tarjetaCredito">Tarjeta de Crédito</Label>
+                      <Label htmlFor="credit_card_sales">Tarjeta de Crédito</Label>
                       <Input
-                        id="tarjetaCredito"
-                        name="tarjetaCredito"
+                        id="credit_card_sales"
+                        name="credit_card_sales"
                         type="number"
                         min="0"
-                        value={formData.tarjetaCredito || ""}
+                        value={formData.credit_card_sales || ""}
                         onChange={handleNumberChange}
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="tarjetaDebito">Tarjeta de Débito</Label>
+                      <Label htmlFor="debit_card_sales">Tarjeta de Débito</Label>
                       <Input
-                        id="tarjetaDebito"
-                        name="tarjetaDebito"
+                        id="debit_card_sales"
+                        name="debit_card_sales"
                         type="number"
                         min="0"
-                        value={formData.tarjetaDebito || ""}
+                        value={formData.debit_card_sales || ""}
                         onChange={handleNumberChange}
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="transferencia">Transferencia</Label>
+                      <Label htmlFor="transfer_sales">Transferencia</Label>
                       <Input
-                        id="transferencia"
-                        name="transferencia"
+                        id="transfer_sales"
+                        name="transfer_sales"
                         type="number"
                         min="0"
-                        value={formData.transferencia || ""}
+                        value={formData.transfer_sales || ""}
                         onChange={handleNumberChange}
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="mercadoPago">MercadoPago</Label>
+                      <Label htmlFor="mercado_pago_sales">MercadoPago</Label>
                       <Input
-                        id="mercadoPago"
-                        name="mercadoPago"
+                        id="mercado_pago_sales"
+                        name="mercado_pago_sales"
                         type="number"
                         min="0"
-                        value={formData.mercadoPago || ""}
+                        value={formData.mercado_pago_sales || ""}
                         onChange={handleNumberChange}
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="otros">Otros métodos</Label>
+                      <Label htmlFor="other_sales">Otros métodos</Label>
                       <Input
-                        id="otros"
-                        name="otros"
+                        id="other_sales"
+                        name="other_sales"
                         type="number"
                         min="0"
-                        value={formData.otros || ""}
+                        value={formData.other_sales || ""}
                         onChange={handleNumberChange}
                       />
                     </div>
@@ -654,7 +776,7 @@ export default function CierreCajaPage() {
                     <div className="pt-4 border-t">
                       <div className="flex justify-between items-center">
                         <span className="font-medium">Total Ventas:</span>
-                        <span className="text-xl font-bold">${formData.ventasTotales.toLocaleString()}</span>
+                        <span className="text-xl font-bold">${formData.total_sales.toLocaleString()}</span>
                       </div>
                     </div>
                   </CardContent>
@@ -678,121 +800,121 @@ export default function CierreCajaPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-4">
                       <div className="space-y-2">
-                        <Label htmlFor="b1000">Billetes de $1000</Label>
+                        <Label htmlFor="bills_1000">Billetes de $1000</Label>
                         <div className="flex items-center space-x-2">
                           <Input
-                            id="b1000"
-                            name="b1000"
+                            id="bills_1000"
+                            name="bills_1000"
                             type="number"
                             min="0"
-                            value={formData.b1000 || ""}
+                            value={formData.bills_1000 || ""}
                             onChange={handleNumberChange}
                           />
-                          <span className="text-sm font-medium">= ${formData.b1000 * 1000}</span>
+                          <span className="text-sm font-medium">= ${formData.bills_1000 * 1000}</span>
                         </div>
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="b500">Billetes de $500</Label>
+                        <Label htmlFor="bills_500">Billetes de $500</Label>
                         <div className="flex items-center space-x-2">
                           <Input
-                            id="b500"
-                            name="b500"
+                            id="bills_500"
+                            name="bills_500"
                             type="number"
                             min="0"
-                            value={formData.b500 || ""}
+                            value={formData.bills_500 || ""}
                             onChange={handleNumberChange}
                           />
-                          <span className="text-sm font-medium">= ${formData.b500 * 500}</span>
+                          <span className="text-sm font-medium">= ${formData.bills_500 * 500}</span>
                         </div>
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="b200">Billetes de $200</Label>
+                        <Label htmlFor="bills_200">Billetes de $200</Label>
                         <div className="flex items-center space-x-2">
                           <Input
-                            id="b200"
-                            name="b200"
+                            id="bills_200"
+                            name="bills_200"
                             type="number"
                             min="0"
-                            value={formData.b200 || ""}
+                            value={formData.bills_200 || ""}
                             onChange={handleNumberChange}
                           />
-                          <span className="text-sm font-medium">= ${formData.b200 * 200}</span>
+                          <span className="text-sm font-medium">= ${formData.bills_200 * 200}</span>
                         </div>
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="b100">Billetes de $100</Label>
+                        <Label htmlFor="bills_100">Billetes de $100</Label>
                         <div className="flex items-center space-x-2">
                           <Input
-                            id="b100"
-                            name="b100"
+                            id="bills_100"
+                            name="bills_100"
                             type="number"
                             min="0"
-                            value={formData.b100 || ""}
+                            value={formData.bills_100 || ""}
                             onChange={handleNumberChange}
                           />
-                          <span className="text-sm font-medium">= ${formData.b100 * 100}</span>
+                          <span className="text-sm font-medium">= ${formData.bills_100 * 100}</span>
                         </div>
                       </div>
                     </div>
 
                     <div className="space-y-4">
                       <div className="space-y-2">
-                        <Label htmlFor="b50">Billetes de $50</Label>
+                        <Label htmlFor="bills_50">Billetes de $50</Label>
                         <div className="flex items-center space-x-2">
                           <Input
-                            id="b50"
-                            name="b50"
+                            id="bills_50"
+                            name="bills_50"
                             type="number"
                             min="0"
-                            value={formData.b50 || ""}
+                            value={formData.bills_50 || ""}
                             onChange={handleNumberChange}
                           />
-                          <span className="text-sm font-medium">= ${formData.b50 * 50}</span>
+                          <span className="text-sm font-medium">= ${formData.bills_50 * 50}</span>
                         </div>
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="b20">Billetes de $20</Label>
+                        <Label htmlFor="bills_20">Billetes de $20</Label>
                         <div className="flex items-center space-x-2">
                           <Input
-                            id="b20"
-                            name="b20"
+                            id="bills_20"
+                            name="bills_20"
                             type="number"
                             min="0"
-                            value={formData.b20 || ""}
+                            value={formData.bills_20 || ""}
                             onChange={handleNumberChange}
                           />
-                          <span className="text-sm font-medium">= ${formData.b20 * 20}</span>
+                          <span className="text-sm font-medium">= ${formData.bills_20 * 20}</span>
                         </div>
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="b10">Billetes de $10</Label>
+                        <Label htmlFor="bills_10">Billetes de $10</Label>
                         <div className="flex items-center space-x-2">
                           <Input
-                            id="b10"
-                            name="b10"
+                            id="bills_10"
+                            name="bills_10"
                             type="number"
                             min="0"
-                            value={formData.b10 || ""}
+                            value={formData.bills_10 || ""}
                             onChange={handleNumberChange}
                           />
-                          <span className="text-sm font-medium">= ${formData.b10 * 10}</span>
+                          <span className="text-sm font-medium">= ${formData.bills_10 * 10}</span>
                         </div>
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="monedas">Monedas (total)</Label>
+                        <Label htmlFor="coins">Monedas (total)</Label>
                         <div className="flex items-center space-x-2">
                           <Input
-                            id="monedas"
-                            name="monedas"
+                            id="coins"
+                            name="coins"
                             type="number"
                             min="0"
-                            value={formData.monedas || ""}
+                            value={formData.coins || ""}
                             onChange={handleNumberChange}
                           />
                         </div>
@@ -830,9 +952,9 @@ export default function CierreCajaPage() {
                   <CardContent className="space-y-4">
                     <div className="space-y-4">
                       <div className="space-y-2">
-                        <Label htmlFor="gastoConcepto">Concepto</Label>
+                        <Label htmlFor="concepto">Concepto</Label>
                         <Input
-                          id="gastoConcepto"
+                          id="concepto"
                           name="concepto"
                           value={nuevoGasto.concepto}
                           onChange={handleGastoChange}
@@ -841,9 +963,9 @@ export default function CierreCajaPage() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="gastoMonto">Monto</Label>
+                        <Label htmlFor="monto">Monto</Label>
                         <Input
-                          id="gastoMonto"
+                          id="monto"
                           name="monto"
                           type="number"
                           min="0"
@@ -853,16 +975,27 @@ export default function CierreCajaPage() {
                         />
                       </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="gastoComprobante">Número de Comprobante</Label>
-                        <Input
-                          id="gastoComprobante"
-                          name="numeroComprobante"
-                          value={nuevoGasto.numeroComprobante || ""}
-                          onChange={handleGastoChange}
-                          placeholder="Opcional"
+                      <div className="flex items-center space-x-2 py-2">
+                        <Checkbox 
+                          id="tieneComprobante" 
+                          checked={nuevoGasto.tieneComprobante} 
+                          onCheckedChange={handleCheckboxChange} 
                         />
+                        <Label htmlFor="tieneComprobante" className="cursor-pointer">Tiene comprobante</Label>
                       </div>
+
+                      {nuevoGasto.tieneComprobante && (
+                        <div className="space-y-2">
+                          <Label htmlFor="numeroComprobante">Número de Comprobante</Label>
+                          <Input
+                            id="numeroComprobante"
+                            name="numeroComprobante"
+                            value={nuevoGasto.numeroComprobante || ""}
+                            onChange={handleGastoChange}
+                            placeholder="Número de factura o ticket"
+                          />
+                        </div>
+                      )}
 
                       <div className="flex justify-end">
                         <Button type="button" onClick={agregarGasto}>
@@ -885,7 +1018,11 @@ export default function CierreCajaPage() {
                             <div key={gasto.id} className="p-2 grid grid-cols-12 gap-2 items-center">
                               <div className="col-span-5 truncate">{gasto.concepto}</div>
                               <div className="col-span-3">${gasto.monto.toLocaleString()}</div>
-                              <div className="col-span-3 truncate">{gasto.numeroComprobante || "Sin comprobante"}</div>
+                              <div className="col-span-3 truncate">
+                                {gasto.tieneComprobante 
+                                  ? (gasto.numeroComprobante || "Sí") 
+                                  : "No"}
+                              </div>
                               <div className="col-span-1 flex justify-end">
                                 <Button
                                   type="button"
@@ -901,7 +1038,7 @@ export default function CierreCajaPage() {
                         </div>
                         <div className="bg-muted p-2 font-medium flex justify-between">
                           <span>Total Gastos:</span>
-                          <span>${formData.totalGastos.toLocaleString()}</span>
+                          <span>${formData.total_expenses.toLocaleString()}</span>
                         </div>
                       </div>
                     )}
@@ -941,9 +1078,9 @@ export default function CierreCajaPage() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="retiroAutorizado">Autorizado por</Label>
+                        <Label htmlFor="autorizadoPor">Autorizado por</Label>
                         <Input
-                          id="retiroAutorizado"
+                          id="autorizadoPor"
                           name="autorizadoPor"
                           value={nuevoRetiro.autorizadoPor}
                           onChange={handleRetiroChange}
@@ -988,7 +1125,7 @@ export default function CierreCajaPage() {
                         </div>
                         <div className="bg-muted p-2 font-medium flex justify-between">
                           <span>Total Retiros:</span>
-                          <span>${formData.totalRetiros.toLocaleString()}</span>
+                          <span>${formData.total_withdrawals.toLocaleString()}</span>
                         </div>
                       </div>
                     )}
@@ -1019,31 +1156,31 @@ export default function CierreCajaPage() {
                       <div className="space-y-2">
                         <div className="flex justify-between">
                           <span>Ventas en Efectivo:</span>
-                          <span>${formData.efectivo.toLocaleString()}</span>
+                          <span>${formData.cash_sales.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Ventas con Tarjeta de Crédito:</span>
-                          <span>${formData.tarjetaCredito.toLocaleString()}</span>
+                          <span>${formData.credit_card_sales.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Ventas con Tarjeta de Débito:</span>
-                          <span>${formData.tarjetaDebito.toLocaleString()}</span>
+                          <span>${formData.debit_card_sales.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Ventas por Transferencia:</span>
-                          <span>${formData.transferencia.toLocaleString()}</span>
+                          <span>${formData.transfer_sales.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Ventas por MercadoPago:</span>
-                          <span>${formData.mercadoPago.toLocaleString()}</span>
+                          <span>${formData.mercado_pago_sales.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Ventas por Otros Métodos:</span>
-                          <span>${formData.otros.toLocaleString()}</span>
+                          <span>${formData.other_sales.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between font-medium pt-2 border-t">
                           <span>Total Ventas:</span>
-                          <span>${formData.ventasTotales.toLocaleString()}</span>
+                          <span>${formData.total_sales.toLocaleString()}</span>
                         </div>
                       </div>
                     </div>
@@ -1053,27 +1190,27 @@ export default function CierreCajaPage() {
                       <div className="space-y-2">
                         <div className="flex justify-between">
                           <span>Saldo Inicial:</span>
-                          <span>${formData.saldoInicial.toLocaleString()}</span>
+                          <span>${formData.initial_balance.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>+ Ventas en Efectivo:</span>
-                          <span>${formData.efectivo.toLocaleString()}</span>
+                          <span>${formData.cash_sales.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>- Gastos:</span>
-                          <span>${formData.totalGastos.toLocaleString()}</span>
+                          <span>${formData.total_expenses.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>- Retiros:</span>
-                          <span>${formData.totalRetiros.toLocaleString()}</span>
+                          <span>${formData.total_withdrawals.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between font-medium pt-2 border-t">
                           <span>= Saldo Esperado:</span>
-                          <span>${formData.saldoEsperado.toLocaleString()}</span>
+                          <span>${formData.expected_balance.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between font-medium">
                           <span>Saldo Real (contado):</span>
-                          <span>${formData.saldoReal.toLocaleString()}</span>
+                          <span>${formData.actual_balance.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="font-bold">Diferencia:</span>
@@ -1131,11 +1268,11 @@ export default function CierreCajaPage() {
                   {/* Justificación de diferencia */}
                   {Math.abs(diferencia) > 0 && (
                     <div className="space-y-2">
-                      <Label htmlFor="justificacionDiferencia">Justificación de la diferencia</Label>
+                      <Label htmlFor="difference_justification">Justificación de la diferencia</Label>
                       <Textarea
-                        id="justificacionDiferencia"
-                        name="justificacionDiferencia"
-                        value={formData.justificacionDiferencia}
+                        id="difference_justification"
+                        name="difference_justification"
+                        value={formData.difference_justification}
                         onChange={handleInputChange}
                         placeholder="Explique el motivo de la diferencia..."
                         rows={3}
@@ -1166,12 +1303,12 @@ export default function CierreCajaPage() {
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="supervisorPin">PIN de autorización</Label>
+                          <Label htmlFor="supervisor_pin">PIN de autorización</Label>
                           <Input
-                            id="supervisorPin"
-                            name="supervisorPin"
+                            id="supervisor_pin"
+                            name="supervisor_pin"
                             type="password"
-                            value={formData.supervisorPin}
+                            value={formData.supervisor_pin}
                             onChange={handleInputChange}
                             placeholder="PIN del supervisor"
                             required
@@ -1194,6 +1331,48 @@ export default function CierreCajaPage() {
             </TabsContent>
           </Tabs>
         </form>
+
+        {/* Diálogo de confirmación */}
+        <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Confirmar cierre de caja</DialogTitle>
+              <DialogDescription>
+                ¿Estás seguro de que deseas finalizar el cierre de caja? Esta acción no se puede deshacer.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="flex justify-between font-medium">
+                <span>Total Ventas:</span>
+                <span>${formData.total_sales.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between font-medium">
+                <span>Saldo Esperado:</span>
+                <span>${formData.expected_balance.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between font-medium">
+                <span>Saldo Real:</span>
+                <span>${formData.actual_balance.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between font-bold">
+                <span>Diferencia:</span>
+                <span className={diferencia !== 0 ? (diferencia > 0 ? "text-green-600" : "text-red-600") : ""}>
+                  ${diferencia.toLocaleString()}
+                </span>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>
+                <XCircle className="mr-2 h-4 w-4" />
+                Cancelar
+              </Button>
+              <Button onClick={handleSubmit} disabled={isLoading}>
+                <CheckCircle className="mr-2 h-4 w-4" />
+                {isLoading ? "Guardando..." : "Confirmar"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   )

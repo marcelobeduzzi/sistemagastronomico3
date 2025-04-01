@@ -148,17 +148,17 @@ export default function DashboardCajaPage() {
         const aperturas = (aperturasResult.data || []).map(item => ({
           ...item,
           tipo: 'apertura',
-          monto: item.saldo_inicial,
-          responsable: item.responsable,
-          fecha_completa: item.fecha
+          monto: item.initial_amount,
+          responsable: item.responsible,
+          fecha_completa: item.date
         }))
         
         const cierres = (cierresResult.data || []).map(item => ({
           ...item,
           tipo: 'cierre',
-          monto: item.ventas_totales,
-          responsable: item.responsable,
-          fecha_completa: item.fecha
+          monto: item.total_sales,
+          responsable: item.responsible,
+          fecha_completa: item.date
         }))
         
         // Combinar y ordenar por fecha
@@ -425,7 +425,7 @@ export default function DashboardCajaPage() {
                         <TableCell>
                           {operacion.local?.name || locales.find(l => l.id === operacion.local_id)?.name || operacion.local_id}
                         </TableCell>
-                        <TableCell className="capitalize">{operacion.turno}</TableCell>
+                        <TableCell className="capitalize">{operacion.shift || operacion.turno}</TableCell>
                         <TableCell>{renderTipoBadge(operacion.tipo)}</TableCell>
                         <TableCell>{operacion.responsable}</TableCell>
                         <TableCell className="text-right">
