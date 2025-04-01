@@ -2,12 +2,30 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { format, parseISO } from "date-fns"
+import { es } from "date-fns/locale"
 import { DashboardLayout } from "@/app/dashboard-layout"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, BarChart3, PieChart, Calendar } from "lucide-react"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
+import { ArrowLeft, TrendingUp, TrendingDown, AlertTriangle, BarChart3, PieChart, Calendar, Eye, History } from 'lucide-react'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+
+// Lista de locales para filtrar
+const locales = [
+  { id: "all", name: "Todos los locales" },
+  { id: "cabildo", name: "BR Cabildo" },
+  { id: "carranza", name: "BR Carranza" },
+  { id: "pacifico", name: "BR Pacífico" },
+  { id: "lavalle", name: "BR Lavalle" },
+  { id: "rivadavia", name: "BR Rivadavia" },
+  { id: "aguero", name: "BR Aguero" },
+  { id: "dorrego", name: "BR Dorrego" },
+  { id: "dean_dennys", name: "Dean & Dennys" },
+]
 
 // Datos de ejemplo para el dashboard
 const dashboardDataMock = {
@@ -86,44 +104,91 @@ const dashboardDataMock = {
   },
 }
 
-// Lista de locales para filtrar
-const locales = [
-  { id: "all", name: "Todos los locales" },
-  { id: "cabildo", name: "BR Cabildo" },
-  { id: "carranza", name: "BR Carranza" },
-  { id: "pacifico", name: "BR Pacífico" },
-  { id: "lavalle", name: "BR Lavalle" },
-  { id: "rivadavia", name: "BR Rivadavia" },
-  { id: "aguero", name: "BR Aguero" },
-  { id: "dorrego", name: "BR Dorrego" },
-  { id: "dean_dennys", name: "Dean & Dennys" },
-]
-
 export default function DashboardCajaPage() {
   const router = useRouter()
+  const supabase = createClientComponentClient()
   const [isLoading, setIsLoading] = useState(true)
   const [periodo, setPeriodo] = useState("mes")
   const [localId, setLocalId] = useState("all")
   const [dashboardData, setDashboardData] = useState<any>(null)
+  const [operacionesRecientes, setOperacionesRecientes] = useState<any[]>([])
 
   // Cargar datos
   useEffect(() => {
     const fetchData = async () => {
       try {
         setIsLoading(true)
-        // Aquí iría la lógica para cargar datos de la API
-        // Por ahora, usamos datos de ejemplo
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-        setDashboardData(dashboardDataMock)
+        
+        // Cargar alertas desde Supabase
+        const { data: alertasData, error: alertasError } = await supabase
+          .from('cash_register_alerts')
+          .select('*')
+          .eq('status', 'pending')
+        
+        if (alertasError) throw alertasError
+        
+        // Contar alertas críticas
+        const alertasCriticas = alertasData?.filter(a => a.alert_level === 'high').length || 0
+        
+        // Cargar operaciones recientes (últimas 5 aperturas y cierres)
+        const [aperturasResult, cierresResult] = await Promise.all([
+          supabase
+            .from('cash_register_openings')
+            .select('*, local:local_id(*)')
+            .order('created_at', { ascending: false })
+            .limit(5),
+          supabase
+            .from('cash_register_closings')
+            .select('*, local:local_id(*)')
+            .order('created_at', { ascending: false })
+            .limit(5)
+        ])
+        
+        // Procesar operaciones recientes
+        const aperturas = (aperturasResult.data || []).map(item => ({
+          ...item,
+          tipo: 'apertura',
+          monto: item.saldo_inicial,
+          responsable: item.responsable,
+          fecha_completa: item.fecha
+        }))
+        
+        const cierres = (cierresResult.data || []).map(item => ({
+          ...item,
+          tipo: 'cierre',
+          monto: item.ventas_totales,
+          responsable: item.responsable,
+          fecha_completa: item.fecha
+        }))
+        
+        // Combinar y ordenar por fecha
+        const todasOperaciones = [...aperturas, ...cierres]
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .slice(0, 5) // Mostrar solo las 5 más recientes
+        
+        setOperacionesRecientes(todasOperaciones)
+        
+        // Actualizar el estado con datos reales
+        setDashboardData({
+          ...dashboardDataMock, // Mantener otros datos de ejemplo por ahora
+          alertas: {
+            total: alertasData?.length || 0,
+            criticas: alertasCriticas,
+            pendientes: alertasData?.length || 0,
+            cambio: 0, // Esto requeriría comparación con período anterior
+            periodo: periodo
+          }
+        })
       } catch (error) {
         console.error("Error al cargar datos del dashboard:", error)
+        setDashboardData(dashboardDataMock) // Usar datos de ejemplo en caso de error
       } finally {
         setIsLoading(false)
       }
     }
 
     fetchData()
-  }, [periodo, localId])
+  }, [periodo, localId, supabase])
 
   // Formatear moneda
   const formatCurrency = (value: number) => {
@@ -133,6 +198,36 @@ export default function DashboardCajaPage() {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(value)
+  }
+
+  // Formatear fecha
+  const formatFecha = (fechaStr: string) => {
+    try {
+      const fecha = parseISO(fechaStr)
+      return format(fecha, "dd/MM/yyyy", { locale: es })
+    } catch (error) {
+      return fechaStr
+    }
+  }
+
+  // Renderizar badge de tipo de operación
+  const renderTipoBadge = (tipo: string) => {
+    switch (tipo) {
+      case "apertura":
+        return (
+          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+            Apertura
+          </Badge>
+        )
+      case "cierre":
+        return (
+          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+            Cierre
+          </Badge>
+        )
+      default:
+        return <Badge variant="outline">{tipo}</Badge>
+    }
   }
 
   if (!dashboardData) {
@@ -295,6 +390,71 @@ export default function DashboardCajaPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Operaciones Recientes */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Operaciones Recientes</CardTitle>
+            <CardDescription>Últimas aperturas y cierres de caja</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead>Local</TableHead>
+                    <TableHead>Turno</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Responsable</TableHead>
+                    <TableHead className="text-right">Monto</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {operacionesRecientes.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="h-24 text-center">
+                        No hay operaciones recientes
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    operacionesRecientes.map((operacion) => (
+                      <TableRow key={`${operacion.tipo}-${operacion.id}`}>
+                        <TableCell>{formatFecha(operacion.fecha_completa)}</TableCell>
+                        <TableCell>
+                          {operacion.local?.name || locales.find(l => l.id === operacion.local_id)?.name || operacion.local_id}
+                        </TableCell>
+                        <TableCell className="capitalize">{operacion.turno}</TableCell>
+                        <TableCell>{renderTipoBadge(operacion.tipo)}</TableCell>
+                        <TableCell>{operacion.responsable}</TableCell>
+                        <TableCell className="text-right">
+                          ${operacion.monto?.toLocaleString() || '0'}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            title="Ver detalles"
+                            onClick={() => router.push(`/caja/${operacion.tipo === 'apertura' ? 'apertura' : 'cierre'}/${operacion.id}`)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+          <CardFooter className="flex justify-end">
+            <Button variant="outline" onClick={() => router.push('/caja/historial')}>
+              <History className="mr-2 h-4 w-4" />
+              Ver historial completo
+            </Button>
+          </CardFooter>
+        </Card>
 
         {/* Gráficos */}
         <div className="space-y-6">

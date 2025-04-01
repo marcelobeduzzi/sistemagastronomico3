@@ -14,7 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/use-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowLeft, Save, AlertTriangle, Plus, Trash2 } from "lucide-react"
+import { ArrowLeft, Save, AlertTriangle, Plus, Trash2 } from 'lucide-react'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
 // Lista de locales para seleccionar (esto podría venir de una API)
 const locales = [
@@ -48,6 +49,7 @@ interface Retiro {
 
 export default function CierreCajaPage() {
   const router = useRouter()
+  const supabase = createClientComponentClient()
   const [isLoading, setIsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("ventas")
   const [needsSupervisor, setNeedsSupervisor] = useState(false)
@@ -358,9 +360,96 @@ export default function CierreCajaPage() {
     try {
       setIsLoading(true)
 
-      // Aquí iría la lógica para guardar en la base de datos
-      // Por ahora, simulamos una operación exitosa
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+      // 1. Guardar el cierre de caja
+      const cierreData = {
+        local_id: formData.localId,
+        fecha: formData.fecha,
+        turno: formData.turno,
+        responsable: formData.responsable,
+        ventas_totales: formData.ventasTotales,
+        efectivo: formData.efectivo,
+        tarjeta_credito: formData.tarjetaCredito,
+        tarjeta_debito: formData.tarjetaDebito,
+        transferencia: formData.transferencia,
+        mercado_pago: formData.mercadoPago,
+        otros: formData.otros,
+        saldo_inicial: formData.saldoInicial,
+        saldo_esperado: formData.saldoEsperado,
+        saldo_real: formData.saldoReal,
+        diferencia: diferencia,
+        porcentaje_diferencia: porcentajeDiferencia,
+        justificacion_diferencia: formData.justificacionDiferencia,
+        supervisor: needsSupervisor ? formData.supervisor : null,
+        estado: needsSupervisor ? 'pendiente' : 'aprobado',
+        gastos: gastos,
+        retiros: retiros,
+      }
+
+      // Insertar en la base de datos
+      const { data: cierreInsertado, error: cierreError } = await supabase
+        .from('cash_register_closings')
+        .insert(cierreData)
+        .select('id')
+        .single()
+
+      if (cierreError) throw cierreError
+
+      // 2. Generar alertas si es necesario
+      const alertas = []
+
+      // Alerta por diferencia significativa
+      if (Math.abs(porcentajeDiferencia) > 0.5) {
+        const alertLevel = Math.abs(porcentajeDiferencia) > 2 ? 'high' : 'medium'
+        
+        alertas.push({
+          cash_register_id: cierreInsertado.id,
+          type: 'diferencia_caja',
+          alert_level: alertLevel,
+          message: `Diferencia ${diferencia > 0 ? 'positiva' : 'negativa'} de $${Math.abs(diferencia)} (${Math.abs(porcentajeDiferencia).toFixed(2)}%)`,
+          details: JSON.stringify({
+            amount: Math.abs(diferencia),
+            percentage: Math.abs(porcentajeDiferencia),
+            expected: formData.saldoEsperado,
+            actual: formData.saldoReal
+          }),
+          date: new Date().toISOString(),
+          status: 'pending',
+          local_id: formData.localId,
+          local_name: locales.find(l => l.id === formData.localId)?.name || formData.localId,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+      }
+
+      // Alerta por gastos elevados (ejemplo)
+      if (formData.totalGastos > formData.efectivo * 0.1) {
+        alertas.push({
+          cash_register_id: cierreInsertado.id,
+          type: 'gastos_elevados',
+          alert_level: 'medium',
+          message: `Gastos representan más del 10% de las ventas en efectivo`,
+          details: JSON.stringify({
+            amount: formData.totalGastos,
+            percentage: (formData.totalGastos / formData.efectivo) * 100,
+            sales: formData.efectivo
+          }),
+          date: new Date().toISOString(),
+          status: 'pending',
+          local_id: formData.localId,
+          local_name: locales.find(l => l.id === formData.localId)?.name || formData.localId,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+      }
+
+      // Insertar alertas si existen
+      if (alertas.length > 0) {
+        const { error: alertasError } = await supabase
+          .from('cash_register_alerts')
+          .insert(alertas)
+
+        if (alertasError) console.error("Error al generar alertas:", alertasError)
+      }
 
       toast({
         title: "Cierre registrado",
@@ -986,14 +1075,29 @@ export default function CierreCajaPage() {
                           <span>Saldo Real (contado):</span>
                           <span>${formData.saldoReal.toLocaleString()}</span>
                         </div>
-                        <div
-                          className={`flex justify-between font-bold ${diferencia !== 0 ? (diferencia > 0 ? "text-green-600" : "text-red-600") : ""}`}
-                        >
-                          <span>Diferencia:</span>
-                          <span>
-                            ${diferencia.toLocaleString()} (
-                            {diferencia > 0 ? "Sobrante" : diferencia < 0 ? "Faltante" : "Sin diferencia"})
-                          </span>
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold">Diferencia:</span>
+                          <div className="flex items-center gap-2">
+                            <span className={`font-bold ${diferencia !== 0 ? (diferencia > 0 ? "text-green-600" : "text-red-600") : ""}`}>
+                              ${diferencia.toLocaleString()} ({diferencia > 0 ? "Sobrante" : diferencia < 0 ? "Faltante" : "Sin diferencia"})
+                            </span>
+                            
+                            {/* Indicador de semáforo */}
+                            <div className="flex items-center gap-1 ml-2">
+                              <div 
+                                className={`h-3 w-3 rounded-full ${
+                                  Math.abs(porcentajeDiferencia) < 0.5 
+                                    ? "bg-green-500" 
+                                    : Math.abs(porcentajeDiferencia) < 2 
+                                      ? "bg-yellow-500" 
+                                      : "bg-red-500"
+                                }`} 
+                              />
+                              <span className="text-xs text-muted-foreground">
+                                {Math.abs(porcentajeDiferencia).toFixed(1)}%
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
