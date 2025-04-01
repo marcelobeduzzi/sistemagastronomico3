@@ -2,22 +2,20 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { format, parseISO } from "date-fns"
-import { es } from "date-fns/locale"
+import { format } from "date-fns"
 import { DashboardLayout } from "@/app/dashboard-layout"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { toast } from "@/components/ui/use-toast"
-import { ArrowLeft, Search, Eye, ArrowUpDown } from 'lucide-react'
+import { ArrowLeft, Search, FileDown, Eye } from 'lucide-react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { Badge } from "@/components/ui/badge"
 
-// Lista de locales para filtrar
+// Lista de locales para seleccionar
 const locales = [
-  { id: "all", name: "Todos los locales" },
   { id: "cabildo", name: "BR Cabildo" },
   { id: "carranza", name: "BR Carranza" },
   { id: "pacifico", name: "BR Pacífico" },
@@ -28,192 +26,149 @@ const locales = [
   { id: "dean_dennys", name: "Dean & Dennys" },
 ]
 
-// Meses para filtrar
-const meses = [
-  { value: "all", label: "Todos los meses" },
-  { value: "1", label: "Enero" },
-  { value: "2", label: "Febrero" },
-  { value: "3", label: "Marzo" },
-  { value: "4", label: "Abril" },
-  { value: "5", label: "Mayo" },
-  { value: "6", label: "Junio" },
-  { value: "7", label: "Julio" },
-  { value: "8", label: "Agosto" },
-  { value: "9", label: "Septiembre" },
-  { value: "10", label: "Octubre" },
-  { value: "11", label: "Noviembre" },
-  { value: "12", label: "Diciembre" },
-]
-
-// Años para filtrar (últimos 5 años)
-const currentYear = new Date().getFullYear()
-const años = [
-  { value: "all", label: "Todos los años" },
-  ...Array.from({ length: 5 }, (_, i) => ({
-    value: (currentYear - i).toString(),
-    label: (currentYear - i).toString(),
-  })),
-]
+// Interfaz para los cierres de caja
+interface CierreCaja {
+  id: string
+  local_id: string
+  local_name: string
+  date: string
+  shift: string
+  responsible: string
+  supervisor: string | null
+  total_sales: number
+  cash_sales: number
+  credit_card_sales: number
+  debit_card_sales: number
+  transfer_sales: number
+  mercado_pago_sales: number
+  other_sales: number
+  initial_balance: number
+  total_expenses: number
+  total_withdrawals: number
+  expected_balance: number
+  actual_balance: number
+  difference: number
+  difference_percentage: number
+  status: string
+  has_alert: boolean
+  created_at: string
+}
 
 export default function HistorialCajaPage() {
   const router = useRouter()
   const supabase = createClientComponentClient()
-  const [isLoading, setIsLoading] = useState(true)
-  const [operaciones, setOperaciones] = useState<any[]>([])
-  const [searchTerm, setSearchTerm] = useState("")
-  const [filterLocal, setFilterLocal] = useState("all")
-  const [filterTipo, setFilterTipo] = useState("all")
-  const [filterMes, setFilterMes] = useState("all")
-  const [filterAño, setFilterAño] = useState(currentYear.toString())
-  const [sortConfig, setSortConfig] = useState<{
-    key: string
-    direction: "ascending" | "descending"
-  }>({ key: "fecha", direction: "descending" })
+  const [isLoading, setIsLoading] = useState(false)
+  const [cierres, setCierres] = useState<CierreCaja[]>([])
+  const [filtros, setFiltros] = useState({
+    local_id: "",
+    fecha_desde: format(new Date(new Date().setDate(new Date().getDate() - 30)), "yyyy-MM-dd"),
+    fecha_hasta: format(new Date(), "yyyy-MM-dd"),
+    turno: "",
+    estado: "",
+  })
 
-  // Cargar operaciones
+  // Cargar cierres de caja
   useEffect(() => {
-    const fetchOperaciones = async () => {
+    const fetchCierres = async () => {
       try {
         setIsLoading(true)
         
-        // Construir filtros de fecha
-        let fechaDesde, fechaHasta
-        
-        if (filterAño !== "all") {
-          if (filterMes !== "all") {
-            // Filtrar por mes y año específicos
-            const mes = parseInt(filterMes, 10)
-            fechaDesde = new Date(parseInt(filterAño, 10), mes - 1, 1).toISOString()
-            fechaHasta = new Date(parseInt(filterAño, 10), mes, 0).toISOString()
-          } else {
-            // Filtrar solo por año
-            fechaDesde = new Date(parseInt(filterAño, 10), 0, 1).toISOString()
-            fechaHasta = new Date(parseInt(filterAño, 10), 11, 31).toISOString()
-          }
-        }
-        
-        // Consultar aperturas
-        let aperturasPromise = supabase
-          .from('cash_register_openings')
-          .select('*, local:local_id(*)')
-        
-        // Consultar cierres
-        let cierresPromise = supabase
+        let query = supabase
           .from('cash_register_closings')
-          .select('*, local:local_id(*)')
+          .select('*')
+          .order('date', { ascending: false })
+          .order('created_at', { ascending: false })
         
-        // Aplicar filtros comunes
-        if (filterLocal !== "all") {
-          aperturasPromise = aperturasPromise.eq('local_id', filterLocal)
-          cierresPromise = cierresPromise.eq('local_id', filterLocal)
+        // Aplicar filtros
+        if (filtros.local_id) {
+          query = query.eq('local_id', filtros.local_id)
         }
         
-        // Aplicar filtros de fecha
-        if (fechaDesde && fechaHasta) {
-          aperturasPromise = aperturasPromise.gte('date', fechaDesde).lte('date', fechaHasta)
-          cierresPromise = cierresPromise.gte('date', fechaDesde).lte('date', fechaHasta)
+        if (filtros.fecha_desde) {
+          query = query.gte('date', filtros.fecha_desde)
         }
         
-        // Ejecutar consultas en paralelo
-        let [aperturasResult, cierresResult] = await Promise.all([
-          filterTipo === "cierre" ? { data: [] } : aperturasPromise  = await Promise.all([
-          filterTipo === "cierre" ? { data: [] } : aperturasPromise,
-          filterTipo === "apertura" ? { data: [] } : cierresPromise
-        ])
+        if (filtros.fecha_hasta) {
+          query = query.lte('date', filtros.fecha_hasta)
+        }
         
-        // Procesar resultados
-        const aperturas = (aperturasResult.data || []).map(item => ({
-          ...item,
-          tipo: 'apertura',
-          monto: item.initial_amount,
-          responsable: item.responsible,
-          fecha_completa: item.date
-        }))
+        if (filtros.turno) {
+          query = query.eq('shift', filtros.turno)
+        }
         
-        const cierres = (cierresResult.data || []).map(item => ({
-          ...item,
-          tipo: 'cierre',
-          monto: item.total_sales,
-          responsable: item.responsible,
-          fecha_completa: item.date
-        }))
+        if (filtros.estado) {
+          query = query.eq('status', filtros.estado)
+        }
         
-        // Combinar resultados
-        let todasOperaciones = [...aperturas, ...cierres]
+        const { data, error } = await query
         
-        // Ordenar
-        todasOperaciones.sort((a, b) => {
-          const dateA = new Date(a.fecha_completa).getTime()
-          const dateB = new Date(b.fecha_completa).getTime()
-          
-          if (sortConfig.direction === 'ascending') {
-            return dateA - dateB
-          } else {
-            return dateB - dateA
-          }
-        })
+        if (error) throw error
         
-        setOperaciones(todasOperaciones)
+        setCierres(data || [])
       } catch (error) {
-        console.error("Error al cargar operaciones:", error)
-        toast({
-          title: "Error",
-          description: "No se pudieron cargar las operaciones",
-          variant: "destructive",
-        })
+        console.error("Error al cargar cierres de caja:", error)
       } finally {
         setIsLoading(false)
       }
     }
+    
+    fetchCierres()
+  }, [supabase, filtros])
 
-    fetchOperaciones()
-  }, [filterLocal, filterTipo, filterMes, filterAño, sortConfig, supabase])
-
-  // Función para ordenar
-  const requestSort = (key: string) => {
-    let direction: "ascending" | "descending" = "ascending"
-    if (sortConfig.key === key && sortConfig.direction === "ascending") {
-      direction = "descending"
-    }
-    setSortConfig({ key, direction })
+  // Manejar cambios en los filtros
+  const handleFiltroChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target
+    setFiltros((prev) => ({
+      ...prev,
+      [name]: value,
+    }))
   }
 
-  // Filtrar operaciones por término de búsqueda
-  const filteredOperaciones = operaciones.filter((operacion) => {
-    return (
-      operacion.responsable?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      operacion.local?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      operacion.shift?.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  })
-
-  // Formatear fecha
-  const formatFecha = (fechaStr: string) => {
-    try {
-      const fecha = parseISO(fechaStr)
-      return format(fecha, "dd/MM/yyyy", { locale: es })
-    } catch (error) {
-      return fechaStr
-    }
+  // Manejar cambios en selects
+  const handleSelectChange = (name: string, value: string) => {
+    setFiltros((prev) => ({
+      ...prev,
+      [name]: value,
+    }))
   }
 
-  // Renderizar badge de tipo de operación
-  const renderTipoBadge = (tipo: string) => {
-    switch (tipo) {
-      case "apertura":
-        return (
-          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-            Apertura
-          </Badge>
-        )
-      case "cierre":
-        return (
-          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-            Cierre
-          </Badge>
-        )
+  // Aplicar filtros
+  const aplicarFiltros = () => {
+    // Los filtros se aplican automáticamente en el useEffect
+  }
+
+  // Resetear filtros
+  const resetearFiltros = () => {
+    setFiltros({
+      local_id: "",
+      fecha_desde: format(new Date(new Date().setDate(new Date().getDate() - 30)), "yyyy-MM-dd"),
+      fecha_hasta: format(new Date(), "yyyy-MM-dd"),
+      turno: "",
+      estado: "",
+    })
+  }
+
+  // Ver detalle de un cierre
+  const verDetalle = (id: string) => {
+    router.push(`/caja/historial/${id}`)
+  }
+
+  // Exportar a Excel (simulado)
+  const exportarExcel = () => {
+    alert("Funcionalidad de exportación a Excel en desarrollo")
+  }
+
+  // Obtener color de badge según estado
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'aprobado':
+        return 'bg-green-100 text-green-800'
+      case 'pendiente':
+        return 'bg-yellow-100 text-yellow-800'
+      case 'rechazado':
+        return 'bg-red-100 text-red-800'
       default:
-        return <Badge variant="outline">{tipo}</Badge>
+        return 'bg-gray-100 text-gray-800'
     }
   }
 
@@ -221,7 +176,7 @@ export default function HistorialCajaPage() {
     <DashboardLayout isLoading={isLoading}>
       <div className="container mx-auto py-6">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-bold">Historial de Operaciones</h1>
+          <h1 className="text-3xl font-bold">Historial de Cierres de Caja</h1>
           <Button variant="outline" onClick={() => router.push("/caja")}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Volver
@@ -229,122 +184,160 @@ export default function HistorialCajaPage() {
         </div>
 
         <Card className="mb-6">
-          <CardContent className="pt-6">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <CardHeader>
+            <CardTitle>Filtros</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="local_id">Local</Label>
+                <Select
+                  value={filtros.local_id}
+                  onValueChange={(value) => handleSelectChange("local_id", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos los locales" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Todos los locales</SelectItem>
+                    {locales.map((local) => (
+                      <SelectItem key={local.id} value={local.id}>
+                        {local.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="fecha_desde">Desde</Label>
                 <Input
-                  placeholder="Buscar por responsable o local..."
-                  className="pl-8"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  id="fecha_desde"
+                  name="fecha_desde"
+                  type="date"
+                  value={filtros.fecha_desde}
+                  onChange={handleFiltroChange}
                 />
               </div>
-              
-              <Select value={filterLocal} onValueChange={setFilterLocal}>
-                <SelectTrigger className="w-full md:w-[200px]">
-                  <SelectValue placeholder="Filtrar por local" />
-                </SelectTrigger>
-                <SelectContent>
-                  {locales.map((local) => (
-                    <SelectItem key={local.id} value={local.id}>
-                      {local.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              
-              <Select value={filterTipo} onValueChange={setFilterTipo}>
-                <SelectTrigger className="w-full md:w-[200px]">
-                  <SelectValue placeholder="Tipo de operación" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas las operaciones</SelectItem>
-                  <SelectItem value="apertura">Aperturas</SelectItem>
-                  <SelectItem value="cierre">Cierres</SelectItem>
-                </SelectContent>
-              </Select>
-              
-              <Select value={filterMes} onValueChange={setFilterMes}>
-                <SelectTrigger className="w-full md:w-[200px]">
-                  <SelectValue placeholder="Mes" />
-                </SelectTrigger>
-                <SelectContent>
-                  {meses.map((mes) => (
-                    <SelectItem key={mes.value} value={mes.value}>
-                      {mes.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              
-              <Select value={filterAño} onValueChange={setFilterAño}>
-                <SelectTrigger className="w-full md:w-[200px]">
-                  <SelectValue placeholder="Año" />
-                </SelectTrigger>
-                <SelectContent>
-                  {años.map((año) => (
-                    <SelectItem key={año.value} value={año.value}>
-                      {año.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+
+              <div className="space-y-2">
+                <Label htmlFor="fecha_hasta">Hasta</Label>
+                <Input
+                  id="fecha_hasta"
+                  name="fecha_hasta"
+                  type="date"
+                  value={filtros.fecha_hasta}
+                  onChange={handleFiltroChange}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="turno">Turno</Label>
+                <Select
+                  value={filtros.turno}
+                  onValueChange={(value) => handleSelectChange("turno", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos los turnos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Todos los turnos</SelectItem>
+                    <SelectItem value="mañana">Mañana</SelectItem>
+                    <SelectItem value="tarde">Tarde</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="estado">Estado</Label>
+                <Select
+                  value={filtros.estado}
+                  onValueChange={(value) => handleSelectChange("estado", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos los estados" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Todos los estados</SelectItem>
+                    <SelectItem value="aprobado">Aprobado</SelectItem>
+                    <SelectItem value="pendiente">Pendiente</SelectItem>
+                    <SelectItem value="rechazado">Rechazado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="outline" onClick={resetearFiltros}>
+                Resetear
+              </Button>
+              <Button onClick={aplicarFiltros}>
+                <Search className="mr-2 h-4 w-4" />
+                Aplicar Filtros
+              </Button>
             </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Listado de Operaciones</CardTitle>
-            <CardDescription>
-              Historial de aperturas y cierres de caja
-            </CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Resultados</CardTitle>
+            <Button variant="outline" onClick={exportarExcel}>
+              <FileDown className="mr-2 h-4 w-4" />
+              Exportar a Excel
+            </Button>
           </CardHeader>
           <CardContent>
             <div className="rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="cursor-pointer" onClick={() => requestSort("fecha")}>
-                      Fecha
-                      {sortConfig.key === "fecha" && <ArrowUpDown className="ml-2 h-4 w-4 inline" />}
-                    </TableHead>
+                    <TableHead>Fecha</TableHead>
                     <TableHead>Local</TableHead>
                     <TableHead>Turno</TableHead>
-                    <TableHead>Tipo</TableHead>
                     <TableHead>Responsable</TableHead>
-                    <TableHead className="text-right">Monto</TableHead>
+                    <TableHead className="text-right">Ventas Totales</TableHead>
+                    <TableHead className="text-right">Diferencia</TableHead>
+                    <TableHead>Estado</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredOperaciones.length === 0 ? (
+                  {cierres.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="h-24 text-center">
-                        No se encontraron operaciones
+                      <TableCell colSpan={8} className="text-center py-4">
+                        No se encontraron registros
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredOperaciones.map((operacion) => (
-                      <TableRow key={`${operacion.tipo}-${operacion.id}`}>
-                        <TableCell>{formatFecha(operacion.fecha_completa)}</TableCell>
+                    cierres.map((cierre) => (
+                      <TableRow key={cierre.id}>
+                        <TableCell>{cierre.date}</TableCell>
+                        <TableCell>{cierre.local_name}</TableCell>
                         <TableCell>
-                          {operacion.local?.name || locales.find(l => l.id === operacion.local_id)?.name || operacion.local_id}
+                          {cierre.shift === 'mañana' ? 'Mañana' : cierre.shift === 'tarde' ? 'Tarde' : cierre.shift}
                         </TableCell>
-                        <TableCell className="capitalize">{operacion.shift || operacion.turno}</TableCell>
-                        <TableCell>{renderTipoBadge(operacion.tipo)}</TableCell>
-                        <TableCell>{operacion.responsable}</TableCell>
+                        <TableCell>{cierre.responsible}</TableCell>
+                        <TableCell className="text-right">${cierre.total_sales.toLocaleString()}</TableCell>
                         <TableCell className="text-right">
-                          ${operacion.monto?.toLocaleString() || '0'}
+                          <span className={cierre.difference !== 0 ? (cierre.difference > 0 ? "text-green-600" : "text-red-600") : ""}>
+                            ${cierre.difference.toLocaleString()}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={getStatusColor(cierre.status)}>
+                            {cierre.status === 'aprobado' ? 'Aprobado' : 
+                             cierre.status === 'pendiente' ? 'Pendiente' : 
+                             cierre.status === 'rechazado' ? 'Rechazado' : cierre.status}
+                          </Badge>
+                          {cierre.has_alert && (
+                            <Badge className="ml-2 bg-red-100 text-red-800">
+                              Alerta
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            title="Ver detalles"
-                            onClick={() => router.push(`/caja/${operacion.tipo === 'apertura' ? 'apertura' : 'cierre'}/${operacion.id}`)}
-                          >
+                          <Button variant="ghost" size="icon" onClick={() => verDetalle(cierre.id)}>
                             <Eye className="h-4 w-4" />
                           </Button>
                         </TableCell>
