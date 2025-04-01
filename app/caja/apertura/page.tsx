@@ -14,9 +14,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/use-toast"
-import { ArrowLeft, Save, AlertTriangle } from "lucide-react"
+import { ArrowLeft, Save, AlertTriangle } from 'lucide-react'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
-// Lista de locales para seleccionar (esto podría venir de una API)
+// Lista de locales para seleccionar
 const locales = [
   { id: "cabildo", name: "BR Cabildo" },
   { id: "carranza", name: "BR Carranza" },
@@ -30,49 +31,71 @@ const locales = [
 
 export default function AperturaCajaPage() {
   const router = useRouter()
+  const supabase = createClientComponentClient()
   const [isLoading, setIsLoading] = useState(false)
   const [needsSupervisor, setNeedsSupervisor] = useState(false)
   const [totalCalculado, setTotalCalculado] = useState(0)
+  const [existingApertura, setExistingApertura] = useState(false)
 
   // Estado para los datos de apertura
   const [formData, setFormData] = useState({
-    localId: "",
-    fecha: format(new Date(), "yyyy-MM-dd"),
-    turno: "mañana",
-    responsable: "",
+    local_id: "",
+    local_name: "",
+    date: format(new Date(), "yyyy-MM-dd"),
+    shift: "mañana",
+    responsible: "",
     supervisor: "",
-    supervisorPin: "",
+    supervisor_pin: "",
 
     // Desglose de billetes
-    b1000: 0,
-    b500: 0,
-    b200: 0,
-    b100: 0,
-    b50: 0,
-    b20: 0,
-    b10: 0,
-    monedas: 0,
+    bills_1000: 0,
+    bills_500: 0,
+    bills_200: 0,
+    bills_100: 0,
+    bills_50: 0,
+    bills_20: 0,
+    bills_10: 0,
+    coins: 0,
 
     // Verificaciones
-    posOperativo: true,
-    impresoraOperativa: true,
-    observaciones: "",
+    pos_operational: true,
+    printer_operational: true,
+    observations: "",
+    
+    // Estado
+    status: "pendiente",
+    has_closing: false,
+    initial_amount: 0
   })
 
   // Calcular el total basado en el desglose de billetes
   useEffect(() => {
     const total =
-      formData.b1000 * 1000 +
-      formData.b500 * 500 +
-      formData.b200 * 200 +
-      formData.b100 * 100 +
-      formData.b50 * 50 +
-      formData.b20 * 20 +
-      formData.b10 * 10 +
-      formData.monedas
+      formData.bills_1000 * 1000 +
+      formData.bills_500 * 500 +
+      formData.bills_200 * 200 +
+      formData.bills_100 * 100 +
+      formData.bills_50 * 50 +
+      formData.bills_20 * 20 +
+      formData.bills_10 * 10 +
+      formData.coins
 
     setTotalCalculado(total)
-  }, [formData])
+    
+    setFormData(prev => ({
+      ...prev,
+      initial_amount: total
+    }))
+  }, [
+    formData.bills_1000,
+    formData.bills_500,
+    formData.bills_200,
+    formData.bills_100,
+    formData.bills_50,
+    formData.bills_20,
+    formData.bills_10,
+    formData.coins
+  ])
 
   // Manejar cambios en los campos del formulario
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -106,11 +129,54 @@ export default function AperturaCajaPage() {
       ...prev,
       [name]: value,
     }))
+    
+    // Si cambia el local, actualizar el nombre del local
+    if (name === "local_id") {
+      const selectedLocal = locales.find((local) => local.id === value)
+      if (selectedLocal) {
+        setFormData((prev) => ({
+          ...prev,
+          local_name: selectedLocal.name,
+        }))
+      }
+      
+      // Verificar si ya existe una apertura para este local y turno
+      checkExistingApertura(value, formData.date, formData.shift)
+    }
+    
+    // Si cambia la fecha o el turno, verificar si ya existe una apertura
+    if (name === "date" || name === "shift") {
+      checkExistingApertura(formData.local_id, name === "date" ? value : formData.date, name === "shift" ? value : formData.shift)
+    }
+  }
+
+  // Verificar si ya existe una apertura para este turno
+  const checkExistingApertura = async (localId: string, date: string, shift: string) => {
+    if (!localId || !date || !shift) return
+    
+    try {
+      const { data, error } = await supabase
+        .from('cash_register_openings')
+        .select('*')
+        .eq('local_id', localId)
+        .eq('date', date)
+        .eq('shift', shift)
+        .eq('has_closing', false)
+        .single()
+      
+      if (error && error.code !== 'PGRST116') {
+        console.error("Error al verificar apertura existente:", error)
+      }
+      
+      setExistingApertura(!!data)
+    } catch (error) {
+      console.error("Error al verificar apertura existente:", error)
+    }
   }
 
   // Validar el formulario
   const validateForm = () => {
-    if (!formData.localId) {
+    if (!formData.local_id) {
       toast({
         title: "Error",
         description: "Debes seleccionar un local",
@@ -119,7 +185,7 @@ export default function AperturaCajaPage() {
       return false
     }
 
-    if (!formData.responsable) {
+    if (!formData.responsible) {
       toast({
         title: "Error",
         description: "Debes ingresar el nombre del responsable",
@@ -128,7 +194,7 @@ export default function AperturaCajaPage() {
       return false
     }
 
-    if (needsSupervisor && (!formData.supervisor || !formData.supervisorPin)) {
+    if (needsSupervisor && (!formData.supervisor || !formData.supervisor_pin)) {
       toast({
         title: "Error",
         description: "Se requiere autorización del supervisor",
@@ -141,6 +207,15 @@ export default function AperturaCajaPage() {
       toast({
         title: "Error",
         description: "El monto inicial debe ser mayor a cero",
+        variant: "destructive",
+      })
+      return false
+    }
+    
+    if (existingApertura) {
+      toast({
+        title: "Error",
+        description: "Ya existe una apertura para este local, fecha y turno",
         variant: "destructive",
       })
       return false
@@ -158,9 +233,46 @@ export default function AperturaCajaPage() {
     try {
       setIsLoading(true)
 
-      // Aquí iría la lógica para guardar en la base de datos
-      // Por ahora, simulamos una operación exitosa
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+      // Preparar datos para guardar
+      const aperturaData = {
+        local_id: formData.local_id,
+        local_name: formData.local_name,
+        date: formData.date,
+        shift: formData.shift,
+        responsible: formData.responsible,
+        supervisor: needsSupervisor ? formData.supervisor : null,
+        supervisor_pin: needsSupervisor ? formData.supervisor_pin : null,
+        
+        // Desglose de billetes
+        bills_1000: formData.bills_1000,
+        bills_500: formData.bills_500,
+        bills_200: formData.bills_200,
+        bills_100: formData.bills_100,
+        bills_50: formData.bills_50,
+        bills_20: formData.bills_20,
+        bills_10: formData.bills_10,
+        coins: formData.coins,
+        
+        // Verificaciones
+        pos_operational: formData.pos_operational,
+        printer_operational: formData.printer_operational,
+        observations: formData.observations,
+        
+        // Estado
+        status: needsSupervisor ? 'pendiente' : 'aprobado',
+        has_closing: false,
+        initial_amount: totalCalculado,
+        
+        // Timestamp
+        created_at: new Date().toISOString()
+      }
+      
+      // Insertar en la base de datos
+      const { error } = await supabase
+        .from('cash_register_openings')
+        .insert(aperturaData)
+      
+      if (error) throw error
 
       toast({
         title: "Apertura registrada",
@@ -180,16 +292,6 @@ export default function AperturaCajaPage() {
       setIsLoading(false)
     }
   }
-
-  // Verificar si ya existe una apertura para este turno
-  useEffect(() => {
-    const checkExistingApertura = async () => {
-      // Aquí iría la lógica para verificar en la base de datos
-      // Por ahora, simulamos que no hay aperturas existentes
-    }
-
-    checkExistingApertura()
-  }, [formData.localId, formData.fecha, formData.turno])
 
   return (
     <DashboardLayout isLoading={isLoading}>
@@ -212,11 +314,11 @@ export default function AperturaCajaPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="localId">Local</Label>
+                  <Label htmlFor="local_id">Local</Label>
                   <Select
-                    name="localId"
-                    value={formData.localId}
-                    onValueChange={(value) => handleSelectChange("localId", value)}
+                    name="local_id"
+                    value={formData.local_id}
+                    onValueChange={(value) => handleSelectChange("local_id", value)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Seleccionar local" />
@@ -232,16 +334,23 @@ export default function AperturaCajaPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="fecha">Fecha</Label>
-                  <Input id="fecha" name="fecha" type="date" value={formData.fecha} onChange={handleInputChange} />
+                  <Label htmlFor="date">Fecha</Label>
+                  <Input 
+                    id="date" 
+                    name="date" 
+                    type="date" 
+                    value={formData.date} 
+                    onChange={handleInputChange}
+                    onBlur={(e) => handleSelectChange("date", e.target.value)}
+                  />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="turno">Turno</Label>
+                  <Label htmlFor="shift">Turno</Label>
                   <Select
-                    name="turno"
-                    value={formData.turno}
-                    onValueChange={(value) => handleSelectChange("turno", value)}
+                    name="shift"
+                    value={formData.shift}
+                    onValueChange={(value) => handleSelectChange("shift", value)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Seleccionar turno" />
@@ -253,12 +362,24 @@ export default function AperturaCajaPage() {
                   </Select>
                 </div>
 
+                {existingApertura && (
+                  <div className="bg-red-50 border border-red-200 rounded-md p-3 flex items-start">
+                    <AlertTriangle className="h-5 w-5 text-red-500 mr-2 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-red-700">
+                      <p className="font-medium">Apertura existente</p>
+                      <p>
+                        Ya existe una apertura para este local, fecha y turno. Por favor, selecciona otra combinación.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-2">
-                  <Label htmlFor="responsable">Responsable de Caja</Label>
+                  <Label htmlFor="responsible">Responsable de Caja</Label>
                   <Input
-                    id="responsable"
-                    name="responsable"
-                    value={formData.responsable}
+                    id="responsible"
+                    name="responsible"
+                    value={formData.responsible}
                     onChange={handleInputChange}
                     placeholder="Nombre del responsable"
                   />
@@ -266,7 +387,9 @@ export default function AperturaCajaPage() {
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="supervisor">Supervisor (opcional)</Label>
+                    <Label htmlFor="supervisor" className="cursor-pointer">
+                      Supervisor (opcional)
+                    </Label>
                     <span className="text-xs text-muted-foreground">{needsSupervisor ? "Requerido" : "Opcional"}</span>
                   </div>
                   <Input
@@ -281,12 +404,12 @@ export default function AperturaCajaPage() {
 
                 {(needsSupervisor || formData.supervisor) && (
                   <div className="space-y-2">
-                    <Label htmlFor="supervisorPin">PIN del Supervisor</Label>
+                    <Label htmlFor="supervisor_pin">PIN del Supervisor</Label>
                     <Input
-                      id="supervisorPin"
-                      name="supervisorPin"
+                      id="supervisor_pin"
+                      name="supervisor_pin"
                       type="password"
-                      value={formData.supervisorPin}
+                      value={formData.supervisor_pin}
                       onChange={handleInputChange}
                       placeholder="PIN de autorización"
                       required={needsSupervisor}
@@ -304,85 +427,85 @@ export default function AperturaCajaPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="b1000">Billetes de $1000</Label>
+                  <Label htmlFor="bills_1000">Billetes de $1000</Label>
                   <div className="flex items-center space-x-2">
                     <Input
-                      id="b1000"
-                      name="b1000"
+                      id="bills_1000"
+                      name="bills_1000"
                       type="number"
                       min="0"
-                      value={formData.b1000 || ""}
+                      value={formData.bills_1000 || ""}
                       onChange={handleNumberChange}
                     />
-                    <span className="text-sm font-medium">= ${formData.b1000 * 1000}</span>
+                    <span className="text-sm font-medium">= ${formData.bills_1000 * 1000}</span>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="b500">Billetes de $500</Label>
+                  <Label htmlFor="bills_500">Billetes de $500</Label>
                   <div className="flex items-center space-x-2">
                     <Input
-                      id="b500"
-                      name="b500"
+                      id="bills_500"
+                      name="bills_500"
                       type="number"
                       min="0"
-                      value={formData.b500 || ""}
+                      value={formData.bills_500 || ""}
                       onChange={handleNumberChange}
                     />
-                    <span className="text-sm font-medium">= ${formData.b500 * 500}</span>
+                    <span className="text-sm font-medium">= ${formData.bills_500 * 500}</span>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="b200">Billetes de $200</Label>
+                  <Label htmlFor="bills_200">Billetes de $200</Label>
                   <div className="flex items-center space-x-2">
                     <Input
-                      id="b200"
-                      name="b200"
+                      id="bills_200"
+                      name="bills_200"
                       type="number"
                       min="0"
-                      value={formData.b200 || ""}
+                      value={formData.bills_200 || ""}
                       onChange={handleNumberChange}
                     />
-                    <span className="text-sm font-medium">= ${formData.b200 * 200}</span>
+                    <span className="text-sm font-medium">= ${formData.bills_200 * 200}</span>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="b100">Billetes de $100</Label>
+                  <Label htmlFor="bills_100">Billetes de $100</Label>
                   <div className="flex items-center space-x-2">
                     <Input
-                      id="b100"
-                      name="b100"
+                      id="bills_100"
+                      name="bills_100"
                       type="number"
                       min="0"
-                      value={formData.b100 || ""}
+                      value={formData.bills_100 || ""}
                       onChange={handleNumberChange}
                     />
-                    <span className="text-sm font-medium">= ${formData.b100 * 100}</span>
+                    <span className="text-sm font-medium">= ${formData.bills_100 * 100}</span>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="b50">Billetes de $50</Label>
+                    <Label htmlFor="bills_50">Billetes de $50</Label>
                     <Input
-                      id="b50"
-                      name="b50"
+                      id="bills_50"
+                      name="bills_50"
                       type="number"
                       min="0"
-                      value={formData.b50 || ""}
+                      value={formData.bills_50 || ""}
                       onChange={handleNumberChange}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="b20">Billetes de $20</Label>
+                    <Label htmlFor="bills_20">Billetes de $20</Label>
                     <Input
-                      id="b20"
-                      name="b20"
+                      id="bills_20"
+                      name="bills_20"
                       type="number"
                       min="0"
-                      value={formData.b20 || ""}
+                      value={formData.bills_20 || ""}
                       onChange={handleNumberChange}
                     />
                   </div>
@@ -390,24 +513,24 @@ export default function AperturaCajaPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="b10">Billetes de $10</Label>
+                    <Label htmlFor="bills_10">Billetes de $10</Label>
                     <Input
-                      id="b10"
-                      name="b10"
+                      id="bills_10"
+                      name="bills_10"
                       type="number"
                       min="0"
-                      value={formData.b10 || ""}
+                      value={formData.bills_10 || ""}
                       onChange={handleNumberChange}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="monedas">Monedas (total)</Label>
+                    <Label htmlFor="coins">Monedas (total)</Label>
                     <Input
-                      id="monedas"
-                      name="monedas"
+                      id="coins"
+                      name="coins"
                       type="number"
                       min="0"
-                      value={formData.monedas || ""}
+                      value={formData.coins || ""}
                       onChange={handleNumberChange}
                     />
                   </div>
@@ -431,29 +554,29 @@ export default function AperturaCajaPage() {
               <CardContent className="space-y-6">
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="posOperativo" className="cursor-pointer">
+                    <Label htmlFor="pos_operational" className="cursor-pointer">
                       Terminal POS operativa
                     </Label>
                     <Switch
-                      id="posOperativo"
-                      checked={formData.posOperativo}
-                      onCheckedChange={(checked) => handleSwitchChange("posOperativo", checked)}
+                      id="pos_operational"
+                      checked={formData.pos_operational}
+                      onCheckedChange={(checked) => handleSwitchChange("pos_operational", checked)}
                     />
                   </div>
 
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="impresoraOperativa" className="cursor-pointer">
+                    <Label htmlFor="printer_operational" className="cursor-pointer">
                       Impresora operativa
                     </Label>
                     <Switch
-                      id="impresoraOperativa"
-                      checked={formData.impresoraOperativa}
-                      onCheckedChange={(checked) => handleSwitchChange("impresoraOperativa", checked)}
+                      id="printer_operational"
+                      checked={formData.printer_operational}
+                      onCheckedChange={(checked) => handleSwitchChange("printer_operational", checked)}
                     />
                   </div>
                 </div>
 
-                {(!formData.posOperativo || !formData.impresoraOperativa) && (
+                {(!formData.pos_operational || !formData.printer_operational) && (
                   <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3 flex items-start">
                     <AlertTriangle className="h-5 w-5 text-yellow-500 mr-2 flex-shrink-0 mt-0.5" />
                     <div className="text-sm text-yellow-700">
@@ -467,11 +590,11 @@ export default function AperturaCajaPage() {
                 )}
 
                 <div className="space-y-2">
-                  <Label htmlFor="observaciones">Observaciones</Label>
+                  <Label htmlFor="observations">Observaciones</Label>
                   <Textarea
-                    id="observaciones"
-                    name="observaciones"
-                    value={formData.observaciones}
+                    id="observations"
+                    name="observations"
+                    value={formData.observations}
                     onChange={handleInputChange}
                     placeholder="Ingresa cualquier observación relevante"
                     rows={5}

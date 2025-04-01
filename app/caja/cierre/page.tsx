@@ -493,7 +493,7 @@ export default function CierreCajaPage() {
         status: needsSupervisor ? 'pendiente' : 'aprobado',
         has_alert: Math.abs(porcentajeDiferencia) > 0.5,
         
-        // Estos campos se pueden incluir como JSON si la tabla los acepta
+        // Gastos y retiros como JSON
         expenses: JSON.stringify(gastos),
         withdrawals: JSON.stringify(retiros),
       }
@@ -532,9 +532,10 @@ export default function CierreCajaPage() {
             expected: formData.expected_balance,
             actual: formData.actual_balance
           }),
-          status: 'activa',
+          status: 'pending',
           local_id: formData.local_id,
-          local_name: formData.local_name
+          local_name: formData.local_name,
+          created_at: new Date().toISOString()
         }
 
         const { error: alertaError } = await supabase
@@ -641,6 +642,9 @@ export default function CierreCajaPage() {
                       <Label htmlFor="date">Fecha</Label>
                       <Input 
                         id="date" 
+                        name="date" 
+                        type="date" 
+                        value={formData.date} 
                         name="date" 
                         type="date" 
                         value={formData.date} 

@@ -12,8 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { PlusCircle, Search, FileDown, Eye, AlertTriangle, DollarSign, ArrowUpDown } from "lucide-react"
-import { useAuth } from "@/lib/auth-context"
+import { PlusCircle, Search, FileDown, Eye, AlertTriangle, DollarSign, ArrowUpDown } from 'lucide-react'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
 // Lista de locales para filtrar
 const locales = [
@@ -27,80 +27,9 @@ const locales = [
   { id: "dean_dennys", name: "Dean & Dennys" },
 ]
 
-// Datos de ejemplo para aperturas y cierres
-const aperturasMock = [
-  {
-    id: "ap1",
-    localId: "cabildo",
-    localName: "BR Cabildo",
-    fecha: "2023-05-15",
-    turno: "mañana",
-    responsable: "Juan Pérez",
-    montoInicial: 5000,
-    estado: "aprobado",
-    tieneCierre: true,
-  },
-  {
-    id: "ap2",
-    localId: "carranza",
-    localName: "BR Carranza",
-    fecha: "2023-05-15",
-    turno: "tarde",
-    responsable: "María López",
-    montoInicial: 4500,
-    estado: "aprobado",
-    tieneCierre: false,
-  },
-  {
-    id: "ap3",
-    localId: "pacifico",
-    localName: "BR Pacífico",
-    fecha: "2023-05-14",
-    turno: "mañana",
-    responsable: "Carlos Gómez",
-    montoInicial: 5200,
-    estado: "aprobado",
-    tieneCierre: true,
-  },
-]
-
-const cierresMock = [
-  {
-    id: "ci1",
-    aperturaId: "ap1",
-    localId: "cabildo",
-    localName: "BR Cabildo",
-    fecha: "2023-05-15",
-    turno: "mañana",
-    responsable: "Juan Pérez",
-    ventasTotales: 45000,
-    efectivo: 15000,
-    saldoEsperado: 15000,
-    saldoReal: 14850,
-    diferencia: -150,
-    estado: "aprobado",
-    tieneAlerta: false,
-  },
-  {
-    id: "ci3",
-    aperturaId: "ap3",
-    localId: "pacifico",
-    localName: "BR Pacífico",
-    fecha: "2023-05-14",
-    turno: "mañana",
-    responsable: "Carlos Gómez",
-    ventasTotales: 38500,
-    efectivo: 12000,
-    saldoEsperado: 12000,
-    saldoReal: 11500,
-    diferencia: -500,
-    estado: "pendiente",
-    tieneAlerta: true,
-  },
-]
-
 export default function CajaPage() {
   const router = useRouter()
+  const supabase = createClientComponentClient()
   const [isLoading, setIsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState("home")
   const [searchTerm, setSearchTerm] = useState("")
@@ -108,23 +37,85 @@ export default function CajaPage() {
   const [filterFecha, setFilterFecha] = useState("")
   const [aperturas, setAperturas] = useState<any[]>([])
   const [cierres, setCierres] = useState<any[]>([])
+  const [alertas, setAlertas] = useState<any[]>([])
+  const [summaryData, setSummaryData] = useState({
+    pendingOpenings: 0,
+    pendingClosings: 0,
+    activeAlerts: 0,
+    todaySales: 0,
+  })
   const [sortConfig, setSortConfig] = useState<{
     key: string
     direction: "ascending" | "descending"
   }>({ key: "fecha", direction: "descending" })
-
-  const { user } = useAuth()
 
   // Cargar datos
   useEffect(() => {
     const fetchData = async () => {
       try {
         setIsLoading(true)
-        // Aquí iría la lógica para cargar datos de la API
-        // Por ahora, usamos datos de ejemplo
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-        setAperturas(aperturasMock)
-        setCierres(cierresMock)
+        
+        // Obtener fecha actual para filtrar datos de hoy
+        const today = format(new Date(), "yyyy-MM-dd")
+        
+        // Consultas en paralelo
+        const [aperturasResult, cierresResult, alertasResult, ventasHoyResult] = await Promise.all([
+          // Aperturas
+          supabase
+            .from('cash_register_openings')
+            .select('*')
+            .order('date', { ascending: false }),
+          
+          // Cierres
+          supabase
+            .from('cash_register_closings')
+            .select('*')
+            .order('date', { ascending: false }),
+          
+          // Alertas
+          supabase
+            .from('cash_register_alerts')
+            .select('*')
+            .eq('status', 'pending'),
+          
+          // Ventas de hoy
+          supabase
+            .from('cash_register_closings')
+            .select('total_sales')
+            .eq('date', today)
+        ])
+        
+        if (aperturasResult.error) throw aperturasResult.error
+        if (cierresResult.error) throw cierresResult.error
+        if (alertasResult.error) throw alertasResult.error
+        if (ventasHoyResult.error) throw ventasHoyResult.error
+        
+        // Procesar datos
+        const aperturasData = aperturasResult.data || []
+        const cierresData = cierresResult.data || []
+        const alertasData = alertasResult.data || []
+        
+        // Calcular ventas de hoy
+        const ventasHoy = ventasHoyResult.data?.reduce((sum, item) => sum + (item.total_sales || 0), 0) || 0
+        
+        // Contar aperturas pendientes (sin cierre)
+        const aperturasPendientes = aperturasData.filter(a => !a.has_closing && a.status === 'aprobado').length
+        
+        // Contar cierres pendientes (no aprobados)
+        const cierresPendientes = cierresData.filter(c => c.status === 'pendiente').length
+        
+        // Actualizar estados
+        setAperturas(aperturasData)
+        setCierres(cierresData)
+        setAlertas(alertasData)
+        
+        // Actualizar datos de resumen
+        setSummaryData({
+          pendingOpenings: aperturasPendientes,
+          pendingClosings: cierresPendientes,
+          activeAlerts: alertasData.length,
+          todaySales: ventasHoy
+        })
       } catch (error) {
         console.error("Error al cargar datos:", error)
       } finally {
@@ -133,7 +124,7 @@ export default function CajaPage() {
     }
 
     fetchData()
-  }, [])
+  }, [supabase])
 
   // Función para ordenar
   const requestSort = (key: string) => {
@@ -148,12 +139,12 @@ export default function CajaPage() {
   const filteredAperturas = aperturas
     .filter((apertura) => {
       const matchesSearch =
-        apertura.localName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        apertura.responsable.toLowerCase().includes(searchTerm.toLowerCase())
+        apertura.local_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        apertura.responsible?.toLowerCase().includes(searchTerm.toLowerCase())
 
-      const matchesLocal = filterLocal === "all" || apertura.localId === filterLocal
+      const matchesLocal = filterLocal === "all" || apertura.local_id === filterLocal
 
-      const matchesFecha = !filterFecha || apertura.fecha === filterFecha
+      const matchesFecha = !filterFecha || apertura.date === filterFecha
 
       return matchesSearch && matchesLocal && matchesFecha
     })
@@ -171,12 +162,12 @@ export default function CajaPage() {
   const filteredCierres = cierres
     .filter((cierre) => {
       const matchesSearch =
-        cierre.localName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        cierre.responsable.toLowerCase().includes(searchTerm.toLowerCase())
+        cierre.local_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        cierre.responsible?.toLowerCase().includes(searchTerm.toLowerCase())
 
-      const matchesLocal = filterLocal === "all" || cierre.localId === filterLocal
+      const matchesLocal = filterLocal === "all" || cierre.local_id === filterLocal
 
-      const matchesFecha = !filterFecha || cierre.fecha === filterFecha
+      const matchesFecha = !filterFecha || cierre.date === filterFecha
 
       return matchesSearch && matchesLocal && matchesFecha
     })
@@ -228,14 +219,6 @@ export default function CajaPage() {
 
   // Componente para la página de inicio
   const HomePage = () => {
-    // Datos simulados para el panel de resumen
-    const summaryData = {
-      pendingOpenings: 2,
-      pendingClosings: 3,
-      activeAlerts: 5,
-      todaySales: 125000,
-    }
-
     return (
       <div className="space-y-6">
         {/* Panel de resumen */}
@@ -332,8 +315,39 @@ export default function CajaPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {/* Aquí irían las operaciones recientes */}
-              <p className="text-muted-foreground text-center py-4">No hay operaciones recientes para mostrar</p>
+              {/* Mostrar las últimas 5 operaciones (aperturas o cierres) */}
+              {[...aperturas, ...cierres]
+                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                .slice(0, 5)
+                .map((operacion) => {
+                  const esApertura = 'initial_amount' in operacion
+                  return (
+                    <div key={operacion.id} className="flex items-center justify-between border-b pb-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className={esApertura ? "bg-blue-50 text-blue-700" : "bg-green-50 text-green-700"}>
+                            {esApertura ? "Apertura" : "Cierre"}
+                          </Badge>
+                          <span className="font-medium">{operacion.local_name}</span>
+                        </div>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          {formatFecha(operacion.date)} - {operacion.shift === 'mañana' ? 'Mañana' : 'Tarde'} - {operacion.responsible}
+                        </div>
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => router.push(`/caja/${esApertura ? 'apertura' : 'cierre'}/${operacion.id}`)}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )
+                })}
+              
+              {[...aperturas, ...cierres].length === 0 && (
+                <p className="text-muted-foreground text-center py-4">No hay operaciones recientes para mostrar</p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -422,13 +436,13 @@ export default function CajaPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="cursor-pointer" onClick={() => requestSort("fecha")}>
+                          <TableHead className="cursor-pointer" onClick={() => requestSort("date")}>
                             Fecha
-                            {sortConfig.key === "fecha" && <ArrowUpDown className="ml-2 h-4 w-4 inline" />}
+                            {sortConfig.key === "date" && <ArrowUpDown className="ml-2 h-4 w-4 inline" />}
                           </TableHead>
-                          <TableHead className="cursor-pointer" onClick={() => requestSort("localName")}>
+                          <TableHead className="cursor-pointer" onClick={() => requestSort("local_name")}>
                             Local
-                            {sortConfig.key === "localName" && <ArrowUpDown className="ml-2 h-4 w-4 inline" />}
+                            {sortConfig.key === "local_name" && <ArrowUpDown className="ml-2 h-4 w-4 inline" />}
                           </TableHead>
                           <TableHead>Turno</TableHead>
                           <TableHead>Responsable</TableHead>
@@ -447,124 +461,23 @@ export default function CajaPage() {
                         ) : (
                           filteredAperturas.map((apertura) => (
                             <TableRow key={apertura.id}>
-                              <TableCell>{formatFecha(apertura.fecha)}</TableCell>
-                              <TableCell className="font-medium">{apertura.localName}</TableCell>
-                              <TableCell>{apertura.turno === "mañana" ? "Mañana" : "Tarde"}</TableCell>
-                              <TableCell>{apertura.responsable}</TableCell>
-                              <TableCell className="text-right">${apertura.montoInicial.toLocaleString()}</TableCell>
-                              <TableCell>{renderEstadoBadge(apertura.estado)}</TableCell>
+                              <TableCell>{formatFecha(apertura.date)}</TableCell>
+                              <TableCell className="font-medium">{apertura.local_name}</TableCell>
+                              <TableCell>{apertura.shift === "mañana" ? "Mañana" : "Tarde"}</TableCell>
+                              <TableCell>{apertura.responsible}</TableCell>
+                              <TableCell className="text-right">${apertura.initial_amount?.toLocaleString()}</TableCell>
+                              <TableCell>{renderEstadoBadge(apertura.status)}</TableCell>
                               <TableCell className="text-right">
                                 <div className="flex justify-end gap-2">
-                                  <Button variant="ghost" size="icon" title="Ver detalles">
+                                  <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    title="Ver detalles"
+                                    onClick={() => router.push(`/caja/apertura/${apertura.id}`)}
+                                  >
                                     <Eye className="h-4 w-4" />
                                   </Button>
-                                  {!apertura.tieneCierre && (
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      title="Realizar cierre"
-                                      onClick={() => router.push(`/caja/cierre?aperturaId=${apertura.id}`)}
-                                    >
-                                      <DollarSign className="h-4 w-4" />
-                                    </Button>
-                                  )}
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Tab de Cierres */}
-            <TabsContent value="cierres" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Cierres de Caja</CardTitle>
-                  <CardDescription>Listado de cierres de caja registrados</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="cursor-pointer" onClick={() => requestSort("fecha")}>
-                            Fecha
-                            {sortConfig.key === "fecha" && <ArrowUpDown className="ml-2 h-4 w-4 inline" />}
-                          </TableHead>
-                          <TableHead className="cursor-pointer" onClick={() => requestSort("localName")}>
-                            Local
-                            {sortConfig.key === "localName" && <ArrowUpDown className="ml-2 h-4 w-4 inline" />}
-                          </TableHead>
-                          <TableHead>Turno</TableHead>
-                          <TableHead>Responsable</TableHead>
-                          <TableHead className="text-right">Ventas</TableHead>
-                          <TableHead className="text-right">Diferencia</TableHead>
-                          <TableHead>Estado</TableHead>
-                          <TableHead className="text-right">Acciones</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredCierres.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={8} className="h-24 text-center">
-                              No se encontraron cierres
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          filteredCierres.map((cierre) => (
-                            <TableRow key={cierre.id}>
-                              <TableCell>{formatFecha(cierre.fecha)}</TableCell>
-                              <TableCell className="font-medium">{cierre.localName}</TableCell>
-                              <TableCell>{cierre.turno === "mañana" ? "Mañana" : "Tarde"}</TableCell>
-                              <TableCell>{cierre.responsable}</TableCell>
-                              <TableCell className="text-right">${cierre.ventasTotales.toLocaleString()}</TableCell>
-                              <TableCell className="text-right">
-                                <span
-                                  className={
-                                    cierre.diferencia < 0
-                                      ? "text-red-600"
-                                      : cierre.diferencia > 0
-                                        ? "text-green-600"
-                                        : ""
-                                  }
-                                >
-                                  ${cierre.diferencia.toLocaleString()}
-                                </span>
-                                {cierre.tieneAlerta && (
-                                  <AlertTriangle className="h-4 w-4 text-yellow-500 inline ml-1" />
-                                )}
-                              </TableCell>
-                              <TableCell>{renderEstadoBadge(cierre.estado)}</TableCell>
-                              <TableCell className="text-right">
-                                <div className="flex justify-end gap-2">
-                                  <Button variant="ghost" size="icon" title="Ver detalles">
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
-                                  <Button variant="ghost" size="icon" title="Exportar">
-                                    <FileDown className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-        </div>
-      </div>
-    </DashboardLayout>
-  )
-}
+                                  {
 
 
 

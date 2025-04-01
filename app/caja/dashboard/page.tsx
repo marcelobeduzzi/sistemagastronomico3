@@ -27,83 +27,6 @@ const locales = [
   { id: "dean_dennys", name: "Dean & Dennys" },
 ]
 
-// Datos de ejemplo para el dashboard
-const dashboardDataMock = {
-  ventasTotales: {
-    valor: 1250000,
-    cambio: 8.5,
-    periodo: "mes",
-  },
-  ventasEfectivo: {
-    valor: 450000,
-    cambio: -2.3,
-    periodo: "mes",
-  },
-  ventasTarjeta: {
-    valor: 650000,
-    cambio: 12.7,
-    periodo: "mes",
-  },
-  ventasDigitales: {
-    valor: 150000,
-    cambio: 25.4,
-    periodo: "mes",
-  },
-  diferencias: {
-    valor: 12500,
-    cambio: -15.2,
-    periodo: "mes",
-    porcentaje: 1.2,
-  },
-  alertas: {
-    total: 8,
-    criticas: 2,
-    pendientes: 5,
-    cambio: 3,
-    periodo: "mes",
-  },
-  graficoVentasPorLocal: {
-    labels: [
-      "BR Cabildo",
-      "BR Carranza",
-      "BR Pacífico",
-      "BR Lavalle",
-      "BR Rivadavia",
-      "BR Aguero",
-      "BR Dorrego",
-      "Dean & Dennys",
-    ],
-    datasets: [
-      {
-        label: "Ventas",
-        data: [250000, 180000, 220000, 150000, 190000, 130000, 80000, 50000],
-      },
-    ],
-  },
-  graficoVentasPorMetodo: {
-    labels: ["Efectivo", "Tarjeta Crédito", "Tarjeta Débito", "MercadoPago", "Transferencia", "Otros"],
-    datasets: [
-      {
-        label: "Porcentaje",
-        data: [36, 28, 24, 8, 3, 1],
-      },
-    ],
-  },
-  graficoVentasPorTurno: {
-    labels: ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"],
-    datasets: [
-      {
-        label: "Turno Mañana",
-        data: [45000, 48000, 52000, 49000, 68000, 72000, 58000],
-      },
-      {
-        label: "Turno Tarde",
-        data: [65000, 62000, 70000, 68000, 82000, 95000, 75000],
-      },
-    ],
-  },
-}
-
 export default function DashboardCajaPage() {
   const router = useRouter()
   const supabase = createClientComponentClient()
@@ -119,30 +42,88 @@ export default function DashboardCajaPage() {
       try {
         setIsLoading(true)
         
-        // Cargar alertas desde Supabase
-        const { data: alertasData, error: alertasError } = await supabase
+        // Determinar fechas para el período seleccionado
+        const today = new Date()
+        let startDate = new Date()
+        
+        switch (periodo) {
+          case "dia":
+            startDate = new Date(today.setHours(0, 0, 0, 0))
+            break
+          case "semana":
+            startDate = new Date(today.setDate(today.getDate() - 7))
+            break
+          case "mes":
+            startDate = new Date(today.setMonth(today.getMonth() - 1))
+            break
+          case "trimestre":
+            startDate = new Date(today.setMonth(today.getMonth() - 3))
+            break
+          case "anio":
+            startDate = new Date(today.setFullYear(today.getFullYear() - 1))
+            break
+        }
+        
+        const formattedStartDate = format(startDate, "yyyy-MM-dd")
+        const formattedEndDate = format(new Date(), "yyyy-MM-dd")
+        
+        // Consultas para obtener datos de ventas
+        let ventasQuery = supabase
+          .from('cash_register_closings')
+          .select('*')
+          .gte('date', formattedStartDate)
+          .lte('date', formattedEndDate)
+        
+        if (localId !== "all") {
+          ventasQuery = ventasQuery.eq('local_id', localId)
+        }
+        
+        // Consulta para obtener alertas
+        let alertasQuery = supabase
           .from('cash_register_alerts')
           .select('*')
           .eq('status', 'pending')
         
-        if (alertasError) throw alertasError
+        if (localId !== "all") {
+          alertasQuery = alertasQuery.eq('local_id', localId)
+        }
         
-        // Contar alertas críticas
-        const alertasCriticas = alertasData?.filter(a => a.alert_level === 'high').length || 0
-        
-        // Cargar operaciones recientes (últimas 5 aperturas y cierres)
-        const [aperturasResult, cierresResult] = await Promise.all([
+        // Ejecutar consultas en paralelo
+        const [ventasResult, alertasResult, aperturasResult, cierresResult] = await Promise.all([
+          ventasQuery,
+          alertasQuery,
           supabase
             .from('cash_register_openings')
-            .select('*, local:local_id(*)')
+            .select('*')
             .order('created_at', { ascending: false })
             .limit(5),
           supabase
             .from('cash_register_closings')
-            .select('*, local:local_id(*)')
+            .select('*')
             .order('created_at', { ascending: false })
             .limit(5)
         ])
+        
+        if (ventasResult.error) throw ventasResult.error
+        if (alertasResult.error) throw alertasResult.error
+        if (aperturasResult.error) throw aperturasResult.error
+        if (cierresResult.error) throw cierresResult.error
+        
+        const ventas = ventasResult.data || []
+        const alertas = alertasResult.data || []
+        
+        // Calcular totales
+        const ventasTotales = ventas.reduce((sum, item) => sum + (item.total_sales || 0), 0)
+        const ventasEfectivo = ventas.reduce((sum, item) => sum + (item.cash_sales || 0), 0)
+        const ventasTarjeta = ventas.reduce((sum, item) => sum + ((item.credit_card_sales || 0) + (item.debit_card_sales || 0)), 0)
+        const ventasDigitales = ventas.reduce((sum, item) => sum + ((item.transfer_sales || 0) + (item.mercado_pago_sales || 0)), 0)
+        const diferencias = ventas.reduce((sum, item) => sum + Math.abs(item.difference || 0), 0)
+        
+        // Calcular porcentaje de diferencia
+        const porcentajeDiferencia = ventasEfectivo > 0 ? (diferencias / ventasEfectivo) * 100 : 0
+        
+        // Contar alertas críticas
+        const alertasCriticas = alertas.filter(a => a.alert_level === 'high').length
         
         // Procesar operaciones recientes
         const aperturas = (aperturasResult.data || []).map(item => ({
@@ -168,20 +149,131 @@ export default function DashboardCajaPage() {
         
         setOperacionesRecientes(todasOperaciones)
         
+        // Preparar datos para gráficos
+        // Ventas por local
+        const ventasPorLocal = locales
+          .filter(local => local.id !== "all")
+          .map(local => {
+            const ventasLocal = ventas.filter(v => v.local_id === local.id)
+            const totalLocal = ventasLocal.reduce((sum, item) => sum + (item.total_sales || 0), 0)
+            return {
+              local: local.name,
+              ventas: totalLocal
+            }
+          })
+          .sort((a, b) => b.ventas - a.ventas)
+        
+        // Ventas por método de pago
+        const totalMetodos = ventasTotales > 0 ? ventasTotales : 1 // Evitar división por cero
+        const ventasPorMetodo = [
+          { metodo: "Efectivo", porcentaje: (ventasEfectivo / totalMetodos) * 100 },
+          { metodo: "Tarjeta Crédito", porcentaje: (ventas.reduce((sum, item) => sum + (item.credit_card_sales || 0), 0) / totalMetodos) * 100 },
+          { metodo: "Tarjeta Débito", porcentaje: (ventas.reduce((sum, item) => sum + (item.debit_card_sales || 0), 0) / totalMetodos) * 100 },
+          { metodo: "MercadoPago", porcentaje: (ventas.reduce((sum, item) => sum + (item.mercado_pago_sales || 0), 0) / totalMetodos) * 100 },
+          { metodo: "Transferencia", porcentaje: (ventas.reduce((sum, item) => sum + (item.transfer_sales || 0), 0) / totalMetodos) * 100 },
+          { metodo: "Otros", porcentaje: (ventas.reduce((sum, item) => sum + (item.other_sales || 0), 0) / totalMetodos) * 100 }
+        ]
+        
         // Actualizar el estado con datos reales
         setDashboardData({
-          ...dashboardDataMock, // Mantener otros datos de ejemplo por ahora
-          alertas: {
-            total: alertasData?.length || 0,
-            criticas: alertasCriticas,
-            pendientes: alertasData?.length || 0,
+          ventasTotales: {
+            valor: ventasTotales,
             cambio: 0, // Esto requeriría comparación con período anterior
             periodo: periodo
+          },
+          ventasEfectivo: {
+            valor: ventasEfectivo,
+            cambio: 0,
+            periodo: periodo
+          },
+          ventasTarjeta: {
+            valor: ventasTarjeta,
+            cambio: 0,
+            periodo: periodo
+          },
+          ventasDigitales: {
+            valor: ventasDigitales,
+            cambio: 0,
+            periodo: periodo
+          },
+          diferencias: {
+            valor: diferencias,
+            cambio: 0,
+            periodo: periodo,
+            porcentaje: porcentajeDiferencia
+          },
+          alertas: {
+            total: alertas.length,
+            criticas: alertasCriticas,
+            pendientes: alertas.length,
+            cambio: 0,
+            periodo: periodo
+          },
+          graficoVentasPorLocal: {
+            labels: ventasPorLocal.map(item => item.local),
+            datasets: [
+              {
+                label: "Ventas",
+                data: ventasPorLocal.map(item => item.ventas),
+              },
+            ],
+          },
+          graficoVentasPorMetodo: {
+            labels: ventasPorMetodo.map(item => item.metodo),
+            datasets: [
+              {
+                label: "Porcentaje",
+                data: ventasPorMetodo.map(item => item.porcentaje),
+              },
+            ],
           }
         })
       } catch (error) {
         console.error("Error al cargar datos del dashboard:", error)
-        setDashboardData(dashboardDataMock) // Usar datos de ejemplo en caso de error
+        // Usar datos de ejemplo en caso de error
+        setDashboardData({
+          ventasTotales: {
+            valor: 0,
+            cambio: 0,
+            periodo: periodo
+          },
+          ventasEfectivo: {
+            valor: 0,
+            cambio: 0,
+            periodo: periodo
+          },
+          ventasTarjeta: {
+            valor: 0,
+            cambio: 0,
+            periodo: periodo
+          },
+          ventasDigitales: {
+            valor: 0,
+            cambio: 0,
+            periodo: periodo
+          },
+          diferencias: {
+            valor: 0,
+            cambio: 0,
+            periodo: periodo,
+            porcentaje: 0
+          },
+          alertas: {
+            total: 0,
+            criticas: 0,
+            pendientes: 0,
+            cambio: 0,
+            periodo: periodo
+          },
+          graficoVentasPorLocal: {
+            labels: [],
+            datasets: [{ label: "Ventas", data: [] }]
+          },
+          graficoVentasPorMetodo: {
+            labels: [],
+            datasets: [{ label: "Porcentaje", data: [] }]
+          }
+        })
       } finally {
         setIsLoading(false)
       }
@@ -328,7 +420,7 @@ export default function DashboardCajaPage() {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                {Math.round((dashboardData.ventasEfectivo.valor / dashboardData.ventasTotales.valor) * 100)}% del total
+                {Math.round((dashboardData.ventasEfectivo.valor / dashboardData.ventasTotales.valor) * 100) || 0}% del total
                 de ventas
               </p>
             </CardContent>
@@ -354,7 +446,7 @@ export default function DashboardCajaPage() {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                {dashboardData.diferencias.porcentaje}% de las ventas en efectivo
+                {dashboardData.diferencias.porcentaje.toFixed(2)}% de las ventas en efectivo
               </p>
             </CardContent>
           </Card>
@@ -421,13 +513,13 @@ export default function DashboardCajaPage() {
                   ) : (
                     operacionesRecientes.map((operacion) => (
                       <TableRow key={`${operacion.tipo}-${operacion.id}`}>
-                        <TableCell>{formatFecha(operacion.fecha_completa)}</TableCell>
+                        <TableCell>{formatFecha(operacion.fecha_completa || operacion.created_at)}</TableCell>
                         <TableCell>
-                          {operacion.local?.name || locales.find(l => l.id === operacion.local_id)?.name || operacion.local_id}
+                          {operacion.local_name}
                         </TableCell>
-                        <TableCell className="capitalize">{operacion.shift || operacion.turno}</TableCell>
+                        <TableCell className="capitalize">{operacion.shift}</TableCell>
                         <TableCell>{renderTipoBadge(operacion.tipo)}</TableCell>
-                        <TableCell>{operacion.responsable}</TableCell>
+                        <TableCell>{operacion.responsible}</TableCell>
                         <TableCell className="text-right">
                           ${operacion.monto?.toLocaleString() || '0'}
                         </TableCell>

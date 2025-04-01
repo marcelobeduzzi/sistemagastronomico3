@@ -40,7 +40,7 @@ export default function AlertasPage() {
   const [sortConfig, setSortConfig] = useState<{
     key: string
     direction: "ascending" | "descending"
-  }>({ key: "date", direction: "descending" })
+  }>({ key: "created_at", direction: "descending" })
 
   // Cargar alertas
   useEffect(() => {
@@ -300,9 +300,9 @@ export default function AlertasPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="cursor-pointer" onClick={() => requestSort("date")}>
+                    <TableHead className="cursor-pointer" onClick={() => requestSort("created_at")}>
                       Fecha
-                      {sortConfig.key === "date" && <ArrowUpDown className="ml-2 h-4 w-4 inline" />}
+                      {sortConfig.key === "created_at" && <ArrowUpDown className="ml-2 h-4 w-4 inline" />}
                     </TableHead>
                     <TableHead>Local</TableHead>
                     <TableHead>Tipo</TableHead>
@@ -322,7 +322,7 @@ export default function AlertasPage() {
                   ) : (
                     filteredAlertas.map((alerta) => (
                       <TableRow key={alerta.id}>
-                        <TableCell>{formatFecha(alerta.date)}</TableCell>
+                        <TableCell>{formatFecha(alerta.created_at)}</TableCell>
                         <TableCell>{alerta.local_name}</TableCell>
                         <TableCell>{getAlertTypeDisplay(alerta.type)}</TableCell>
                         <TableCell className="max-w-xs truncate">{alerta.message}</TableCell>

@@ -88,6 +88,10 @@ export default function HistorialCajaPage() {
           query = query.gte('date', filtros.fecha_desde)
         }
         
+        if (filtros.fecha_hasta)  {
+          query = query.gte('date', filtros.fecha_desde)
+        }
+        
         if (filtros.fecha_hasta) {
           query = query.lte('date', filtros.fecha_hasta)
         }
