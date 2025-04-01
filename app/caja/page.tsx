@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
+import DashboardLayout from "@/app/dashboard-layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -25,9 +26,6 @@ const locales = [
   { id: "dorrego", name: "BR Dorrego" },
   { id: "dean_dennys", name: "Dean & Dennys" },
 ]
-
-// Importar el DashboardLayout correctamente
-import DashboardLayout from "@/app/dashboard-layout"
 
 export default function CajaPage() {
   const router = useRouter()
@@ -565,6 +563,8 @@ export default function CajaPage() {
     </DashboardLayout>
   )
 }
+
+
 
 
 
