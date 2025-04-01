@@ -72,11 +72,10 @@ export default function CajaPage() {
             .select("*")
             .order("date", { ascending: false }),
 
-          // Alertas
+          // Alertas - Sin filtrar por estado para obtener todas
           supabase
             .from("cash_register_alerts")
-            .select("*")
-            .eq("status", "pending"),
+            .select("*"),
 
           // Ventas de hoy
           supabase
@@ -104,6 +103,9 @@ export default function CajaPage() {
         // Contar cierres pendientes (no aprobados)
         const cierresPendientes = cierresData.filter((c) => c.status === "pendiente").length
 
+        // Contar alertas activas
+        const alertasActivas = alertasData.filter((a) => a.status === "activa").length
+
         // Actualizar estados
         setAperturas(aperturasData)
         setCierres(cierresData)
@@ -113,7 +115,7 @@ export default function CajaPage() {
         setSummaryData({
           pendingOpenings: aperturasPendientes,
           pendingClosings: cierresPendientes,
-          activeAlerts: alertasData.length,
+          activeAlerts: alertasActivas,
           todaySales: ventasHoy,
         })
       } catch (error) {
@@ -563,6 +565,7 @@ export default function CajaPage() {
     </DashboardLayout>
   )
 }
+
 
 
 
