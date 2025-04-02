@@ -3,8 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect, useCallback, memo, useMemo } from "react"
-import { Shield } from 'lucide-react'
-import { BarChart3, Users, DollarSign, Calendar, Settings, ChevronDown, Menu, TrendingUp, LogOut, ClipboardCheck, ReceiptText, PieChart, LayoutDashboard, Star, MessageSquare, ShoppingCart, CreditCard, Package } from 'lucide-react'
+import { BarChart3, Users, DollarSign, Calendar, Settings, ChevronDown, Menu, TrendingUp, LogOut, ClipboardCheck, ReceiptText, PieChart, LayoutDashboard, Star, MessageSquare, ShoppingCart, CreditCard, Package, Shield } from 'lucide-react'
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
