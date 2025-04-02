@@ -124,15 +124,81 @@ class DatabaseService {
   }
 
   /**
-   * Elimina un empleado por su ID
+   * Elimina un empleado por su ID y todos sus registros relacionados
    * @param id ID del empleado a eliminar
    * @returns true si se eliminó correctamente, false en caso contrario
    */
   async deleteEmployee(id: string): Promise<boolean> {
     try {
+      console.log(`Iniciando eliminación del empleado con ID: ${id}`)
+
+      // 1. Eliminar registros de asistencia relacionados con el empleado
+      console.log("Eliminando registros de asistencia...")
+      const { error: attendanceError } = await this.supabase.from("attendance").delete().eq("employee_id", id)
+
+      if (attendanceError) {
+        console.error("Error al eliminar asistencias del empleado:", attendanceError)
+        // Continuamos con el proceso aunque haya error, para intentar eliminar lo más posible
+      }
+
+      // 2. Eliminar registros de nómina relacionados con el empleado
+      // Primero obtenemos los IDs de las nóminas para eliminar los detalles
+      console.log("Buscando nóminas del empleado...")
+      const { data: payrolls, error: payrollsError } = await this.supabase
+        .from("payroll")
+        .select("id")
+        .eq("employee_id", id)
+
+      if (payrollsError) {
+        console.error("Error al obtener nóminas del empleado:", payrollsError)
+      } else if (payrolls && payrolls.length > 0) {
+        // Eliminar detalles de nómina para cada nómina del empleado
+        console.log(`Encontradas ${payrolls.length} nóminas. Eliminando detalles...`)
+        const payrollIds = payrolls.map((p) => p.id)
+
+        for (const payrollId of payrollIds) {
+          const { error: detailsError } = await this.supabase
+            .from("payroll_details")
+            .delete()
+            .eq("payroll_id", payrollId)
+
+          if (detailsError) {
+            console.error(`Error al eliminar detalles de nómina ${payrollId}:`, detailsError)
+          }
+        }
+
+        // Ahora eliminamos las nóminas
+        console.log("Eliminando nóminas...")
+        const { error: payrollError } = await this.supabase.from("payroll").delete().eq("employee_id", id)
+
+        if (payrollError) {
+          console.error("Error al eliminar nóminas del empleado:", payrollError)
+        }
+      }
+
+      // 3. Eliminar liquidaciones relacionadas con el empleado (si existen)
+      console.log("Eliminando liquidaciones si existen...")
+      try {
+        const { error: liquidationError } = await this.supabase.from("liquidations").delete().eq("employee_id", id)
+
+        if (liquidationError) {
+          console.error("Error al eliminar liquidaciones del empleado:", liquidationError)
+        }
+      } catch (error) {
+        // Si la tabla no existe, ignoramos el error
+        console.log("No se encontró tabla de liquidaciones o no hay registros")
+      }
+
+      // 4. Finalmente, eliminar el empleado
+      console.log("Eliminando el registro del empleado...")
       const { error } = await this.supabase.from("employees").delete().eq("id", id)
 
-      if (error) throw error
+      if (error) {
+        console.error("Error al eliminar empleado:", error)
+        throw error
+      }
+
+      console.log(`Empleado ${id} y todos sus registros relacionados eliminados correctamente`)
       return true
     } catch (error) {
       console.error("Error en deleteEmployee:", error)
@@ -708,17 +774,43 @@ class DatabaseService {
   // Método para actualizar una nómina
   async updatePayroll(id: string, payroll: Partial<Payroll>) {
     try {
-      // Convertir de camelCase a snake_case
-      const payrollData = objectToSnakeCase({
-        ...payroll,
-        updated_at: new Date().toISOString(),
-      })
+      console.log("Actualizando nómina con ID:", id, "Datos:", payroll)
 
-      const { data, error } = await this.supabase.from("payroll").update(payrollData).eq("id", id).select().single()
+      // Crear objeto de actualización
+      const updateData: any = {}
 
-      if (error) throw error
+      // Campos básicos
+      if ("isPaid" in payroll) updateData.is_paid = payroll.isPaid
+      if ("updatedAt" in payroll) updateData.updated_at = payroll.updatedAt
+      if ("paymentDate" in payroll) updateData.payment_date = payroll.paymentDate
 
-      // Convertir de snake_case a camelCase
+      // Usar los nombres de columnas correctos que existen en la tabla
+      if ("bankSalaryPaid" in payroll) {
+        updateData.is_paid_bank = payroll.bankSalaryPaid
+      }
+
+      if ("handSalaryPaid" in payroll) {
+        updateData.is_paid_hand = payroll.handSalaryPaid
+      }
+
+      // Añadir timestamp de actualización
+      updateData.updated_at = new Date().toISOString()
+
+      console.log("Datos para actualización:", updateData)
+
+      const { data, error } = await this.supabase.from("payroll").update(updateData).eq("id", id).select().single()
+
+      if (error) {
+        console.error("Error detallado al actualizar nómina:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+        })
+        throw error
+      }
+
+      console.log("Nómina actualizada correctamente:", data)
       return objectToCamelCase(data)
     } catch (error) {
       console.error("Error al actualizar nómina:", error)
@@ -752,7 +844,7 @@ class DatabaseService {
     }
   }
 
-  // Método para generar nóminas
+  // Método mejorado para generar nóminas que no depende del estado de pago de nóminas anteriores
   async generatePayrolls(month: number, year: number) {
     try {
       console.log(`Generando nóminas para ${month}/${year}`)
@@ -769,14 +861,22 @@ class DatabaseService {
       // 2. Para cada empleado, generar una nómina
       for (const employee of activeEmployees) {
         // Verificar si ya existe una nómina para este empleado en este período
-        const existingPayrolls = await this.supabase
+        const { data: existingPayrolls, error: checkError } = await this.supabase
           .from("payroll")
           .select("*")
           .eq("employee_id", employee.id)
           .eq("month", month)
           .eq("year", year)
 
-        if (existingPayrolls.data && existingPayrolls.data.length > 0) {
+        if (checkError) {
+          console.error(
+            `Error al verificar nóminas existentes para ${employee.firstName} ${employee.lastName}:`,
+            checkError,
+          )
+          continue
+        }
+
+        if (existingPayrolls && existingPayrolls.length > 0) {
           console.log(`Ya existe una nómina para ${employee.firstName} ${employee.lastName} en ${month}/${year}`)
           continue // Saltar este empleado
         }
@@ -872,8 +972,8 @@ class DatabaseService {
         console.log(`Sueldo final en mano: ${finalHandSalary}`)
         console.log(`Total a pagar: ${totalSalary}`)
 
-        // Crear la nómina
-        const payrollData = {
+        // Crear la nómina con los campos que existen en la tabla
+        const payrollData: any = {
           employee_id: employee.id,
           month,
           year,
@@ -885,8 +985,8 @@ class DatabaseService {
           final_hand_salary: finalHandSalary,
           total_salary: totalSalary,
           is_paid: false,
-          hand_salary_paid: false,
-          bank_salary_paid: false,
+          is_paid_bank: false, // Usar el nombre correcto
+          is_paid_hand: false, // Usar el nombre correcto
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }
@@ -1699,6 +1799,8 @@ export const db = {
 
 // Exportar también el servicio original para mantener compatibilidad
 export { dbService }
+
+
 
 
 
