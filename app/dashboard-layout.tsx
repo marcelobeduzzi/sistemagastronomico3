@@ -3,7 +3,6 @@
 import type React from "react"
 
 import { useState, useEffect, useCallback, memo, useMemo } from "react"
-import { BarChart3, Users, DollarSign, Calendar, Settings, ChevronDown, Menu, TrendingUp, LogOut, ClipboardCheck, ReceiptText, PieChart, LayoutDashboard, Star, MessageSquare, ShoppingCart, CreditCard, Package, Shield } from 'lucide-react'
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
@@ -24,6 +23,8 @@ import {
   MessageSquare,
   ShoppingCart,
   CreditCard,
+  Package,
+  Shield,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
