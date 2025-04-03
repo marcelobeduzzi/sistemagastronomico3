@@ -175,7 +175,12 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         icon: CreditCard,
       },
 	  {
-		title: "Control de Stock",
+        title: "Control de Stock",
+        href: "/stock-control",
+        icon: Package,
+      },
+	  {
+		title: "Control de Stock Prueba",
 		href: "/stock",
 		icon: Package,
 	  },
