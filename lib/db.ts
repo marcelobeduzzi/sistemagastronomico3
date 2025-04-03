@@ -782,53 +782,29 @@ class DatabaseService {
       // Campos básicos
       if ("isPaid" in payroll) updateData.is_paid = payroll.isPaid
       if ("updatedAt" in payroll) updateData.updated_at = payroll.updatedAt
+      
       // Añadir estas líneas para usar las columnas correctas:
       const now = new Date().toISOString()
     
       // Usar los nombres de columnas correctos que existen en la tabla
       if ("bankSalaryPaid" in payroll) {
-      updateData.is_paid_bank = payroll.bankSalaryPaid
-      // Si se está confirmando el pago de banco, actualizar la fecha de pago de banco
-      if (payroll.bankSalaryPaid) {
-        updateData.bank_payment_date = now
-      }
-    }
-	// Añadir timestamp de actualización
-    updateData.updated_at = now
-
-    console.log("Datos para actualización:", updateData)
-
-    const { data, error } = await this.supabase.from("payroll").update(updateData).eq("id", id).select().single()
-
-    if (error) {
-      console.error("Error detallado al actualizar nómina:", {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code,
-      })
-      throw error
-    }
-
-    console.log("Nómina actualizada correctamente:", data)
-    return objectToCamelCase(data)
-  } catch (error) {
-    console.error("Error al actualizar nómina:", error)
-    throw error
-  }
-}
-
-      // Usar los nombres de columnas correctos que existen en la tabla
-      if ("bankSalaryPaid" in payroll) {
         updateData.is_paid_bank = payroll.bankSalaryPaid
+        // Si se está confirmando el pago de banco, actualizar la fecha de pago de banco
+        if (payroll.bankSalaryPaid) {
+          updateData.bank_payment_date = now
+        }
       }
 
       if ("handSalaryPaid" in payroll) {
         updateData.is_paid_hand = payroll.handSalaryPaid
+        // Si se está confirmando el pago en mano, actualizar la fecha de pago en mano
+        if (payroll.handSalaryPaid) {
+          updateData.hand_payment_date = now
+        }
       }
 
       // Añadir timestamp de actualización
-      updateData.updated_at = new Date().toISOString()
+      updateData.updated_at = now
 
       console.log("Datos para actualización:", updateData)
 
@@ -1832,6 +1808,8 @@ export const db = {
 
 // Exportar también el servicio original para mantener compatibilidad
 export { dbService }
+
+
 
 
 
