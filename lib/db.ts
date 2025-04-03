@@ -984,7 +984,6 @@ class DatabaseService {
           additions,
           final_hand_salary: finalHandSalary,
           total_salary: totalSalary,
-          is_paid: false,
           is_paid_bank: false, // Usar el nombre correcto
           is_paid_hand: false, // Usar el nombre correcto
           created_at: new Date().toISOString(),
