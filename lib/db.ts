@@ -647,6 +647,10 @@ class DatabaseService {
         .single()
 
       if (fetchUpdatedError) {
+        console.error("Error al obtener datos  id)
+        .single()
+
+      if (fetchUpdatedError) {
         console.error("Error al obtener datos actualizados:", fetchUpdatedError)
         throw fetchUpdatedError
       }
@@ -778,35 +782,39 @@ class DatabaseService {
 
       // Crear objeto de actualización
       const updateData: any = {}
-
-      // Campos básicos
-      if ("isPaid" in payroll) updateData.is_paid = payroll.isPaid
-      if ("updatedAt" in payroll) updateData.updated_at = payroll.updatedAt
-      
-      // Añadir estas líneas para usar las columnas correctas:
       const now = new Date().toISOString()
-    
-      // Usar los nombres de columnas correctos que existen en la tabla
-      if ("bankSalaryPaid" in payroll) {
-        updateData.is_paid_bank = payroll.bankSalaryPaid
-        // Si se está confirmando el pago de banco, actualizar la fecha de pago de banco
-        if (payroll.bankSalaryPaid) {
-          updateData.bank_payment_date = now
-        }
-      }
 
-      if ("handSalaryPaid" in payroll) {
-        updateData.is_paid_hand = payroll.handSalaryPaid
-        // Si se está confirmando el pago en mano, actualizar la fecha de pago en mano
-        if (payroll.handSalaryPaid) {
-          updateData.hand_payment_date = now
-        }
+      // Determinar qué campos actualizar según el tipo de pago
+      if (payroll.paymentType === "bank" || payroll.bankSalaryPaid) {
+        // Pago de banco
+        updateData.is_paid_bank = true
+        updateData.bank_payment_date = now
+      } 
+      
+      if (payroll.paymentType === "hand" || payroll.handSalaryPaid) {
+        // Pago en mano
+        updateData.is_paid_hand = true
+        updateData.hand_payment_date = now
+      }
+      
+      if (payroll.paymentType === "all") {
+        // Pago total (banco y mano)
+        updateData.is_paid_bank = true
+        updateData.is_paid_hand = true
+        updateData.bank_payment_date = now
+        updateData.hand_payment_date = now
       }
 
       // Añadir timestamp de actualización
       updateData.updated_at = now
 
       console.log("Datos para actualización:", updateData)
+
+      // Verificar que haya datos para actualizar
+      if (Object.keys(updateData).length <= 1) {
+        console.warn("No hay campos para actualizar en la nómina")
+        throw new Error("No se especificó ningún tipo de pago válido para actualizar")
+      }
 
       const { data, error } = await this.supabase.from("payroll").update(updateData).eq("id", id).select().single()
 
