@@ -647,10 +647,6 @@ class DatabaseService {
         .single()
 
       if (fetchUpdatedError) {
-        console.error("Error al obtener datos  id)
-        .single()
-
-      if (fetchUpdatedError) {
         console.error("Error al obtener datos actualizados:", fetchUpdatedError)
         throw fetchUpdatedError
       }
