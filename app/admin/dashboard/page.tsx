@@ -55,13 +55,25 @@ export default function AdminDashboardPage() {
               })),
             )
           } else {
-            // Si no hay datos en la base de datos, usar los datos de mock
-            setAlerts(mockAlerts)
+            // Si no hay datos en la base de datos, intentar cargar desde localStorage
+            const localAlerts = localStorage.getItem("localAlerts")
+            if (localAlerts) {
+              setAlerts(JSON.parse(localAlerts))
+            } else {
+              // Si no hay datos en localStorage, usar los datos de mock
+              setAlerts(mockAlerts)
+            }
           }
         } catch (dbError) {
           console.error("Error al cargar alertas desde la base de datos:", dbError)
-          // Usar datos de mock como fallback
-          setAlerts(mockAlerts)
+          // Intentar cargar desde localStorage
+          const localAlerts = localStorage.getItem("localAlerts")
+          if (localAlerts) {
+            setAlerts(JSON.parse(localAlerts))
+          } else {
+            // Usar datos de mock como fallback
+            setAlerts(mockAlerts)
+          }
         }
       } catch (error) {
         console.error("Error al cargar alertas:", error)
@@ -799,4 +811,6 @@ export default function AdminDashboardPage() {
     </div>
   )
 }
+
+
 

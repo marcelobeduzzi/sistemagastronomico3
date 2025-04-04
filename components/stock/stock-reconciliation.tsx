@@ -1,139 +1,217 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertTriangle, CheckCircle } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { mockProducts } from "@/lib/mock-data"
+import { dbService } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
 
-interface StockReconciliationProps {
-  stockData: any
-  onComplete: () => void
-}
-
-export function StockReconciliation({ stockData, onComplete }: StockReconciliationProps) {
+export function StockReconciliation({ stockData, onComplete }) {
   const { toast } = useToast()
-  const [reconciliationData, setReconciliationData] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [alertsGenerated, setAlertsGenerated] = useState(false)
 
-  useEffect(() => {
-    // Simular cálculo de reconciliación
-    setTimeout(() => {
-      const data = calculateReconciliation(stockData)
-      setReconciliationData(data)
-      setLoading(false)
+  // Función para calcular las diferencias de stock
+  const calculateDifferences = () => {
+    // Obtener productos del stock inicial
+    const initialProducts = stockData.inicial.products || []
 
-      // Generar alertas si es necesario
-      if (data.stockAlerts.length > 0 || data.cashAlerts.length > 0) {
-        toast({
-          title: "Alertas detectadas",
-          description: `Se han detectado ${data.stockAlerts.length} alertas de stock y ${data.cashAlerts.length} alertas de caja`,
-          variant: "destructive",
-        })
+    // Obtener productos del stock de cierre
+    const finalProducts = stockData.cierre.products || []
+
+    // Obtener ingresos
+    const ingresos = stockData.ingresos || []
+
+    // Obtener decomisos
+    const decomisos = stockData.decomisos || []
+
+    // Obtener ventas
+    const ventas = stockData.ventas?.items || []
+
+    // Calcular diferencias
+    const differences = initialProducts.map((initialProduct) => {
+      // Buscar el producto en el stock final
+      const finalProduct = finalProducts.find((p) => p.id === initialProduct.id) || { quantity: 0 }
+
+      // Buscar el producto en las ventas
+      const salesProduct = ventas.find((p) => p.productId === initialProduct.id)
+      const salesQuantity = salesProduct ? salesProduct.quantity : 0
+
+      // Calcular ingresos para este producto
+      const ingresosQuantity = ingresos.reduce((total, ingreso) => {
+        const item = ingreso.items.find((i) => i.productId === initialProduct.id)
+        return total + (item ? item.quantity : 0)
+      }, 0)
+
+      // Calcular decomisos para este producto
+      const decomisosQuantity = decomisos.reduce((total, decomiso) => {
+        const item = decomiso.items.find((i) => i.productId === initialProduct.id)
+        return total + (item ? item.quantity : 0)
+      }, 0)
+
+      // Calcular stock esperado
+      const expectedQuantity = initialProduct.quantity + ingresosQuantity - salesQuantity - decomisosQuantity
+
+      // Calcular diferencia
+      const difference = finalProduct.quantity - expectedQuantity
+
+      // Calcular porcentaje de diferencia
+      const percentageDifference = expectedQuantity !== 0 ? (difference / expectedQuantity) * 100 : 0
+
+      // Obtener información del producto
+      const productInfo = mockProducts.find((p) => p.id === initialProduct.id) || {
+        name: initialProduct.name,
+        price: 0,
       }
-    }, 1500)
-  }, [stockData, toast])
 
-  // Función para calcular la reconciliación
-  const calculateReconciliation = (data) => {
-    // Esta función simula el cálculo real que se haría con los datos
-    // En un caso real, tendríamos lógica más compleja
+      return {
+        id: initialProduct.id,
+        name: productInfo.name,
+        initialQuantity: initialProduct.quantity,
+        ingresos: ingresosQuantity,
+        ventas: salesQuantity,
+        decomisos: decomisosQuantity,
+        expectedQuantity,
+        finalQuantity: finalProduct.quantity,
+        difference,
+        percentageDifference,
+        monetaryValue: Math.abs(difference) * productInfo.price,
+      }
+    })
 
-    // 1. Calcular diferencias de stock
-    const stockDifferences = []
-    const stockAlerts = []
+    return differences
+  }
 
-    if (data.inicial && data.cierre) {
-      data.inicial.items.forEach((initialItem) => {
-        const finalItem = data.cierre.items.find((item) => item.productId === initialItem.productId)
+  const differences = calculateDifferences()
 
-        if (finalItem) {
-          // Calcular ventas del producto
-          const sales = data.ventas.items
-            .filter((item) => item.productId === initialItem.productId)
-            .reduce((total, item) => total + item.quantity, 0)
+  // Filtrar diferencias significativas (más del 2% o más de 5 unidades)
+  const significantDifferences = differences.filter(
+    (diff) => Math.abs(diff.percentageDifference) > 2 || Math.abs(diff.difference) >= 5,
+  )
 
-          // Calcular decomisos del producto
-          const decomisos = data.decomisos
-            .flatMap((d) => d.items)
-            .filter((item) => item.productId === initialItem.productId)
-            .reduce((total, item) => total + item.quantity, 0)
+  // Calcular impacto financiero total
+  const totalFinancialImpact = differences.reduce((total, diff) => {
+    return total + (diff.difference < 0 ? diff.monetaryValue : 0)
+  }, 0)
 
-          // Calcular ingresos del producto
-          const ingresos = data.ingresos
-            .flatMap((i) => i.items)
-            .filter((item) => item.productId === initialItem.productId)
-            .reduce((total, item) => total + item.quantity, 0)
+  // Función para generar alertas
+  const generateAlerts = async () => {
+    setIsSubmitting(true)
 
-          // Calcular balance esperado
-          const expectedFinal = initialItem.quantity - sales - decomisos + ingresos
-
-          // Calcular diferencia
-          const difference = finalItem.quantity - expectedFinal
-          const differencePercentage = expectedFinal !== 0 ? (difference / expectedFinal) * 100 : 0
-
-          stockDifferences.push({
-            productId: initialItem.productId,
-            productName: initialItem.productName,
-            initial: initialItem.quantity,
-            sales,
-            decomisos,
-            ingresos,
-            expected: expectedFinal,
-            final: finalItem.quantity,
-            difference,
-            differencePercentage,
-          })
-
-          // Generar alerta si la diferencia es significativa (más del 2%)
-          if (Math.abs(differencePercentage) > 2 && expectedFinal > 0) {
-            // Calcular el valor monetario de la diferencia (usando un precio ficticio por ahora)
-            const unitPrice = 500 // En una implementación real, esto vendría de los datos del producto
-            const monetaryDifference = difference * unitPrice
-
-            stockAlerts.push({
-              productId: initialItem.productId,
-              productName: initialItem.productName,
-              difference,
-              differencePercentage,
-              monetaryValue: monetaryDifference, // Añadir el valor monetario
-              severity: Math.abs(differencePercentage) > 5 ? "alta" : "media",
-              // Añadir más contexto para la alerta
-              context: `Stock inicial: ${initialItem.quantity}, Ventas: ${sales}, Decomisos: ${decomisos}, Ingresos: ${ingresos}, Stock esperado: ${expectedFinal}, Stock final: ${finalItem.quantity}`,
-            })
+    try {
+      // Generar alertas para diferencias significativas
+      for (const diff of significantDifferences) {
+        if (diff.difference < 0) {
+          // Solo alertas para faltantes
+          const alertData = {
+            local_id: stockData.ventas?.localId || "local-1",
+            local_name: stockData.ventas?.localName || "BR Cabildo",
+            date: new Date().toISOString(),
+            shift: stockData.ventas?.shift || "mañana",
+            user_id: stockData.cierre?.userId || "user-1",
+            type: "stock",
+            severity:
+              Math.abs(diff.percentageDifference) > 10
+                ? "alta"
+                : Math.abs(diff.percentageDifference) > 5
+                  ? "media"
+                  : "baja",
+            title: `Diferencia en ${diff.name}`,
+            description: `Faltante de ${Math.abs(diff.difference)} unidades de ${diff.name} (${Math.abs(diff.percentageDifference).toFixed(1)}% del stock esperado)`,
+            difference_amount: diff.difference,
+            difference_percentage: diff.percentageDifference,
+            monetary_value: diff.monetaryValue,
+            context: `Stock inicial: ${diff.initialQuantity}, Ingresos: ${diff.ingresos}, Ventas: ${diff.ventas}, Decomisos: ${diff.decomisos}, Stock esperado: ${diff.expectedQuantity}, Stock final: ${diff.finalQuantity}`,
+            status: "pendiente",
           }
+
+          try {
+            // Intentar guardar en Supabase
+            const { error } = await dbService.supabase.from("alerts").insert(alertData)
+
+            if (error) {
+              console.error("Error al guardar alerta en Supabase:", error)
+              // Continuar con el siguiente aunque haya error
+            }
+          } catch (dbError) {
+            console.error("Error de conexión con Supabase:", dbError)
+            // Continuar con el siguiente aunque haya error
+          }
+
+          // Guardar en localStorage para pruebas
+          const localAlerts = JSON.parse(localStorage.getItem("localAlerts") || "[]")
+          localAlerts.push({
+            id: `alert-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            ...alertData,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          })
+          localStorage.setItem("localAlerts", JSON.stringify(localAlerts))
         }
+      }
+
+      // Si hay un impacto financiero significativo, generar una alerta general
+      if (totalFinancialImpact > 5000) {
+        const alertData = {
+          local_id: stockData.ventas?.localId || "local-1",
+          local_name: stockData.ventas?.localName || "BR Cabildo",
+          date: new Date().toISOString(),
+          shift: stockData.ventas?.shift || "mañana",
+          user_id: stockData.cierre?.userId || "user-1",
+          type: "stock",
+          severity: totalFinancialImpact > 20000 ? "alta" : totalFinancialImpact > 10000 ? "media" : "baja",
+          title: "Impacto financiero significativo",
+          description: `Impacto financiero total de ${formatCurrency(totalFinancialImpact)} por faltantes de stock`,
+          difference_amount: null,
+          difference_percentage: null,
+          monetary_value: totalFinancialImpact,
+          context: `Reconciliación de stock del ${new Date().toLocaleDateString()}`,
+          status: "pendiente",
+        }
+
+        try {
+          // Intentar guardar en Supabase
+          const { error } = await dbService.supabase.from("alerts").insert(alertData)
+
+          if (error) {
+            console.error("Error al guardar alerta en Supabase:", error)
+          }
+        } catch (dbError) {
+          console.error("Error de conexión con Supabase:", dbError)
+        }
+
+        // Guardar en localStorage para pruebas
+        const localAlerts = JSON.parse(localStorage.getItem("localAlerts") || "[]")
+        localAlerts.push({
+          id: `alert-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          ...alertData,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+        localStorage.setItem("localAlerts", JSON.stringify(localAlerts))
+      }
+
+      setAlertsGenerated(true)
+      toast({
+        title: "Alertas generadas",
+        description: `Se han generado ${significantDifferences.filter((d) => d.difference < 0).length} alertas por diferencias de stock.`,
       })
-    }
 
-    // 2. Calcular diferencias de caja
-    // Esto es una simulación, en un caso real obtendríamos los datos del cierre de caja
-    const cashData = {
-      expected: data.ventas.totalAmount,
-      actual: data.ventas.totalAmount * 0.98, // Simulamos una diferencia del 2%
-      difference: data.ventas.totalAmount * 0.02,
-      differencePercentage: 2,
-    }
-
-    const cashAlerts = []
-
-    // Generar alerta si la diferencia es significativa (más de $5000)
-    if (Math.abs(cashData.difference) > 5000) {
-      cashAlerts.push({
-        type: "caja",
-        difference: cashData.difference,
-        differencePercentage: cashData.differencePercentage,
-        severity: Math.abs(cashData.difference) > 10000 ? "alta" : "media",
+      if (onComplete) {
+        onComplete()
+      }
+    } catch (error) {
+      console.error("Error al generar alertas:", error)
+      toast({
+        title: "Error",
+        description: "No se pudieron generar las alertas. Intente nuevamente.",
+        variant: "destructive",
       })
-    }
-
-    return {
-      stockDifferences,
-      stockAlerts,
-      cashData,
-      cashAlerts,
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -145,172 +223,103 @@ export function StockReconciliation({ stockData, onComplete }: StockReconciliati
     }).format(amount)
   }
 
-  if (loading) {
-    return <div className="text-center py-8">Calculando reconciliación...</div>
-  }
-
   return (
-    <div>
-      {/* Alertas */}
-      {(reconciliationData.stockAlerts.length > 0 || reconciliationData.cashAlerts.length > 0) && (
-        <div className="mb-6 space-y-4">
-          <h3 className="text-lg font-medium">Alertas Detectadas</h3>
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <p className="text-sm text-muted-foreground">Productos con Diferencias</p>
+              <p className="text-2xl font-bold">{significantDifferences.length}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <p className="text-sm text-muted-foreground">Faltantes</p>
+              <p className="text-2xl font-bold text-red-500">
+                {significantDifferences.filter((d) => d.difference < 0).length}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <p className="text-sm text-muted-foreground">Impacto Financiero</p>
+              <p className="text-2xl font-bold text-red-500">{formatCurrency(totalFinancialImpact)}</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-          {reconciliationData.stockAlerts.map((alert, index) => (
-            <Alert key={`stock-${index}`} variant="destructive">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Alerta de Stock - {alert.severity.toUpperCase()}</AlertTitle>
-              <AlertDescription>
-                Diferencia significativa en {alert.productName}: {alert.difference > 0 ? "+" : ""}
-                {alert.difference} unidades ({alert.differencePercentage.toFixed(2)}%)
-              </AlertDescription>
-            </Alert>
-          ))}
-
-          {reconciliationData.cashAlerts.map((alert, index) => (
-            <Alert key={`cash-${index}`} variant="destructive">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Alerta de Caja - {alert.severity.toUpperCase()}</AlertTitle>
-              <AlertDescription>
-                Diferencia significativa en caja: {formatCurrency(alert.difference)} (
-                {alert.differencePercentage.toFixed(2)}%)
-              </AlertDescription>
-            </Alert>
-          ))}
-        </div>
-      )}
-
-      {/* Reconciliación de Stock */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Reconciliación de Stock</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Producto</TableHead>
-                <TableHead className="text-right">Inicial</TableHead>
-                <TableHead className="text-right">Ventas</TableHead>
-                <TableHead className="text-right">Decomisos</TableHead>
-                <TableHead className="text-right">Ingresos</TableHead>
-                <TableHead className="text-right">Esperado</TableHead>
-                <TableHead className="text-right">Final</TableHead>
-                <TableHead className="text-right">Diferencia</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {reconciliationData.stockDifferences.map((item) => (
-                <TableRow
-                  key={item.productId}
-                  className={
-                    item.difference < 0 && Math.abs(item.differencePercentage) > 2
-                      ? "bg-red-50"
-                      : item.difference > 0 && Math.abs(item.differencePercentage) > 2
-                        ? "bg-green-50"
-                        : ""
-                  }
-                >
-                  <TableCell>{item.productName}</TableCell>
-                  <TableCell className="text-right">{item.initial}</TableCell>
-                  <TableCell className="text-right">{item.sales}</TableCell>
-                  <TableCell className="text-right">{item.decomisos}</TableCell>
-                  <TableCell className="text-right">{item.ingresos}</TableCell>
-                  <TableCell className="text-right font-medium">{item.expected}</TableCell>
-                  <TableCell className="text-right">{item.final}</TableCell>
-                  <TableCell
-                    className={`text-right font-medium ${
-                      item.difference < 0 ? "text-red-600" : item.difference > 0 ? "text-green-600" : ""
-                    }`}
-                  >
-                    {item.difference > 0 ? "+" : ""}
-                    {item.difference} ({item.differencePercentage.toFixed(2)}%)
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      {/* Reconciliación de Caja */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Reconciliación de Caja</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Concepto</TableHead>
-                <TableHead className="text-right">Monto</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow>
-                <TableCell>Ventas Esperadas (según sistema)</TableCell>
-                <TableCell className="text-right">{formatCurrency(reconciliationData.cashData.expected)}</TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell>Ventas Reales (según cierre de caja)</TableCell>
-                <TableCell className="text-right">{formatCurrency(reconciliationData.cashData.actual)}</TableCell>
-              </TableRow>
-              <TableRow
-                className={
-                  reconciliationData.cashData.difference < 0 ? "bg-red-50 font-medium" : "bg-green-50 font-medium"
-                }
-              >
-                <TableCell>Diferencia</TableCell>
-                <TableCell
-                  className={`text-right ${
-                    reconciliationData.cashData.difference < 0 ? "text-red-600" : "text-green-600"
-                  }`}
-                >
-                  {formatCurrency(reconciliationData.cashData.difference)} (
-                  {reconciliationData.cashData.differencePercentage.toFixed(2)}%)
+      <div>
+        <h3 className="text-lg font-medium mb-4">Reconciliación de Stock</h3>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Producto</TableHead>
+              <TableHead className="text-right">Stock Inicial</TableHead>
+              <TableHead className="text-right">Ingresos</TableHead>
+              <TableHead className="text-right">Ventas</TableHead>
+              <TableHead className="text-right">Decomisos</TableHead>
+              <TableHead className="text-right">Stock Esperado</TableHead>
+              <TableHead className="text-right">Stock Final</TableHead>
+              <TableHead className="text-right">Diferencia</TableHead>
+              <TableHead className="text-right">Impacto</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {differences.map((diff) => (
+              <TableRow key={diff.id} className={Math.abs(diff.percentageDifference) > 2 ? "bg-muted/50" : ""}>
+                <TableCell>{diff.name}</TableCell>
+                <TableCell className="text-right">{diff.initialQuantity}</TableCell>
+                <TableCell className="text-right">{diff.ingresos}</TableCell>
+                <TableCell className="text-right">{diff.ventas}</TableCell>
+                <TableCell className="text-right">{diff.decomisos}</TableCell>
+                <TableCell className="text-right">{diff.expectedQuantity}</TableCell>
+                <TableCell className="text-right">{diff.finalQuantity}</TableCell>
+                <TableCell className="text-right">
+                  <span className={diff.difference < 0 ? "text-red-500" : diff.difference > 0 ? "text-green-500" : ""}>
+                    {diff.difference > 0 ? "+" : ""}
+                    {diff.difference} ({diff.percentageDifference.toFixed(1)}%)
+                  </span>
+                </TableCell>
+                <TableCell className="text-right">
+                  {diff.difference !== 0 && (
+                    <Badge variant={diff.difference < 0 ? "destructive" : "outline"}>
+                      {formatCurrency(diff.monetaryValue)}
+                    </Badge>
+                  )}
                 </TableCell>
               </TableRow>
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            ))}
+            <TableRow className="font-medium">
+              <TableCell colSpan={7} className="text-right">
+                Impacto Financiero Total:
+              </TableCell>
+              <TableCell colSpan={2} className="text-right text-red-500">
+                {formatCurrency(totalFinancialImpact)}
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </div>
 
-      {/* Resumen y Conclusión */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Resumen y Conclusión</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-2 mb-4">
-            {reconciliationData.stockAlerts.length === 0 && reconciliationData.cashAlerts.length === 0 ? (
-              <>
-                <CheckCircle className="h-5 w-5 text-green-500" />
-                <span className="font-medium text-green-600">No se detectaron problemas significativos</span>
-              </>
-            ) : (
-              <>
-                <AlertTriangle className="h-5 w-5 text-red-500" />
-                <span className="font-medium text-red-600">
-                  Se detectaron {reconciliationData.stockAlerts.length + reconciliationData.cashAlerts.length} alertas
-                  que requieren atención
-                </span>
-              </>
-            )}
-          </div>
-
-          <p className="text-sm text-muted-foreground mb-4">
-            Este informe ha sido generado automáticamente basado en los datos ingresados. Las alertas generadas serán
-            enviadas al panel de administración para su revisión.
-          </p>
-
-          <Button onClick={onComplete} className="w-full">
-            Finalizar Control
-          </Button>
-        </CardContent>
-      </Card>
+      <div className="flex justify-end space-x-4">
+        <Button variant="outline" onClick={() => window.print()}>
+          Imprimir Reporte
+        </Button>
+        <Button onClick={generateAlerts} disabled={isSubmitting || alertsGenerated}>
+          {isSubmitting ? "Generando..." : alertsGenerated ? "Alertas Generadas" : "Generar Alertas"}
+        </Button>
+      </div>
     </div>
   )
 }
+
+
 
 
 

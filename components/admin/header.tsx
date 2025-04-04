@@ -57,6 +57,9 @@ export function Header() {
     <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
       <div className="flex flex-1 items-center gap-4">
         <h1 className="text-xl font-semibold">{getPageTitle()}</h1>
+        <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
+          ← Volver al Dashboard Principal
+        </Link>
       </div>
       <div className="flex items-center gap-4">
         <form className="hidden md:flex">
@@ -124,4 +127,6 @@ export function Header() {
     </header>
   )
 }
+
+
 

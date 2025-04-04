@@ -1,44 +1,84 @@
-
-
 "use client"
 
-import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Textarea } from "@/components/ui/textarea"
 import { mockAlerts } from "@/lib/mock-data"
+import { dbService } from "@/lib/db"
+import { useToast } from "@/hooks/use-toast"
 
 export function AlertsDisplay() {
-  const [alerts, setAlerts] = useState(mockAlerts)
-  const [selectedAlert, setSelectedAlert] = useState(null)
-  const [resolution, setResolution] = useState("")
+  const { toast } = useToast()
+  const [alerts, setAlerts] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [isClient, setIsClient] = useState(false)
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat("es-AR", {
-      style: "currency",
-      currency: "ARS",
-    }).format(amount)
-  }
+  // Cargar alertas al montar el componente
+  useEffect(() => {
+    setIsClient(true)
+    const loadAlerts = async () => {
+      try {
+        // Intentar cargar desde la base de datos
+        try {
+          const { data, error } = await dbService.supabase
+            .from("alerts")
+            .select("*")
+            .order("created_at", { ascending: false })
+            .limit(5)
 
-  const handleResolveAlert = (id) => {
-    setAlerts(
-      alerts.map((alert) =>
-        alert.id === id ? { ...alert, status: "resuelta", resolution, resolvedAt: new Date().toISOString() } : alert,
-      ),
-    )
-    setSelectedAlert(null)
-    setResolution("")
-  }
+          if (error) throw error
+
+          if (data && data.length > 0) {
+            setAlerts(
+              data.map((alert) => ({
+                ...alert,
+                // Asegurar que las fechas sean strings
+                date: alert.date ? new Date(alert.date).toISOString() : new Date().toISOString(),
+                createdAt: alert.created_at ? new Date(alert.created_at).toISOString() : new Date().toISOString(),
+                updatedAt: alert.updated_at ? new Date(alert.updated_at).toISOString() : new Date().toISOString(),
+                resolvedAt: alert.resolved_at ? new Date(alert.resolved_at).toISOString() : null,
+              })),
+            )
+          } else {
+            // Si no hay datos en la base de datos, intentar cargar desde localStorage
+            const localAlerts = localStorage.getItem("localAlerts")
+            if (localAlerts) {
+              setAlerts(JSON.parse(localAlerts))
+            } else {
+              // Si no hay datos en localStorage, usar los datos de mock
+              setAlerts(mockAlerts.slice(0, 5))
+            }
+          }
+        } catch (dbError) {
+          console.error("Error al cargar alertas desde la base de datos:", dbError)
+          // Intentar cargar desde localStorage
+          if (isClient) {
+            const localAlerts = localStorage.getItem("localAlerts")
+            if (localAlerts) {
+              setAlerts(JSON.parse(localAlerts))
+            } else {
+              // Usar datos de mock como fallback
+              setAlerts(mockAlerts.slice(0, 5))
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error al cargar alertas:", error)
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar las alertas. Se están usando datos de ejemplo.",
+          variant: "destructive",
+        })
+        setAlerts(mockAlerts.slice(0, 5))
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadAlerts()
+  }, [toast, isClient])
 
   const getSeverityColor = (severity) => {
     switch (severity) {
@@ -66,34 +106,62 @@ export function AlertsDisplay() {
     }
   }
 
-  return (
-    <>
+  // Formatear moneda
+  const formatCurrency = (amount) => {
+    if (amount === undefined || amount === null) return ""
+    return new Intl.NumberFormat("es-AR", {
+      style: "currency",
+      currency: "ARS",
+    }).format(amount)
+  }
+
+  if (loading) {
+    return (
       <Card>
         <CardHeader>
           <CardTitle>Alertas Recientes</CardTitle>
+          <CardDescription>Cargando alertas...</CardDescription>
         </CardHeader>
-        <CardContent>
-          {alerts.length === 0 ? (
-            <p className="text-center py-4 text-muted-foreground">No hay alertas recientes</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Fecha</TableHead>
-                  <TableHead>Local</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Severidad</TableHead>
-                  <TableHead>Descripción</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {alerts.map((alert) => (
-                  <TableRow key={alert.id}>
-                    <TableCell>{new Date(alert.date).toLocaleDateString()}</TableCell>
-                    <TableCell>{alert.localName}</TableCell>
-                    <TableCell>
+        <CardContent className="h-[200px] flex items-center justify-center">
+          <p>Cargando...</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <div>
+          <CardTitle>Alertas Recientes</CardTitle>
+          <CardDescription>Últimas alertas generadas por el sistema</CardDescription>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => (window.location.href = "/admin/alerts")}>
+          Ver Todas
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {alerts.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-muted-foreground">No hay alertas recientes</p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Fecha</TableHead>
+                <TableHead>Tipo</TableHead>
+                <TableHead>Severidad</TableHead>
+                <TableHead>Descripción</TableHead>
+                <TableHead>Estado</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {alerts.map((alert, index) => (
+                <TableRow key={index}>
+                  <TableCell>{new Date(alert.date).toLocaleDateString()}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">
                       {alert.type === "stock"
                         ? "Stock"
                         : alert.type === "caja"
@@ -101,104 +169,39 @@ export function AlertsDisplay() {
                           : alert.type === "decomiso"
                             ? "Decomiso"
                             : alert.type}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={getSeverityColor(alert.severity)}>{alert.severity.toUpperCase()}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      {alert.description}
-                      {alert.monetaryValue && (
-                        <div className="text-sm text-red-500 mt-1">
-                          Impacto financiero estimado: {formatCurrency(alert.monetaryValue)}
-                        </div>
-                      )}
-                      {alert.context && (
-                        <details className="text-xs text-muted-foreground mt-1">
-                          <summary>Ver detalles</summary>
-                          <p className="mt-1">{alert.context}</p>
-                        </details>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={getStatusColor(alert.status)}>
-                        {alert.status === "pendiente"
-                          ? "Pendiente"
-                          : alert.status === "revisada"
-                            ? "Revisada"
-                            : alert.status === "resuelta"
-                              ? "Resuelta"
-                              : alert.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {alert.status !== "resuelta" && (
-                        <Button variant="outline" size="sm" onClick={() => setSelectedAlert(alert)}>
-                          Resolver
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Diálogo para resolver alerta */}
-      <Dialog open={selectedAlert !== null} onOpenChange={(open) => !open && setSelectedAlert(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Resolver Alerta</DialogTitle>
-            <DialogDescription>
-              Ingresa la resolución para esta alerta. Una vez resuelta, se marcará como completada en el sistema.
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedAlert && (
-            <>
-              <div className="space-y-2 mb-4">
-                <p>
-                  <strong>Tipo:</strong>{" "}
-                  {selectedAlert.type === "stock"
-                    ? "Stock"
-                    : selectedAlert.type === "caja"
-                      ? "Caja"
-                      : selectedAlert.type === "decomiso"
-                        ? "Decomiso"
-                        : selectedAlert.type}
-                </p>
-                <p>
-                  <strong>Descripción:</strong> {selectedAlert.description}
-                </p>
-                <p>
-                  <strong>Fecha:</strong> {new Date(selectedAlert.date).toLocaleDateString()}
-                </p>
-                <p>
-                  <strong>Local:</strong> {selectedAlert.localName}
-                </p>
-              </div>
-
-              <Textarea
-                placeholder="Ingresa la resolución de esta alerta..."
-                value={resolution}
-                onChange={(e) => setResolution(e.target.value)}
-                rows={4}
-              />
-
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setSelectedAlert(null)}>
-                  Cancelar
-                </Button>
-                <Button onClick={() => handleResolveAlert(selectedAlert.id)} disabled={!resolution.trim()}>
-                  Resolver Alerta
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-    </>
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={getSeverityColor(alert.severity)}>{alert.severity.toUpperCase()}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    {alert.description}
+                    {alert.monetaryValue && (
+                      <div className="text-sm text-red-500 mt-1">
+                        Impacto financiero: {formatCurrency(alert.monetaryValue)}
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={getStatusColor(alert.status)}>
+                      {alert.status === "pendiente"
+                        ? "Pendiente"
+                        : alert.status === "revisada"
+                          ? "Revisada"
+                          : alert.status === "resuelta"
+                            ? "Resuelta"
+                            : alert.status}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   )
 }
+
+
 
