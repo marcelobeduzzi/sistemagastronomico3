@@ -1,16 +1,11 @@
 import type React from "react"
-import { Sidebar } from "@/components/sidebar"
+import { DashboardLayout } from "@/components/dashboard-layout"
 
 export default function StockControlLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  return (
-    <div className="flex min-h-screen">
-      <Sidebar />
-      <div className="flex-1 p-8">{children}</div>
-    </div>
-  )
+  return <DashboardLayout>{children}</DashboardLayout>
 }
 
