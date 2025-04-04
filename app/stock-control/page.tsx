@@ -1,8 +1,6 @@
-
-
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -22,13 +20,39 @@ export default function StockControlPage() {
   const { toast } = useToast()
   const [activeTab, setActiveTab] = useState("stock-inicial")
   const [showInitialSetup, setShowInitialSetup] = useState(false)
-  const [stockData, setStockData] = useState({
-    inicial: null,
-    ingresos: [],
-    decomisos: [],
-    ventas: mockSalesData, // Datos ficticios simulando Datalive
-    cierre: null,
+  const [stockData, setStockData] = useState(() => {
+    // Intentar cargar datos guardados del localStorage
+    const savedData = localStorage.getItem("stockControlData")
+    if (savedData) {
+      return JSON.parse(savedData)
+    }
+
+    // Datos por defecto
+    return {
+      inicial: null,
+      ingresos: [],
+      decomisos: [],
+      ventas: null, // Se cargará desde localStorage o mockSalesData
+      cierre: null,
+    }
   })
+
+  // Cargar datos de ventas (desde localStorage o mock)
+  useEffect(() => {
+    // Intentar cargar datos de ventas personalizados
+    const savedSalesData = localStorage.getItem("testSalesData")
+    const salesData = savedSalesData ? JSON.parse(savedSalesData) : mockSalesData
+
+    setStockData((prev) => ({
+      ...prev,
+      ventas: salesData,
+    }))
+  }, [])
+
+  // Guardar cambios en localStorage cuando cambian los datos
+  useEffect(() => {
+    localStorage.setItem("stockControlData", JSON.stringify(stockData))
+  }, [stockData])
 
   // Función para simular sincronización con Datalive
   const syncWithDatalive = () => {
@@ -37,13 +61,34 @@ export default function StockControlPage() {
       description: "Obteniendo datos de ventas actualizados...",
     })
 
-    // Simulamos una carga
+    // Determinar el turno actual basado en la hora
+    const hour = new Date().getHours()
+    const currentShift = hour >= 6 && hour < 14 ? "mañana" : "tarde"
+
+    // Intentar cargar datos de ventas personalizados
+    const savedSalesData = localStorage.getItem(`testSalesData_${currentShift}`)
+    let salesData
+
+    if (savedSalesData) {
+      salesData = JSON.parse(savedSalesData)
+    } else {
+      // Si no hay datos guardados, usar los datos predeterminados según el turno
+      const { getSalesDataByShift } = require("@/lib/test-sales-data")
+      salesData = getSalesDataByShift(currentShift)
+    }
+
+    // Actualizar los datos de ventas
     setTimeout(() => {
+      setStockData((prev) => ({
+        ...prev,
+        ventas: salesData,
+      }))
+
       toast({
         title: "Sincronización completada",
-        description: "Datos de ventas actualizados correctamente",
+        description: `Datos de ventas del turno de ${currentShift} actualizados correctamente`,
       })
-    }, 2000)
+    }, 1500)
   }
 
   // Función para avanzar al siguiente paso
@@ -75,11 +120,59 @@ export default function StockControlPage() {
     // No avanzamos automáticamente para permitir múltiples registros
   }
 
+  // Función para eliminar un ingreso
+  const handleDeleteIngreso = (index) => {
+    const newIngresos = [...stockData.ingresos]
+    newIngresos.splice(index, 1)
+    setStockData({ ...stockData, ingresos: newIngresos })
+    toast({
+      title: "Ingreso eliminado",
+      description: "El registro de ingreso ha sido eliminado correctamente.",
+    })
+  }
+
+  // Función para eliminar un decomiso
+  const handleDeleteDecomiso = (index) => {
+    const newDecomisos = [...stockData.decomisos]
+    newDecomisos.splice(index, 1)
+    setStockData({ ...stockData, decomisos: newDecomisos })
+    toast({
+      title: "Decomiso eliminado",
+      description: "El registro de decomiso ha sido eliminado correctamente.",
+    })
+  }
+
+  // Función para reiniciar todos los datos
+  const handleResetAllData = () => {
+    if (confirm("¿Estás seguro de que deseas reiniciar todos los datos? Esta acción no se puede deshacer.")) {
+      setStockData({
+        inicial: null,
+        ingresos: [],
+        decomisos: [],
+        ventas: stockData.ventas, // Mantener los datos de ventas
+        cierre: null,
+      })
+      toast({
+        title: "Datos reiniciados",
+        description: "Todos los datos de control de stock han sido reiniciados.",
+      })
+      setActiveTab("stock-inicial")
+    }
+  }
+
   return (
     <div className="container mx-auto py-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Control de Stock y Anti-Robo</h1>
-        <Button onClick={syncWithDatalive}>Sincronizar con Datalive</Button>
+        <div className="space-x-2">
+          <Button variant="outline" onClick={() => (window.location.href = "/stock-control/test-data")}>
+            Datos de Prueba
+          </Button>
+          <Button onClick={syncWithDatalive}>Sincronizar con Datalive</Button>
+          <Button variant="destructive" onClick={handleResetAllData}>
+            Reiniciar Datos
+          </Button>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
@@ -150,11 +243,19 @@ export default function StockControlPage() {
 
           {stockData.ingresos.length > 0 && (
             <Card>
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Ingresos Registrados</CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => goToNextStep("ingresos")}
+                  disabled={stockData.ingresos.length === 0}
+                >
+                  Continuar
+                </Button>
               </CardHeader>
               <CardContent>
-                <EntryList entries={stockData.ingresos} type="ingresos" />
+                <EntryList entries={stockData.ingresos} type="ingresos" onDelete={handleDeleteIngreso} />
               </CardContent>
             </Card>
           )}
@@ -176,11 +277,19 @@ export default function StockControlPage() {
 
           {stockData.decomisos.length > 0 && (
             <Card>
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Decomisos Registrados</CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => goToNextStep("decomisos")}
+                  disabled={stockData.decomisos.length === 0}
+                >
+                  Continuar
+                </Button>
               </CardHeader>
               <CardContent>
-                <EntryList entries={stockData.decomisos} type="decomisos" />
+                <EntryList entries={stockData.decomisos} type="decomisos" onDelete={handleDeleteDecomiso} />
               </CardContent>
             </Card>
           )}
@@ -195,7 +304,14 @@ export default function StockControlPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <SalesDataDisplay salesData={stockData.ventas} onContinue={() => goToNextStep("ventas")} />
+              {stockData.ventas ? (
+                <SalesDataDisplay salesData={stockData.ventas} onContinue={() => goToNextStep("ventas")} />
+              ) : (
+                <div className="text-center py-8">
+                  <p className="mb-4">No hay datos de ventas disponibles. Sincroniza con Datalive para obtenerlos.</p>
+                  <Button onClick={syncWithDatalive}>Sincronizar con Datalive</Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -230,15 +346,39 @@ export default function StockControlPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <StockReconciliation
-                stockData={stockData}
-                onComplete={() => {
-                  toast({
-                    title: "Control completado",
-                    description: "Los datos han sido guardados y las alertas generadas si corresponde.",
-                  })
-                }}
-              />
+              {stockData.inicial && stockData.cierre && stockData.ventas ? (
+                <StockReconciliation
+                  stockData={stockData}
+                  onComplete={() => {
+                    toast({
+                      title: "Control completado",
+                      description: "Los datos han sido guardados y las alertas generadas si corresponde.",
+                    })
+                  }}
+                />
+              ) : (
+                <div className="text-center py-8">
+                  <p className="mb-4">
+                    Para realizar la reconciliación, necesitas completar el stock inicial, el stock de cierre y tener
+                    datos de ventas.
+                  </p>
+                  {!stockData.inicial && (
+                    <Button className="mx-2" onClick={() => setActiveTab("stock-inicial")}>
+                      Ir a Stock Inicial
+                    </Button>
+                  )}
+                  {!stockData.ventas && (
+                    <Button className="mx-2" onClick={syncWithDatalive}>
+                      Sincronizar Ventas
+                    </Button>
+                  )}
+                  {!stockData.cierre && stockData.inicial && stockData.ventas && (
+                    <Button className="mx-2" onClick={() => setActiveTab("stock-cierre")}>
+                      Ir a Stock de Cierre
+                    </Button>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
