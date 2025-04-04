@@ -15,14 +15,14 @@ export default function TestDataPage() {
   const { toast } = useToast()
   const [activeTab, setActiveTab] = useState("sales")
   const [selectedShift, setSelectedShift] = useState("mañana")
-  const [salesData, setSalesData] = useState(() => {
-    // Intentar cargar datos guardados del localStorage
-    const savedData = localStorage.getItem(`testSalesData_${selectedShift}`)
-    return savedData ? JSON.parse(savedData) : selectedShift === "mañana" ? testSalesDataMañana : testSalesDataTarde
-  })
+  const [salesData, setSalesData] = useState(selectedShift === "mañana" ? testSalesDataMañana : testSalesDataTarde)
+  const [isClient, setIsClient] = useState(false)
 
-  // Actualizar datos cuando cambia el turno
+  // Marcar cuando el componente está en el cliente
   useEffect(() => {
+    setIsClient(true)
+
+    // Intentar cargar datos guardados del localStorage
     const savedData = localStorage.getItem(`testSalesData_${selectedShift}`)
     if (savedData) {
       setSalesData(JSON.parse(savedData))
@@ -31,10 +31,24 @@ export default function TestDataPage() {
     }
   }, [selectedShift])
 
-  // Guardar cambios en localStorage cuando cambian los datos
+  // Actualizar datos cuando cambia el turno (solo en el cliente)
   useEffect(() => {
-    localStorage.setItem(`testSalesData_${selectedShift}`, JSON.stringify(salesData))
-  }, [salesData, selectedShift])
+    if (isClient) {
+      const savedData = localStorage.getItem(`testSalesData_${selectedShift}`)
+      if (savedData) {
+        setSalesData(JSON.parse(savedData))
+      } else {
+        setSalesData(selectedShift === "mañana" ? testSalesDataMañana : testSalesDataTarde)
+      }
+    }
+  }, [selectedShift, isClient])
+
+  // Guardar cambios en localStorage cuando cambian los datos (solo en el cliente)
+  useEffect(() => {
+    if (isClient) {
+      localStorage.setItem(`testSalesData_${selectedShift}`, JSON.stringify(salesData))
+    }
+  }, [salesData, selectedShift, isClient])
 
   // Función para actualizar la cantidad de un producto
   const updateProductQuantity = (productId: string, quantity: number) => {
@@ -94,11 +108,31 @@ export default function TestDataPage() {
 
   // Función para guardar los cambios
   const saveChanges = () => {
-    localStorage.setItem(`testSalesData_${selectedShift}`, JSON.stringify(salesData))
-    toast({
-      title: "Cambios guardados",
-      description: `Los datos de prueba para el turno de ${selectedShift} han sido guardados correctamente.`,
-    })
+    if (isClient) {
+      localStorage.setItem(`testSalesData_${selectedShift}`, JSON.stringify(salesData))
+      toast({
+        title: "Cambios guardados",
+        description: `Los datos de prueba para el turno de ${selectedShift} han sido guardados correctamente.`,
+      })
+    }
+  }
+
+  // Si estamos en el servidor o el componente acaba de montarse, mostrar un estado de carga
+  if (!isClient) {
+    return (
+      <div className="container mx-auto py-6">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold">Datos de Prueba</h1>
+        </div>
+        <Card>
+          <CardContent className="py-10">
+            <div className="text-center">
+              <p>Cargando datos de prueba...</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (

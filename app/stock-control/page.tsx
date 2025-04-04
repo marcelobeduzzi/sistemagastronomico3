@@ -20,39 +20,46 @@ export default function StockControlPage() {
   const { toast } = useToast()
   const [activeTab, setActiveTab] = useState("stock-inicial")
   const [showInitialSetup, setShowInitialSetup] = useState(false)
-  const [stockData, setStockData] = useState(() => {
+  const [stockData, setStockData] = useState({
+    inicial: null,
+    ingresos: [],
+    decomisos: [],
+    ventas: null,
+    cierre: null,
+  })
+  const [isClient, setIsClient] = useState(false)
+
+  // Marcar cuando el componente está en el cliente
+  useEffect(() => {
+    setIsClient(true)
+
     // Intentar cargar datos guardados del localStorage
     const savedData = localStorage.getItem("stockControlData")
     if (savedData) {
-      return JSON.parse(savedData)
+      setStockData(JSON.parse(savedData))
     }
 
-    // Datos por defecto
-    return {
-      inicial: null,
-      ingresos: [],
-      decomisos: [],
-      ventas: null, // Se cargará desde localStorage o mockSalesData
-      cierre: null,
-    }
-  })
-
-  // Cargar datos de ventas (desde localStorage o mock)
-  useEffect(() => {
-    // Intentar cargar datos de ventas personalizados
+    // Cargar datos de ventas
     const savedSalesData = localStorage.getItem("testSalesData")
-    const salesData = savedSalesData ? JSON.parse(savedSalesData) : mockSalesData
-
-    setStockData((prev) => ({
-      ...prev,
-      ventas: salesData,
-    }))
+    if (savedSalesData) {
+      setStockData((prev) => ({
+        ...prev,
+        ventas: JSON.parse(savedSalesData),
+      }))
+    } else {
+      setStockData((prev) => ({
+        ...prev,
+        ventas: mockSalesData,
+      }))
+    }
   }, [])
 
-  // Guardar cambios en localStorage cuando cambian los datos
+  // Guardar cambios en localStorage cuando cambian los datos (solo en el cliente)
   useEffect(() => {
-    localStorage.setItem("stockControlData", JSON.stringify(stockData))
-  }, [stockData])
+    if (isClient) {
+      localStorage.setItem("stockControlData", JSON.stringify(stockData))
+    }
+  }, [stockData, isClient])
 
   // Función para simular sincronización con Datalive
   const syncWithDatalive = () => {
@@ -66,15 +73,25 @@ export default function StockControlPage() {
     const currentShift = hour >= 6 && hour < 14 ? "mañana" : "tarde"
 
     // Intentar cargar datos de ventas personalizados
-    const savedSalesData = localStorage.getItem(`testSalesData_${currentShift}`)
     let salesData
 
-    if (savedSalesData) {
-      salesData = JSON.parse(savedSalesData)
+    if (isClient) {
+      const savedSalesData = localStorage.getItem(`testSalesData_${currentShift}`)
+
+      if (savedSalesData) {
+        salesData = JSON.parse(savedSalesData)
+      } else {
+        // Si no hay datos guardados, usar los datos predeterminados según el turno
+        try {
+          const { getSalesDataByShift } = require("@/lib/test-sales-data")
+          salesData = getSalesDataByShift(currentShift)
+        } catch (error) {
+          console.error("Error al cargar datos de ventas:", error)
+          salesData = mockSalesData
+        }
+      }
     } else {
-      // Si no hay datos guardados, usar los datos predeterminados según el turno
-      const { getSalesDataByShift } = require("@/lib/test-sales-data")
-      salesData = getSalesDataByShift(currentShift)
+      salesData = mockSalesData
     }
 
     // Actualizar los datos de ventas
@@ -158,6 +175,24 @@ export default function StockControlPage() {
       })
       setActiveTab("stock-inicial")
     }
+  }
+
+  // Si estamos en el servidor o el componente acaba de montarse, mostrar un estado de carga
+  if (!isClient) {
+    return (
+      <div className="container mx-auto py-6">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold">Control de Stock y Anti-Robo</h1>
+        </div>
+        <Card>
+          <CardContent className="py-10">
+            <div className="text-center">
+              <p>Cargando datos de control de stock...</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
