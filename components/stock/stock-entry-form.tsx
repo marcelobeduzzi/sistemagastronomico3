@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
-import { mockProducts, mockUsers, mockProviders } from "@/lib/mock-data"
+import { mockProducts } from "@/lib/mock-data"
 
 interface StockEntryFormProps {
   onSubmit: (data: any) => void
@@ -27,6 +27,14 @@ export function StockEntryForm({ onSubmit }: StockEntryFormProps) {
       quantity: 0,
     })),
   )
+
+  // Actualizar la lista de proveedores para incluir los solicitados
+  const providers = [
+    { id: "prov-1", name: "Fabian Bebidas" },
+    { id: "prov-2", name: "Lucho Tango" },
+    { id: "prov-3", name: "Brozziano" },
+    // Mantener otros proveedores si es necesario
+  ]
 
   const handleQuantityChange = (index: number, value: number) => {
     const newEntryItems = [...entryItems]
@@ -83,49 +91,27 @@ export function StockEntryForm({ onSubmit }: StockEntryFormProps) {
 
   return (
     <form onSubmit={handleSubmit}>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <div>
-          <Label htmlFor="userId">Encargado</Label>
-          <Select value={userId} onValueChange={setUserId}>
-            <SelectTrigger id="userId">
-              <SelectValue placeholder="Seleccionar encargado" />
-            </SelectTrigger>
-            <SelectContent>
-              {mockUsers
-                .filter((user) => user.role === "encargado")
-                .map((user) => (
-                  <SelectItem key={user.id} value={user.id}>
-                    {user.name}
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
+          <Label htmlFor="currentUser">Encargado</Label>
+          <Input id="currentUser" value="Usuario Actual (Automático)" disabled className="bg-muted" />
+          <input type="hidden" name="userId" value="user-current" />
         </div>
 
         <div>
-          <Label htmlFor="providerId">Proveedor (opcional)</Label>
+          <Label htmlFor="providerId">Proveedor</Label>
           <Select value={providerId} onValueChange={setProviderId}>
             <SelectTrigger id="providerId">
               <SelectValue placeholder="Seleccionar proveedor" />
             </SelectTrigger>
             <SelectContent>
-              {mockProviders.map((provider) => (
+              {providers.map((provider) => (
                 <SelectItem key={provider.id} value={provider.id}>
                   {provider.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-        </div>
-
-        <div>
-          <Label htmlFor="invoiceNumber">Número de Factura (opcional)</Label>
-          <Input
-            id="invoiceNumber"
-            value={invoiceNumber}
-            onChange={(e) => setInvoiceNumber(e.target.value)}
-            placeholder="Ej: A-0001-00000123"
-          />
         </div>
       </div>
 
@@ -158,4 +144,6 @@ export function StockEntryForm({ onSubmit }: StockEntryFormProps) {
     </form>
   )
 }
+
+
 

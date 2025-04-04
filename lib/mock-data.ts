@@ -30,11 +30,9 @@ export const mockUsers = [
 
 // Proveedores
 export const mockProviders = [
-  { id: "prov-1", name: "Distribuidora Central" },
-  { id: "prov-2", name: "Panadería Mayorista" },
-  { id: "prov-3", name: "Bebidas del Sur" },
-  { id: "prov-4", name: "Distribuidora de Lácteos" },
-  { id: "prov-5", name: "Almacén Mayorista" },
+  { id: "prov-1", name: "Fabian Bebidas" },
+  { id: "prov-2", name: "Lucho Tango" },
+  { id: "prov-3", name: "Brozziano" },
 ]
 
 // Datos de ventas (simulando datos de Datalive)
@@ -254,4 +252,6 @@ export const mockAlerts = [
     updatedAt: new Date(Date.now() - 129600000).toISOString(),
   },
 ]
+
+
 

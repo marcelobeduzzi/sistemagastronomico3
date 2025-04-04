@@ -1,3 +1,5 @@
+
+
 "use client"
 
 import { useState } from "react"
@@ -13,9 +15,13 @@ import { AlertsDisplay } from "@/components/stock/alerts-display"
 import { useToast } from "@/hooks/use-toast"
 import { mockSalesData } from "@/lib/mock-data"
 
+import { InitialSetupForm } from "@/components/stock/initial-setup-form"
+import { EntryList } from "@/components/stock/entry-list"
+
 export default function StockControlPage() {
   const { toast } = useToast()
   const [activeTab, setActiveTab] = useState("stock-inicial")
+  const [showInitialSetup, setShowInitialSetup] = useState(false)
   const [stockData, setStockData] = useState({
     inicial: null,
     ingresos: [],
@@ -49,6 +55,26 @@ export default function StockControlPage() {
     }
   }
 
+  // Función para manejar múltiples registros de ingresos
+  const handleStockEntrySubmit = (data) => {
+    setStockData({ ...stockData, ingresos: [...stockData.ingresos, data] })
+    toast({
+      title: "Ingreso registrado",
+      description: "El ingreso de mercadería ha sido registrado correctamente.",
+    })
+    // No avanzamos automáticamente para permitir múltiples registros
+  }
+
+  // Función para manejar múltiples registros de decomisos
+  const handleDecomisoSubmit = (data) => {
+    setStockData({ ...stockData, decomisos: [...stockData.decomisos, data] })
+    toast({
+      title: "Decomiso registrado",
+      description: "El decomiso ha sido registrado correctamente.",
+    })
+    // No avanzamos automáticamente para permitir múltiples registros
+  }
+
   return (
     <div className="container mx-auto py-6">
       <div className="flex justify-between items-center mb-6">
@@ -57,7 +83,8 @@ export default function StockControlPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid grid-cols-6 w-full">
+        <TabsList className="grid grid-cols-7 w-full">
+          <TabsTrigger value="configuracion-inicial">Config. Inicial</TabsTrigger>
           <TabsTrigger value="stock-inicial">Stock Inicial</TabsTrigger>
           <TabsTrigger value="ingresos">Ingresos</TabsTrigger>
           <TabsTrigger value="decomisos">Decomisos</TabsTrigger>
@@ -65,6 +92,30 @@ export default function StockControlPage() {
           <TabsTrigger value="stock-cierre">Stock Cierre</TabsTrigger>
           <TabsTrigger value="reconciliacion">Reconciliación</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="configuracion-inicial">
+          <Card>
+            <CardHeader>
+              <CardTitle>Configuración Inicial de Stock</CardTitle>
+              <CardDescription>
+                Configuración inicial de stock supervisada. Esta operación debe ser realizada por un encargado y
+                validada por un supervisor.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <InitialSetupForm
+                onSubmit={(data) => {
+                  setStockData({ ...stockData, inicial: data })
+                  toast({
+                    title: "Configuración inicial completada",
+                    description: "La configuración inicial de stock ha sido registrada correctamente.",
+                  })
+                  setActiveTab("stock-inicial")
+                }}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="stock-inicial">
           <Card>
@@ -87,24 +138,30 @@ export default function StockControlPage() {
         </TabsContent>
 
         <TabsContent value="ingresos">
-          <Card>
+          <Card className="mb-6">
             <CardHeader>
               <CardTitle>Ingresos de Mercadería</CardTitle>
               <CardDescription>Registra los ingresos de mercadería durante el turno.</CardDescription>
             </CardHeader>
             <CardContent>
-              <StockEntryForm
-                onSubmit={(data) => {
-                  setStockData({ ...stockData, ingresos: [...stockData.ingresos, data] })
-                  goToNextStep("ingresos")
-                }}
-              />
+              <StockEntryForm onSubmit={handleStockEntrySubmit} />
             </CardContent>
           </Card>
+
+          {stockData.ingresos.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Ingresos Registrados</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <EntryList entries={stockData.ingresos} type="ingresos" />
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="decomisos">
-          <Card>
+          <Card className="mb-6">
             <CardHeader>
               <CardTitle>Decomisos</CardTitle>
               <CardDescription>
@@ -113,15 +170,20 @@ export default function StockControlPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <DecomisoForm
-                salesData={stockData.ventas}
-                onSubmit={(data) => {
-                  setStockData({ ...stockData, decomisos: [...stockData.decomisos, data] })
-                  goToNextStep("decomisos")
-                }}
-              />
+              <DecomisoForm salesData={stockData.ventas} onSubmit={handleDecomisoSubmit} />
             </CardContent>
           </Card>
+
+          {stockData.decomisos.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Decomisos Registrados</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <EntryList entries={stockData.decomisos} type="decomisos" />
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="ventas">

@@ -1,3 +1,5 @@
+
+
 "use client"
 
 import { useState } from "react"
@@ -20,6 +22,13 @@ export function AlertsDisplay() {
   const [alerts, setAlerts] = useState(mockAlerts)
   const [selectedAlert, setSelectedAlert] = useState(null)
   const [resolution, setResolution] = useState("")
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat("es-AR", {
+      style: "currency",
+      currency: "ARS",
+    }).format(amount)
+  }
 
   const handleResolveAlert = (id) => {
     setAlerts(
@@ -96,7 +105,20 @@ export function AlertsDisplay() {
                     <TableCell>
                       <Badge variant={getSeverityColor(alert.severity)}>{alert.severity.toUpperCase()}</Badge>
                     </TableCell>
-                    <TableCell>{alert.description}</TableCell>
+                    <TableCell>
+                      {alert.description}
+                      {alert.monetaryValue && (
+                        <div className="text-sm text-red-500 mt-1">
+                          Impacto financiero estimado: {formatCurrency(alert.monetaryValue)}
+                        </div>
+                      )}
+                      {alert.context && (
+                        <details className="text-xs text-muted-foreground mt-1">
+                          <summary>Ver detalles</summary>
+                          <p className="mt-1">{alert.context}</p>
+                        </details>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={getStatusColor(alert.status)}>
                         {alert.status === "pendiente"

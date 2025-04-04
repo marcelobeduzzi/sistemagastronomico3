@@ -89,12 +89,19 @@ export function StockReconciliation({ stockData, onComplete }: StockReconciliati
 
           // Generar alerta si la diferencia es significativa (más del 2%)
           if (Math.abs(differencePercentage) > 2 && expectedFinal > 0) {
+            // Calcular el valor monetario de la diferencia (usando un precio ficticio por ahora)
+            const unitPrice = 500 // En una implementación real, esto vendría de los datos del producto
+            const monetaryDifference = difference * unitPrice
+
             stockAlerts.push({
               productId: initialItem.productId,
               productName: initialItem.productName,
               difference,
               differencePercentage,
+              monetaryValue: monetaryDifference, // Añadir el valor monetario
               severity: Math.abs(differencePercentage) > 5 ? "alta" : "media",
+              // Añadir más contexto para la alerta
+              context: `Stock inicial: ${initialItem.quantity}, Ventas: ${sales}, Decomisos: ${decomisos}, Ingresos: ${ingresos}, Stock esperado: ${expectedFinal}, Stock final: ${finalItem.quantity}`,
             })
           }
         }
@@ -304,4 +311,6 @@ export function StockReconciliation({ stockData, onComplete }: StockReconciliati
     </div>
   )
 }
+
+
 

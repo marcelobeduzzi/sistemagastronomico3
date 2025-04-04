@@ -20,6 +20,7 @@ interface StockCountFormProps {
 export function StockCountForm({ type, requireSecondaryUser = false, onSubmit }: StockCountFormProps) {
   const { toast } = useToast()
   const [userId, setUserId] = useState("")
+  const [supervisorId, setSupervisorId] = useState("")
   const [secondaryUserId, setSecondaryUserId] = useState("")
   const [confirmationPin, setConfirmationPin] = useState("")
   const [stockItems, setStockItems] = useState(
@@ -53,6 +54,15 @@ export function StockCountForm({ type, requireSecondaryUser = false, onSubmit }:
       toast({
         title: "Error",
         description: "Debes seleccionar un encargado",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (type === "inicial" && !supervisorId) {
+      toast({
+        title: "Error",
+        description: "Debes seleccionar un supervisor para la configuración inicial",
         variant: "destructive",
       })
       return
@@ -94,6 +104,7 @@ export function StockCountForm({ type, requireSecondaryUser = false, onSubmit }:
     onSubmit({
       type,
       userId,
+      supervisorId: type === "inicial" ? supervisorId : undefined,
       secondaryUserId: requireSecondaryUser ? secondaryUserId : undefined,
       confirmationPin,
       items: stockItems,
@@ -134,6 +145,26 @@ export function StockCountForm({ type, requireSecondaryUser = false, onSubmit }:
             </SelectContent>
           </Select>
         </div>
+
+        {type === "inicial" && (
+          <div>
+            <Label htmlFor="supervisorId">Supervisor (Requerido para configuración inicial)</Label>
+            <Select value={supervisorId} onValueChange={setSupervisorId}>
+              <SelectTrigger id="supervisorId">
+                <SelectValue placeholder="Seleccionar supervisor" />
+              </SelectTrigger>
+              <SelectContent>
+                {mockUsers
+                  .filter((user) => user.role === "admin" || user.role === "supervisor")
+                  .map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {user.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         {requireSecondaryUser && (
           <div>
@@ -209,7 +240,7 @@ export function StockCountForm({ type, requireSecondaryUser = false, onSubmit }:
                     value={item.quantity}
                     onChange={(e) => handleQuantityChange(index, Number.parseInt(e.target.value) || 0)}
                   />
-                  {item.expectedQuantity > 0 && (
+                  {type === "inicial" && item.expectedQuantity > 0 && (
                     <span className="text-sm text-muted-foreground whitespace-nowrap">
                       Esperado: {item.expectedQuantity}
                     </span>
@@ -227,4 +258,6 @@ export function StockCountForm({ type, requireSecondaryUser = false, onSubmit }:
     </form>
   )
 }
+
+
 
