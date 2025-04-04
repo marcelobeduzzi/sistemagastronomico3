@@ -11,6 +11,93 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey)
 const FTP_USERNAME = process.env.FTP_USERNAME || "quadrifoglio"
 const FTP_PASSWORD = process.env.FTP_PASSWORD || "secure_password"
 
+// Manejar solicitudes GET (para pruebas)
+export async function GET(request: NextRequest) {
+  return new Response(
+    `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Prueba de API FTP</title>
+      <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        h1 { color: #333; }
+        .info { background: #f0f0f0; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+        form { background: #f9f9f9; padding: 20px; border-radius: 5px; }
+        label { display: block; margin-bottom: 10px; }
+        input[type="file"] { margin-bottom: 15px; }
+        button { background: #0070f3; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; }
+        #result { margin-top: 20px; padding: 15px; border-radius: 5px; background: #f0f0f0; display: none; }
+      </style>
+    </head>
+    <body>
+      <h1>Prueba de API FTP</h1>
+      <div class="info">
+        <p>Esta página te permite probar la API de carga FTP. Selecciona un archivo y haz clic en "Subir archivo".</p>
+        <p>La API utiliza autenticación básica con las siguientes credenciales:</p>
+        <ul>
+          <li>Usuario: quadrifoglio</li>
+          <li>Contraseña: secure_password</li>
+        </ul>
+      </div>
+      <form id="uploadForm">
+        <label for="fileInput">Selecciona un archivo:</label>
+        <input type="file" id="fileInput" required>
+        <button type="submit">Subir archivo</button>
+      </form>
+      <div id="result"></div>
+
+      <script>
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+          e.preventDefault();
+          
+          const fileInput = document.getElementById('fileInput');
+          const resultDiv = document.getElementById('result');
+          
+          if (!fileInput.files[0]) {
+            resultDiv.textContent = 'Por favor selecciona un archivo';
+            resultDiv.style.display = 'block';
+            return;
+          }
+          
+          const formData = new FormData();
+          formData.append('file', fileInput.files[0]);
+          
+          try {
+            resultDiv.textContent = 'Subiendo...';
+            resultDiv.style.display = 'block';
+            
+            const response = await fetch('/api/ftp-up', {
+              method: 'POST',
+              headers: {
+                'Authorization': 'Basic ' + btoa('quadrifoglio:secure_password')
+              },
+              body: formData
+            });
+            
+            if (!response.ok) {
+              throw new Error('Error: ' + response.status + ' ' + response.statusText);
+            }
+            
+            const data = await response.json();
+            resultDiv.innerHTML = '<strong>Resultado:</strong><br>' + JSON.stringify(data, null, 2).replace(/\\n/g, '<br>').replace(/ /g, '&nbsp;');
+          } catch (error) {
+            resultDiv.textContent = 'Error: ' + error.message;
+          }
+        });
+      </script>
+    </body>
+    </html>
+  `,
+    {
+      headers: {
+        "Content-Type": "text/html",
+      },
+    },
+  )
+}
+
+// Manejar solicitudes POST (para subir archivos)
 export async function POST(request: NextRequest) {
   try {
     // Verificar autenticación básica
@@ -72,4 +159,6 @@ function verifyAuth(authHeader: string): boolean {
 
   return username === FTP_USERNAME && password === FTP_PASSWORD
 }
+
+
 
