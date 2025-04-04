@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { testSalesDataMañana, testSalesDataTarde } from "@/lib/test-sales-data"
+import Link from "next/link"
 
 export default function TestDataPage() {
   const { toast } = useToast()
@@ -110,6 +111,8 @@ export default function TestDataPage() {
   const saveChanges = () => {
     if (isClient) {
       localStorage.setItem(`testSalesData_${selectedShift}`, JSON.stringify(salesData))
+      // También guardar en testSalesData para compatibilidad
+      localStorage.setItem("testSalesData", JSON.stringify(salesData))
       toast({
         title: "Cambios guardados",
         description: `Los datos de prueba para el turno de ${selectedShift} han sido guardados correctamente.`,
@@ -290,9 +293,13 @@ export default function TestDataPage() {
       </Card>
 
       <div className="flex justify-end">
-        <Button onClick={() => (window.location.href = "/stock-control")}>Ir al Control de Stock</Button>
+        <Link href="/stock-control">
+          <Button>Ir al Control de Stock</Button>
+        </Link>
       </div>
     </div>
   )
 }
+
+
 

@@ -1,15 +1,21 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card, CardContent } from "@/components/ui/card"
-import { useToast } from "@/hooks/use-toast"
 import { mockProducts, mockUsers } from "@/lib/mock-data"
+import { useToast } from "@/hooks/use-toast"
+import { useAuth } from "@/lib/auth-context"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 interface StockCountFormProps {
   type: "inicial" | "cierre"
@@ -19,245 +25,261 @@ interface StockCountFormProps {
 
 export function StockCountForm({ type, requireSecondaryUser = false, onSubmit }: StockCountFormProps) {
   const { toast } = useToast()
-  const [userId, setUserId] = useState("")
-  const [supervisorId, setSupervisorId] = useState("")
+  const { user, validateSupervisorPin, supervisors } = useAuth()
+  const [products, setProducts] = useState(mockProducts.map((product) => ({ ...product, quantity: 0 })))
+  const [userId, setUserId] = useState(user?.id || "")
   const [secondaryUserId, setSecondaryUserId] = useState("")
-  const [confirmationPin, setConfirmationPin] = useState("")
-  const [stockItems, setStockItems] = useState(
-    mockProducts.map((product) => ({
-      productId: product.id,
-      productName: product.name,
-      quantity: 0,
-      expectedQuantity: type === "inicial" ? product.expectedInitialStock : product.expectedFinalStock,
-      difference: 0,
-      differencePercentage: 0,
-    })),
-  )
+  const [shift, setShift] = useState("mañana")
+  const [notes, setNotes] = useState("")
+  const [showSupervisorDialog, setShowSupervisorDialog] = useState(false)
+  const [supervisorPin, setSupervisorPin] = useState("")
+  const [pinError, setPinError] = useState("")
 
-  const handleQuantityChange = (index: number, value: number) => {
-    const newStockItems = [...stockItems]
-    newStockItems[index].quantity = value
+  // Actualizar el ID de usuario cuando cambia el usuario autenticado
+  useEffect(() => {
+    if (user) {
+      setUserId(user.id)
+    }
+  }, [user])
 
-    // Calcular diferencia y porcentaje
-    const expected = newStockItems[index].expectedQuantity || 0
-    newStockItems[index].difference = value - expected
-    newStockItems[index].differencePercentage = expected > 0 ? Math.round(((value - expected) / expected) * 100) : 0
-
-    setStockItems(newStockItems)
+  const handleQuantityChange = (productId, quantity) => {
+    setProducts(
+      products.map((product) =>
+        product.id === productId ? { ...product, quantity: Number.parseInt(quantity) || 0 } : product,
+      ),
+    )
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = () => {
+    // Validar que se hayan ingresado cantidades para al menos un producto
+    const hasProducts = products.some((product) => product.quantity > 0)
+    if (!hasProducts) {
+      toast({
+        title: "Error",
+        description: "Debes ingresar al menos un producto con cantidad mayor a cero.",
+        variant: "destructive",
+      })
+      return
+    }
 
-    // Validaciones
+    // Validar que se haya seleccionado un usuario
     if (!userId) {
       toast({
         title: "Error",
-        description: "Debes seleccionar un encargado",
+        description: "Debes seleccionar un usuario responsable.",
         variant: "destructive",
       })
       return
     }
 
-    if (type === "inicial" && !supervisorId) {
-      toast({
-        title: "Error",
-        description: "Debes seleccionar un supervisor para la configuración inicial",
-        variant: "destructive",
-      })
-      return
-    }
-
+    // Validar que se haya seleccionado un usuario secundario si es requerido
     if (requireSecondaryUser && !secondaryUserId) {
       toast({
         title: "Error",
-        description: "Debes seleccionar un segundo encargado para el cambio de turno",
+        description: "Debes seleccionar un segundo usuario para validar el conteo.",
         variant: "destructive",
       })
       return
     }
 
-    if (!confirmationPin) {
-      toast({
-        title: "Error",
-        description: "Debes ingresar el PIN de confirmación",
-        variant: "destructive",
-      })
+    // Si se requiere un usuario secundario, mostrar el diálogo para ingresar el PIN
+    if (requireSecondaryUser) {
+      setShowSupervisorDialog(true)
       return
     }
 
-    // Verificar si hay diferencias significativas (más del 2%)
-    const significantDifferences = stockItems.filter(
-      (item) => Math.abs(item.differencePercentage) > 2 && item.expectedQuantity > 0,
-    )
+    // Si no se requiere un usuario secundario, enviar los datos directamente
+    submitData()
+  }
 
-    if (significantDifferences.length > 0) {
-      // Mostrar alerta pero permitir continuar
-      toast({
-        title: "Atención",
-        description: `Se detectaron ${significantDifferences.length} productos con diferencias mayores al 2%`,
-        variant: "destructive",
-      })
+  const validateAndSubmit = () => {
+    // Validar el PIN del supervisor
+    if (validateSupervisorPin(supervisorPin)) {
+      setShowSupervisorDialog(false)
+      setSupervisorPin("")
+      setPinError("")
+      submitData()
+    } else {
+      setPinError("PIN incorrecto. Intenta nuevamente.")
     }
+  }
 
-    // Enviar datos
-    onSubmit({
+  const submitData = () => {
+    // Filtrar productos con cantidad mayor a cero
+    const productsWithQuantity = products.filter((product) => product.quantity > 0)
+
+    // Crear objeto de datos
+    const data = {
       type,
       userId,
-      supervisorId: type === "inicial" ? supervisorId : undefined,
-      secondaryUserId: requireSecondaryUser ? secondaryUserId : undefined,
-      confirmationPin,
-      items: stockItems,
+      secondaryUserId: requireSecondaryUser ? secondaryUserId : null,
+      shift,
       date: new Date().toISOString(),
-      shift: getCurrentShift(),
-      localId: "local-1", // En un caso real, esto vendría de un contexto o selección
-      confirmed: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      products: productsWithQuantity,
+      notes,
+    }
+
+    // Enviar datos al componente padre
+    onSubmit(data)
+
+    // Mostrar mensaje de éxito
+    toast({
+      title: `Stock ${type} registrado`,
+      description: `El stock ${type} ha sido registrado correctamente.`,
     })
   }
 
-  // Determinar el turno actual basado en la hora
-  const getCurrentShift = () => {
-    const hour = new Date().getHours()
-    if (hour >= 6 && hour < 14) return "mañana"
-    if (hour >= 14 && hour < 22) return "tarde"
-    return "noche"
-  }
-
   return (
-    <form onSubmit={handleSubmit}>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
-          <Label htmlFor="userId">Encargado</Label>
+          <Label htmlFor="user">Usuario Responsable</Label>
           <Select value={userId} onValueChange={setUserId}>
-            <SelectTrigger id="userId">
-              <SelectValue placeholder="Seleccionar encargado" />
+            <SelectTrigger id="user">
+              <SelectValue placeholder="Seleccionar usuario" />
             </SelectTrigger>
             <SelectContent>
               {mockUsers
-                .filter((user) => user.role === "encargado")
+                .filter((u) => u.role === "encargado" || u.role === "supervisor")
                 .map((user) => (
                   <SelectItem key={user.id} value={user.id}>
-                    {user.name}
+                    {user.name} ({user.role})
                   </SelectItem>
                 ))}
             </SelectContent>
           </Select>
         </div>
 
-        {type === "inicial" && (
-          <div>
-            <Label htmlFor="supervisorId">Supervisor (Requerido para configuración inicial)</Label>
-            <Select value={supervisorId} onValueChange={setSupervisorId}>
-              <SelectTrigger id="supervisorId">
-                <SelectValue placeholder="Seleccionar supervisor" />
-              </SelectTrigger>
-              <SelectContent>
-                {mockUsers
-                  .filter((user) => user.role === "admin" || user.role === "supervisor")
-                  .map((user) => (
-                    <SelectItem key={user.id} value={user.id}>
-                      {user.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
         {requireSecondaryUser && (
           <div>
-            <Label htmlFor="secondaryUserId">Segundo Encargado (Cambio de Turno)</Label>
+            <Label htmlFor="secondaryUser">Usuario Secundario</Label>
             <Select value={secondaryUserId} onValueChange={setSecondaryUserId}>
-              <SelectTrigger id="secondaryUserId">
-                <SelectValue placeholder="Seleccionar segundo encargado" />
+              <SelectTrigger id="secondaryUser">
+                <SelectValue placeholder="Seleccionar usuario" />
               </SelectTrigger>
               <SelectContent>
                 {mockUsers
-                  .filter((user) => user.role === "encargado" && user.id !== userId)
+                  .filter((u) => u.id !== userId && (u.role === "encargado" || u.role === "supervisor"))
                   .map((user) => (
                     <SelectItem key={user.id} value={user.id}>
-                      {user.name}
+                      {user.name} ({user.role})
                     </SelectItem>
                   ))}
               </SelectContent>
             </Select>
           </div>
         )}
+
+        <div>
+          <Label htmlFor="shift">Turno</Label>
+          <Select value={shift} onValueChange={setShift}>
+            <SelectTrigger id="shift">
+              <SelectValue placeholder="Seleccionar turno" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="mañana">Mañana</SelectItem>
+              <SelectItem value="tarde">Tarde</SelectItem>
+              <SelectItem value="noche">Noche</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
-      <div className="mb-6">
-        <Label htmlFor="pin">PIN de Confirmación</Label>
-        <Input
-          id="pin"
-          type="password"
-          maxLength={4}
-          value={confirmationPin}
-          onChange={(e) => setConfirmationPin(e.target.value)}
-          className="w-32"
-        />
-        <p className="text-sm text-muted-foreground mt-1">Ingresa tu PIN de 4 dígitos para confirmar este conteo</p>
-      </div>
-
-      <div className="mb-6">
+      <div>
         <h3 className="text-lg font-medium mb-4">Productos</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {stockItems.map((item, index) => (
-            <Card
-              key={item.productId}
-              className={
-                item.difference < 0 && Math.abs(item.differencePercentage) > 2
-                  ? "border-red-500"
-                  : item.difference > 0 && Math.abs(item.differencePercentage) > 2
-                    ? "border-green-500"
-                    : ""
-              }
-            >
-              <CardContent className="p-4">
-                <div className="flex justify-between items-center mb-2">
-                  <Label htmlFor={`quantity-${index}`}>{item.productName}</Label>
-                  {item.expectedQuantity > 0 && (
-                    <span
-                      className={`text-sm font-medium ${
-                        item.difference < 0 && Math.abs(item.differencePercentage) > 2
-                          ? "text-red-500"
-                          : item.difference > 0 && Math.abs(item.differencePercentage) > 2
-                            ? "text-green-500"
-                            : "text-muted-foreground"
-                      }`}
-                    >
-                      {item.difference > 0 ? "+" : ""}
-                      {item.difference} ({item.differencePercentage}%)
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Input
-                    id={`quantity-${index}`}
-                    type="number"
-                    min="0"
-                    value={item.quantity}
-                    onChange={(e) => handleQuantityChange(index, Number.parseInt(e.target.value) || 0)}
-                  />
-                  {type === "inicial" && item.expectedQuantity > 0 && (
-                    <span className="text-sm text-muted-foreground whitespace-nowrap">
-                      Esperado: {item.expectedQuantity}
-                    </span>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+        <div className="space-y-4">
+          {products.map((product) => (
+            <div key={product.id} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+              <div className="md:col-span-2">
+                <Label htmlFor={`product-${product.id}`}>{product.name}</Label>
+              </div>
+              <div>
+                <Input
+                  id={`product-${product.id}`}
+                  type="number"
+                  min="0"
+                  value={product.quantity}
+                  onChange={(e) => handleQuantityChange(product.id, e.target.value)}
+                />
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {product.unit} - ${product.price}
+              </div>
+            </div>
           ))}
         </div>
       </div>
 
-      <Button type="submit" className="w-full">
-        {type === "inicial" ? "Registrar Stock Inicial" : "Registrar Stock de Cierre"}
-      </Button>
-    </form>
+      <div>
+        <Label htmlFor="notes">Observaciones</Label>
+        <Input
+          id="notes"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Observaciones adicionales (opcional)"
+        />
+      </div>
+
+      <div className="flex justify-end">
+        <Button onClick={handleSubmit}>
+          {type === "inicial" ? "Registrar Stock Inicial" : "Registrar Stock de Cierre"}
+        </Button>
+      </div>
+
+      {/* Diálogo para validación de supervisor */}
+      <Dialog open={showSupervisorDialog} onOpenChange={setShowSupervisorDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Validación de Supervisor</DialogTitle>
+            <DialogDescription>
+              Para completar el registro de stock de cierre, un supervisor debe ingresar su PIN.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="supervisorPin">PIN de Supervisor</Label>
+              <Input
+                id="supervisorPin"
+                type="password"
+                value={supervisorPin}
+                onChange={(e) => {
+                  setSupervisorPin(e.target.value)
+                  setPinError("")
+                }}
+                placeholder="Ingrese el PIN"
+              />
+              {pinError && <p className="text-sm text-destructive">{pinError}</p>}
+            </div>
+
+            <div>
+              <p className="text-sm text-muted-foreground">Supervisores disponibles:</p>
+              <ul className="text-sm text-muted-foreground mt-1">
+                {supervisors.map((supervisor) => (
+                  <li key={supervisor.id}>
+                    {supervisor.name} - PIN: {supervisor.pin}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-sm text-muted-foreground mt-2">
+                Nota: En un entorno de producción, esta información no sería visible.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSupervisorDialog(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={validateAndSubmit}>Validar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   )
 }
+
+
 
 
 

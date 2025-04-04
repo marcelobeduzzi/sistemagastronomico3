@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Checkbox } from "@/components/ui/checkbox"
 import { mockUsers, mockAlerts } from "@/lib/mock-data"
 import { dbService } from "@/lib/db"
 import { useToast } from "@/hooks/use-toast"
@@ -91,7 +92,10 @@ export default function AdminActionsPage() {
     amount: 0,
     assignedTo: "",
     notes: "",
+    affectedEmployees: [],
   })
+  const [shiftEmployees, setShiftEmployees] = useState([])
+  const [selectedEmployees, setSelectedEmployees] = useState({})
 
   // Cargar alertas al montar el componente
   useEffect(() => {
@@ -118,13 +122,25 @@ export default function AdminActionsPage() {
               })),
             )
           } else {
-            // Si no hay datos en la base de datos, usar los datos de mock
-            setAlerts(mockAlerts)
+            // Si no hay datos en la base de datos, intentar cargar desde localStorage
+            const localAlerts = localStorage.getItem("localAlerts")
+            if (localAlerts) {
+              setAlerts(JSON.parse(localAlerts))
+            } else {
+              // Si no hay datos en localStorage, usar los datos de mock
+              setAlerts(mockAlerts)
+            }
           }
         } catch (dbError) {
           console.error("Error al cargar alertas desde la base de datos:", dbError)
-          // Usar datos de mock como fallback
-          setAlerts(mockAlerts)
+          // Intentar cargar desde localStorage
+          const localAlerts = localStorage.getItem("localAlerts")
+          if (localAlerts) {
+            setAlerts(JSON.parse(localAlerts))
+          } else {
+            // Usar datos de mock como fallback
+            setAlerts(mockAlerts)
+          }
         }
       } catch (error) {
         console.error("Error al cargar alertas:", error)
@@ -142,6 +158,19 @@ export default function AdminActionsPage() {
     loadAlerts()
   }, [toast])
 
+  // Cuando se selecciona una alerta, cargar los empleados del turno correspondiente
+  useEffect(() => {
+    if (selectedAlert) {
+      // En un caso real, aquí cargaríamos los empleados del turno desde la base de datos
+      // Para este ejemplo, filtramos los empleados de mockUsers
+      const employees = mockUsers.filter((user) => user.role === "empleado" || user.role === "encargado")
+      setShiftEmployees(employees)
+
+      // Resetear los empleados seleccionados
+      setSelectedEmployees({})
+    }
+  }, [selectedAlert])
+
   // Función para crear una nueva acción correctiva
   const handleCreateAction = () => {
     if (!newAction.type || !newAction.description || !newAction.assignedTo) {
@@ -156,11 +185,36 @@ export default function AdminActionsPage() {
     const actionId = `action-${Date.now()}`
     const now = new Date().toISOString()
 
+    // Si es una deducción a empleado, procesar los empleados seleccionados
+    let affectedEmployees = []
+    let actionDescription = newAction.description
+
+    if (newAction.type === "employee-deduction") {
+      affectedEmployees = Object.entries(selectedEmployees)
+        .filter(([_, isSelected]) => isSelected)
+        .map(([id, _]) => id)
+
+      if (affectedEmployees.length === 0) {
+        toast({
+          title: "Error",
+          description: "Debes seleccionar al menos un empleado para la deducción.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Calcular el monto por empleado
+      const amountPerEmployee = Number.parseFloat(newAction.amount) / affectedEmployees.length
+
+      // Actualizar la descripción para incluir los empleados afectados
+      actionDescription = `Deducción de ${formatCurrency(Number.parseFloat(newAction.amount))} repartido entre ${affectedEmployees.length} empleados (${formatCurrency(amountPerEmployee)} c/u)`
+    }
+
     const action = {
       id: actionId,
       alertId: selectedAlert.id,
       type: newAction.type,
-      description: newAction.description,
+      description: actionDescription,
       amount: Number.parseFloat(newAction.amount) || 0,
       status: "pendiente",
       assignedTo: newAction.assignedTo,
@@ -168,6 +222,7 @@ export default function AdminActionsPage() {
       createdAt: now,
       completedAt: null,
       notes: newAction.notes,
+      affectedEmployees: affectedEmployees,
     }
 
     // Actualizar el estado local
@@ -181,7 +236,9 @@ export default function AdminActionsPage() {
       amount: 0,
       assignedTo: "",
       notes: "",
+      affectedEmployees: [],
     })
+    setSelectedEmployees({})
 
     toast({
       title: "Acción creada",
@@ -212,6 +269,47 @@ export default function AdminActionsPage() {
       title: "Estado actualizado",
       description: `La acción ha sido marcada como ${newStatus}.`,
     })
+  }
+
+  // Manejar cambio en el tipo de acción
+  const handleActionTypeChange = (type) => {
+    setNewAction({ ...newAction, type })
+
+    // Si es ajuste de stock y hay una alerta seleccionada, pre-llenar la descripción
+    if (type === "stock-adjustment" && selectedAlert) {
+      let description = `Ajuste de stock para corregir `
+
+      if (selectedAlert.type === "stock") {
+        description += `faltante de ${Math.abs(selectedAlert.difference_amount || 0)} unidades de producto`
+      } else {
+        description += `diferencia detectada en ${selectedAlert.type}`
+      }
+
+      setNewAction({
+        ...newAction,
+        type,
+        description,
+        amount: selectedAlert.monetary_value || 0,
+      })
+    }
+
+    // Si es deducción a empleado, pre-llenar con el monto de la alerta
+    else if (type === "employee-deduction" && selectedAlert) {
+      setNewAction({
+        ...newAction,
+        type,
+        description: `Deducción por ${selectedAlert.type === "stock" ? "faltante de stock" : selectedAlert.type === "caja" ? "faltante en caja" : "irregularidad"}`,
+        amount: selectedAlert.monetary_value || 0,
+      })
+    }
+  }
+
+  // Manejar selección/deselección de empleados
+  const handleEmployeeSelection = (employeeId) => {
+    setSelectedEmployees((prev) => ({
+      ...prev,
+      [employeeId]: !prev[employeeId],
+    }))
   }
 
   // Filtrar acciones según la pestaña activa
@@ -419,7 +517,7 @@ export default function AdminActionsPage() {
 
             <div>
               <Label htmlFor="type">Tipo de Acción</Label>
-              <Select onValueChange={(value) => setNewAction({ ...newAction, type: value })}>
+              <Select onValueChange={handleActionTypeChange}>
                 <SelectTrigger id="type">
                   <SelectValue placeholder="Seleccionar tipo" />
                 </SelectTrigger>
@@ -455,6 +553,37 @@ export default function AdminActionsPage() {
               />
               <p className="text-xs text-muted-foreground mt-1">Dejar en 0 si no aplica un monto</p>
             </div>
+
+            {newAction.type === "employee-deduction" && selectedAlert && (
+              <div>
+                <Label>Empleados del Turno</Label>
+                <div className="border rounded-md p-3 mt-1 max-h-40 overflow-y-auto">
+                  {shiftEmployees.length > 0 ? (
+                    <div className="space-y-2">
+                      {shiftEmployees.map((employee) => (
+                        <div key={employee.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`employee-${employee.id}`}
+                            checked={!!selectedEmployees[employee.id]}
+                            onCheckedChange={() => handleEmployeeSelection(employee.id)}
+                          />
+                          <Label htmlFor={`employee-${employee.id}`} className="cursor-pointer">
+                            {employee.name} ({employee.role})
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No hay empleados disponibles para este turno</p>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {Object.values(selectedEmployees).filter(Boolean).length > 0
+                    ? `El monto se repartirá entre ${Object.values(selectedEmployees).filter(Boolean).length} empleados`
+                    : "Selecciona los empleados a los que se aplicará la deducción"}
+                </p>
+              </div>
+            )}
 
             <div>
               <Label htmlFor="assignedTo">Asignar a</Label>
@@ -561,6 +690,19 @@ export default function AdminActionsPage() {
                 <p className="text-sm text-muted-foreground">Descripción</p>
                 <p>{selectedAction.description}</p>
               </div>
+
+              {selectedAction.affectedEmployees && selectedAction.affectedEmployees.length > 0 && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Empleados Afectados</p>
+                  <div className="mt-1">
+                    {selectedAction.affectedEmployees.map((employeeId) => (
+                      <Badge key={employeeId} variant="outline" className="mr-1 mb-1">
+                        {getUserName(employeeId)}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {selectedAction.notes && (
                 <div>
@@ -707,4 +849,6 @@ export default function AdminActionsPage() {
     </div>
   )
 }
+
+
 
