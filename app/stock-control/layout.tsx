@@ -1,5 +1,5 @@
 import type React from "react"
-import { DashboardLayout } from "@/components/dashboard-layout"
+import { DashboardLayout } from "@/app/dashboard-layout"
 
 export default function StockControlLayout({
   children,
@@ -8,4 +8,6 @@ export default function StockControlLayout({
 }) {
   return <DashboardLayout>{children}</DashboardLayout>
 }
+
+
 
