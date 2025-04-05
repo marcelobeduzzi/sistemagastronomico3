@@ -25,6 +25,7 @@ import {
   CreditCard,
   Package,
   Shield,
+  Calculator,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -174,16 +175,16 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         href: "/caja",
         icon: CreditCard,
       },
-	  {
+      {
         title: "Control de Stock",
         href: "/stock-control",
         icon: Package,
       },
-	  {
-		title: "Control de Stock Prueba",
-		href: "/stock",
-		icon: Package,
-	  },
+      {
+        title: "Control de Stock Prueba",
+        href: "/stock",
+        icon: Package,
+      },
       {
         title: "Delivery",
         href: "#",
@@ -228,8 +229,20 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
       },
       {
         title: "Proveedores y Pagos",
-        href: "/proveedores-pagos",
+        href: "#",
         icon: DollarSign,
+        submenu: [
+          {
+            title: "Gestión de Proveedores",
+            href: "/proveedores-pagos",
+            icon: DollarSign,
+          },
+          {
+            title: "Simulación de Costos",
+            href: "/proveedores-pagos/simulacion-costos",
+            icon: Calculator,
+          },
+        ],
       },
       {
         title: "Sistema de Puntos",
@@ -251,11 +264,11 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         href: "/reportes",
         icon: BarChart3,
       },
-	  {
-		title: "Panel de Administración",
-		href: "/admin",
-		icon: Shield, // Necesitarás importar Shield de lucide-react
-	  },
+      {
+        title: "Panel de Administración",
+        href: "/admin",
+        icon: Shield, // Necesitarás importar Shield de lucide-react
+      },
       {
         title: "Configuración",
         href: "/configuracion",
@@ -396,6 +409,8 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
     </div>
   )
 }
+
+
 
 
 
