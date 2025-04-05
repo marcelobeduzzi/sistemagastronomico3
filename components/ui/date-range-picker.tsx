@@ -1,5 +1,6 @@
 "use client"
 import { format } from "date-fns"
+import { es } from "date-fns/locale" // Importar locale español
 import { CalendarIcon } from "lucide-react"
 import type { DateRange } from "react-day-picker"
 
@@ -28,10 +29,10 @@ export function DatePickerWithRange({ className, date, setDate }: DatePickerWith
             {date?.from ? (
               date.to ? (
                 <>
-                  {format(date.from, "dd/MM/yyyy")} - {format(date.to, "dd/MM/yyyy")}
+                  {format(date.from, "dd/MM/yyyy", { locale: es })} - {format(date.to, "dd/MM/yyyy", { locale: es })}
                 </>
               ) : (
-                format(date.from, "dd/MM/yyyy")
+                format(date.from, "dd/MM/yyyy", { locale: es })
               )
             ) : (
               <span>Seleccionar rango de fechas</span>
@@ -46,6 +47,7 @@ export function DatePickerWithRange({ className, date, setDate }: DatePickerWith
             selected={date}
             onSelect={setDate}
             numberOfMonths={2}
+            locale={es}
           />
         </PopoverContent>
       </Popover>

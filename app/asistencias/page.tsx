@@ -9,7 +9,7 @@ import { dbService } from "@/lib/db-service"
 import { exportToCSV, formatDate } from "@/lib/export-utils"
 import type { Attendance, Employee } from "@/types"
 import type { ColumnDef } from "@tanstack/react-table"
-import { Download, Plus, Calendar, Edit, FileText, List } from "lucide-react"
+import { Download, Plus, Calendar, Edit, FileText, List, QrCode } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -27,6 +27,8 @@ import { UltraSimpleDatePicker } from "@/components/ultra-simple-date-picker"
 import { StatusBadge } from "@/components/status-badge"
 import { useToast } from "@/components/ui/use-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { QrClockRecords } from "@/components/asistencias/qr-clock-records"
+import Link from "next/link"
 
 export default function AsistenciasPage() {
   const [attendances, setAttendances] = useState<Attendance[]>([])
@@ -523,217 +525,230 @@ export default function AsistenciasPage() {
             <h2 className="text-3xl font-bold tracking-tight">Control de Asistencias</h2>
             <p className="text-muted-foreground">Gestiona las asistencias de los empleados</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Registrar Asistencia
+          <div className="flex gap-2">
+            <Link href="/fichaje-qr">
+              <Button variant="outline">
+                <QrCode className="mr-2 h-4 w-4" />
+                Fichaje QR
               </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Registrar Asistencia</DialogTitle>
-                <DialogDescription>Ingresa los datos de asistencia del empleado</DialogDescription>
-              </DialogHeader>
+            </Link>
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Registrar Asistencia
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Registrar Asistencia</DialogTitle>
+                  <DialogDescription>Ingresa los datos de asistencia del empleado</DialogDescription>
+                </DialogHeader>
 
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="employee">Empleado</Label>
-                    <Select
-                      value={newAttendance.employeeId}
-                      onValueChange={(value) => {
-                        // Usar el manejador específico para actualizar también los horarios esperados
-                        handleEmployeeChange(value)
-                      }}
-                    >
-                      <SelectTrigger id="employee">
-                        <SelectValue placeholder="Seleccionar empleado" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {employees
-                          .filter((e) => e.status === "active")
-                          .map((employee) => (
-                            <SelectItem key={employee.id} value={employee.id}>
-                              {employee.firstName} {employee.lastName}
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="employee">Empleado</Label>
+                      <Select
+                        value={newAttendance.employeeId}
+                        onValueChange={(value) => {
+                          // Usar el manejador específico para actualizar también los horarios esperados
+                          handleEmployeeChange(value)
+                        }}
+                      >
+                        <SelectTrigger id="employee">
+                          <SelectValue placeholder="Seleccionar empleado" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {employees
+                            .filter((e) => e.status === "active")
+                            .map((employee) => (
+                              <SelectItem key={employee.id} value={employee.id}>
+                                {employee.firstName} {employee.lastName}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="date">Fecha</Label>
-                    <UltraSimpleDatePicker
-                      value={newAttendance.date}
-                      onChange={(dateString) => {
-                        console.log("Nueva fecha seleccionada:", dateString)
-                        setNewAttendance((prev) => ({
-                          ...prev,
-                          date: dateString,
-                        }))
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="isAbsent"
-                      checked={newAttendance.isAbsent}
-                      onCheckedChange={(checked) => {
-                        const isAbsent = checked === true
-                        setNewAttendance((prev) => ({
-                          ...prev,
-                          isAbsent,
-                          checkIn: isAbsent ? "" : prev.checkIn,
-                          checkOut: isAbsent ? "" : prev.checkOut,
-                          lateMinutes: isAbsent ? 0 : prev.lateMinutes,
-                          earlyDepartureMinutes: isAbsent ? 0 : prev.earlyDepartureMinutes,
-                        }))
-                      }}
-                    />
-                    <Label htmlFor="isAbsent">Ausente</Label>
-                  </div>
-                </div>
-
-                {newAttendance.isAbsent && (
-                  <div className="space-y-2">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="isJustified"
-                        checked={newAttendance.isJustified}
-                        onCheckedChange={(checked) => {
+                    <div className="space-y-2">
+                      <Label htmlFor="date">Fecha</Label>
+                      <UltraSimpleDatePicker
+                        value={newAttendance.date}
+                        onChange={(dateString) => {
+                          console.log("Nueva fecha seleccionada:", dateString)
                           setNewAttendance((prev) => ({
                             ...prev,
-                            isJustified: checked === true,
+                            date: dateString,
                           }))
                         }}
                       />
-                      <Label htmlFor="isJustified">Justificado</Label>
                     </div>
                   </div>
-                )}
 
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="isHoliday"
-                      checked={newAttendance.isHoliday}
-                      onCheckedChange={(checked) => {
-                        setNewAttendance((prev) => ({
-                          ...prev,
-                          isHoliday: checked === true,
-                        }))
-                      }}
-                    />
-                    <Label htmlFor="isHoliday">Feriado</Label>
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="isAbsent"
+                        checked={newAttendance.isAbsent}
+                        onCheckedChange={(checked) => {
+                          const isAbsent = checked === true
+                          setNewAttendance((prev) => ({
+                            ...prev,
+                            isAbsent,
+                            checkIn: isAbsent ? "" : prev.checkIn,
+                            checkOut: isAbsent ? "" : prev.checkOut,
+                            lateMinutes: isAbsent ? 0 : prev.lateMinutes,
+                            earlyDepartureMinutes: isAbsent ? 0 : prev.earlyDepartureMinutes,
+                          }))
+                        }}
+                      />
+                      <Label htmlFor="isAbsent">Ausente</Label>
+                    </div>
                   </div>
-                </div>
 
-                {!newAttendance.isAbsent && (
-                  <>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="expectedCheckIn">Hora Entrada Esperada</Label>
-                        <Input
-                          id="expectedCheckIn"
-                          type="time"
-                          value={newAttendance.expectedCheckIn}
-                          onChange={(e) => setNewAttendance((prev) => ({ ...prev, expectedCheckIn: e.target.value }))}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="expectedCheckOut">Hora Salida Esperada</Label>
-                        <Input
-                          id="expectedCheckOut"
-                          type="time"
-                          value={newAttendance.expectedCheckOut}
-                          onChange={(e) => setNewAttendance((prev) => ({ ...prev, expectedCheckOut: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="checkIn">Hora Entrada Real</Label>
-                        <Input
-                          id="checkIn"
-                          type="time"
-                          value={newAttendance.checkIn}
-                          onChange={(e) => {
-                            setNewAttendance((prev) => ({ ...prev, checkIn: e.target.value }))
-                            setTimeout(calculateMinutes, 100)
-                          }}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="checkOut">Hora Salida Real</Label>
-                        <Input
-                          id="checkOut"
-                          type="time"
-                          value={newAttendance.checkOut}
-                          onChange={(e) => {
-                            setNewAttendance((prev) => ({ ...prev, checkOut: e.target.value }))
-                            setTimeout(calculateEarlyDeparture, 100)
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="lateMinutes">Minutos Tarde</Label>
-                        <Input
-                          id="lateMinutes"
-                          type="number"
-                          value={newAttendance.lateMinutes}
-                          onChange={(e) =>
-                            setNewAttendance((prev) => ({ ...prev, lateMinutes: Number.parseInt(e.target.value) || 0 }))
-                          }
-                          readOnly
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="earlyDepartureMinutes">Minutos Salida Anticipada</Label>
-                        <Input
-                          id="earlyDepartureMinutes"
-                          type="number"
-                          value={newAttendance.earlyDepartureMinutes}
-                          onChange={(e) =>
+                  {newAttendance.isAbsent && (
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="isJustified"
+                          checked={newAttendance.isJustified}
+                          onCheckedChange={(checked) => {
                             setNewAttendance((prev) => ({
                               ...prev,
-                              earlyDepartureMinutes: Number.parseInt(e.target.value) || 0,
+                              isJustified: checked === true,
                             }))
-                          }
-                          readOnly
+                          }}
                         />
+                        <Label htmlFor="isJustified">Justificado</Label>
                       </div>
                     </div>
-                  </>
-                )}
+                  )}
 
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Notas</Label>
-                  <Input
-                    id="notes"
-                    value={newAttendance.notes}
-                    onChange={(e) => setNewAttendance((prev) => ({ ...prev, notes: e.target.value }))}
-                  />
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="isHoliday"
+                        checked={newAttendance.isHoliday}
+                        onCheckedChange={(checked) => {
+                          setNewAttendance((prev) => ({
+                            ...prev,
+                            isHoliday: checked === true,
+                          }))
+                        }}
+                      />
+                      <Label htmlFor="isHoliday">Feriado</Label>
+                    </div>
+                  </div>
+
+                  {!newAttendance.isAbsent && (
+                    <>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="expectedCheckIn">Hora Entrada Esperada</Label>
+                          <Input
+                            id="expectedCheckIn"
+                            type="time"
+                            value={newAttendance.expectedCheckIn}
+                            onChange={(e) => setNewAttendance((prev) => ({ ...prev, expectedCheckIn: e.target.value }))}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="expectedCheckOut">Hora Salida Esperada</Label>
+                          <Input
+                            id="expectedCheckOut"
+                            type="time"
+                            value={newAttendance.expectedCheckOut}
+                            onChange={(e) =>
+                              setNewAttendance((prev) => ({ ...prev, expectedCheckOut: e.target.value }))
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="checkIn">Hora Entrada Real</Label>
+                          <Input
+                            id="checkIn"
+                            type="time"
+                            value={newAttendance.checkIn}
+                            onChange={(e) => {
+                              setNewAttendance((prev) => ({ ...prev, checkIn: e.target.value }))
+                              setTimeout(calculateMinutes, 100)
+                            }}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="checkOut">Hora Salida Real</Label>
+                          <Input
+                            id="checkOut"
+                            type="time"
+                            value={newAttendance.checkOut}
+                            onChange={(e) => {
+                              setNewAttendance((prev) => ({ ...prev, checkOut: e.target.value }))
+                              setTimeout(calculateEarlyDeparture, 100)
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="lateMinutes">Minutos Tarde</Label>
+                          <Input
+                            id="lateMinutes"
+                            type="number"
+                            value={newAttendance.lateMinutes}
+                            onChange={(e) =>
+                              setNewAttendance((prev) => ({
+                                ...prev,
+                                lateMinutes: Number.parseInt(e.target.value) || 0,
+                              }))
+                            }
+                            readOnly
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="earlyDepartureMinutes">Minutos Salida Anticipada</Label>
+                          <Input
+                            id="earlyDepartureMinutes"
+                            type="number"
+                            value={newAttendance.earlyDepartureMinutes}
+                            onChange={(e) =>
+                              setNewAttendance((prev) => ({
+                                ...prev,
+                                earlyDepartureMinutes: Number.parseInt(e.target.value) || 0,
+                              }))
+                            }
+                            readOnly
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="notes">Notas</Label>
+                    <Input
+                      id="notes"
+                      value={newAttendance.notes}
+                      onChange={(e) => setNewAttendance((prev) => ({ ...prev, notes: e.target.value }))}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <DialogFooter>
-                <Button type="submit" onClick={handleSubmit}>
-                  Guardar
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+                <DialogFooter>
+                  <Button type="submit" onClick={handleSubmit}>
+                    Guardar
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         {/* Diálogo de edición de asistencia */}
@@ -972,6 +987,10 @@ export default function AsistenciasPage() {
                   <Calendar className="mr-2 h-4 w-4" />
                   Por Fecha
                 </TabsTrigger>
+                <TabsTrigger value="qr">
+                  <QrCode className="mr-2 h-4 w-4" />
+                  Fichajes QR
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="recent">
@@ -1030,6 +1049,44 @@ export default function AsistenciasPage() {
                   isLoading={isLoading}
                 />
               </TabsContent>
+
+              <TabsContent value="qr">
+                <div className="flex items-center mb-4 space-x-4">
+                  <div className="flex-1 max-w-sm">
+                    <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos los empleados" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos los empleados</SelectItem>
+                        {employees.map((employee) => (
+                          <SelectItem key={employee.id} value={employee.id}>
+                            {employee.firstName} {employee.lastName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="ml-auto flex items-center gap-2">
+                    <Link href="/fichaje-qr">
+                      <Button variant="outline">
+                        <QrCode className="mr-2 h-4 w-4" />
+                        Ir a Fichaje QR
+                      </Button>
+                    </Link>
+                    <Button variant="outline" onClick={handleExportCSV}>
+                      <Download className="mr-2 h-4 w-4" />
+                      Exportar CSV
+                    </Button>
+                  </div>
+                </div>
+
+                <QrClockRecords
+                  employeeId={selectedEmployee !== "all" ? selectedEmployee : undefined}
+                  isLoading={isLoading}
+                />
+              </TabsContent>
             </Tabs>
           </CardContent>
         </Card>
@@ -1037,42 +1094,4 @@ export default function AsistenciasPage() {
     </DashboardLayout>
   )
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
