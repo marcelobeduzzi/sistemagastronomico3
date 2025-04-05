@@ -1,4 +1,3 @@
-// Asegurarse de que el CSS de react-datepicker esté incluido
 import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
@@ -43,6 +42,8 @@ export default function RootLayout({
     </html>
   )
 }
+
+
 
 
 
