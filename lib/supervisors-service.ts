@@ -1,12 +1,8 @@
-import supabase from "@/lib/supabase-client"
+import { createClient } from "@/lib/supabase-client"
 
 export async function getAllSupervisors() {
   try {
-    // Verificamos que supabase esté definido antes de usarlo
-    if (!supabase) {
-      console.error("Cliente de Supabase no inicializado")
-      return []
-    }
+    const supabase = createClient()
 
     const { data, error } = await supabase.from("employees").select("*").eq("role", "Supervisor").order("lastName")
 

@@ -1,16 +1,30 @@
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+// Verificar que las variables de entorno estén definidas
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-// Creamos una instancia del cliente de Supabase
-const supabaseInstance = createSupabaseClient(supabaseUrl, supabaseKey)
-
-// Exportamos la función createClient para mantener compatibilidad con el código existente
-export function createClient() {
-  return supabaseInstance
+if (!supabaseUrl || !supabaseKey) {
+  console.error("Variables de entorno de Supabase no definidas:", {
+    url: !!supabaseUrl ? "definida" : "no definida",
+    key: !!supabaseKey ? "definida" : "no definida",
+  })
 }
 
-// También exportamos la instancia directamente como alternativa
-export default supabaseInstance
+// Crear una instancia del cliente para exportar directamente
+export const supabase = supabaseUrl && supabaseKey ? createSupabaseClient(supabaseUrl, supabaseKey) : null
+
+// Función para crear un cliente de Supabase (para mantener compatibilidad con código existente)
+export function createClient() {
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error("Variables de entorno de Supabase no definidas")
+  }
+  return createSupabaseClient(supabaseUrl, supabaseKey)
+}
+
+export default supabase
+
+
+
+
 
