@@ -49,7 +49,12 @@ export const suppliersService = {
   // Crear un nuevo proveedor
   async createSupplier(supplier: Omit<Supplier, "id" | "created_at" | "updated_at">): Promise<Supplier> {
     const supabase = createClient()
-    const { data, error } = await supabase.from("suppliers").insert(supplier).select().single()
+
+    // Crear una copia del objeto y eliminar el campo 'active' si existe
+    const supplierData = { ...supplier }
+    delete supplierData.active
+
+    const { data, error } = await supabase.from("suppliers").insert(supplierData).select().single()
 
     if (error) {
       console.error("Error creating supplier:", error)
@@ -190,22 +195,27 @@ export const suppliersService = {
 export const invoicesService = {
   // Obtener todas las facturas
   async getInvoices(): Promise<InvoiceWithDetails[]> {
-    const supabase = createClient()
-    const { data, error } = await supabase
-      .from("supplier_invoices")
-      .select(`
-        *,
-        supplier:suppliers(*),
-        payments:supplier_payments(*)
-      `)
-      .order("issue_date", { ascending: false })
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from("supplier_invoices")
+        .select(`
+          *,
+          supplier:suppliers(*),
+          payments:supplier_payments(*)
+        `)
+        .order("issue_date", { ascending: false })
 
-    if (error) {
-      console.error("Error fetching invoices:", error)
-      throw error
+      if (error) {
+        console.error("Error fetching invoices:", error)
+        return []
+      }
+
+      return data || []
+    } catch (error) {
+      console.error("Error in getInvoices:", error)
+      return []
     }
-
-    return data || []
   },
 
   // Obtener facturas por proveedor
@@ -369,23 +379,28 @@ export const invoicesService = {
 
   // Obtener historial de pagos (pagos completados)
   async getPaymentHistory(): Promise<PaymentWithDetails[]> {
-    const supabase = createClient()
-    const { data, error } = await supabase
-      .from("supplier_payments")
-      .select(`
-        *,
-        invoice:supplier_invoices(*),
-        supplier:supplier_invoices(supplier:suppliers(*))
-      `)
-      .eq("status", "completed")
-      .order("payment_date", { ascending: false })
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from("supplier_payments")
+        .select(`
+          *,
+          invoice:supplier_invoices(*),
+          supplier:supplier_invoices(supplier:suppliers(*))
+        `)
+        .eq("status", "completed")
+        .order("payment_date", { ascending: false })
 
-    if (error) {
-      console.error("Error fetching payment history:", error)
-      throw error
+      if (error) {
+        console.error("Error fetching payment history:", error)
+        return []
+      }
+
+      return data || []
+    } catch (error) {
+      console.error("Error in getPaymentHistory:", error)
+      return []
     }
-
-    return data || []
   },
 }
 

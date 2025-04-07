@@ -32,7 +32,8 @@ export default function HistorialPagosPage() {
     const fetchPaymentHistory = async () => {
       try {
         setLoading(true)
-        const data = await invoicesService.getPaymentHistory()
+        // Usar un array vacío como fallback en caso de error
+        const data = await invoicesService.getPaymentHistory().catch(() => [])
         setPayments(data)
         setFilteredPayments(data)
       } catch (err: any) {
@@ -112,7 +113,7 @@ export default function HistorialPagosPage() {
 
   // Calcular estadísticas
   const totalPaid = filteredPayments.reduce((sum, payment) => sum + payment.payment_amount, 0)
-  const uniqueSuppliers = new Set(filteredPayments.map((payment) => payment.supplier?.id)).size
+  const uniqueSuppliers = new Set(filteredPayments.map((payment) => payment.supplier?.id).filter(Boolean)).size
   const uniqueInvoices = new Set(filteredPayments.map((payment) => payment.invoice_id)).size
 
   // Obtener métodos de pago únicos

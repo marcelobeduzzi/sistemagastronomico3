@@ -8,13 +8,13 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { DateRange } from "react-day-picker"
 
-interface DateRangePickerProps {
-  dateRange: DateRange | undefined
-  onDateRangeChange: (dateRange: DateRange | undefined) => void
+interface DatePickerWithRangeProps {
   className?: string
+  date: DateRange | undefined
+  setDate: (date: DateRange | undefined) => void
 }
 
-export function DateRangePicker({ dateRange, onDateRangeChange, className }: DateRangePickerProps) {
+export function DatePickerWithRange({ className, date, setDate }: DatePickerWithRangeProps) {
   return (
     <div className={cn("grid gap-2", className)}>
       <Popover>
@@ -23,21 +23,20 @@ export function DateRangePicker({ dateRange, onDateRangeChange, className }: Dat
             id="date"
             className={cn(
               "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 w-[300px] justify-start text-left font-normal cursor-pointer",
-              !dateRange && "text-muted-foreground",
+              !date && "text-muted-foreground",
             )}
           >
             <CalendarIcon className="mr-2 h-4 w-4" />
-            {dateRange?.from ? (
-              dateRange.to ? (
+            {date?.from ? (
+              date.to ? (
                 <>
-                  {format(dateRange.from, "dd/MM/yyyy", { locale: es })} -{" "}
-                  {format(dateRange.to, "dd/MM/yyyy", { locale: es })}
+                  {format(date.from, "dd/MM/yyyy", { locale: es })} - {format(date.to, "dd/MM/yyyy", { locale: es })}
                 </>
               ) : (
-                format(dateRange.from, "dd/MM/yyyy", { locale: es })
+                format(date.from, "dd/MM/yyyy", { locale: es })
               )
             ) : (
-              <span>Seleccionar fecha</span>
+              <span>Seleccionar rango de fechas</span>
             )}
           </div>
         </PopoverTrigger>
@@ -46,9 +45,9 @@ export function DateRangePicker({ dateRange, onDateRangeChange, className }: Dat
             <Calendar
               initialFocus
               mode="range"
-              defaultMonth={dateRange?.from}
-              selected={dateRange}
-              onSelect={onDateRangeChange}
+              defaultMonth={date?.from}
+              selected={date}
+              onSelect={setDate}
               numberOfMonths={2}
               locale={es}
               classNames={{
@@ -85,4 +84,19 @@ export function DateRangePicker({ dateRange, onDateRangeChange, className }: Dat
     </div>
   )
 }
+
+// Exportamos también el componente con la interfaz original para mantener compatibilidad
+export function DateRangePicker({
+  dateRange,
+  onDateRangeChange,
+  className,
+}: {
+  dateRange: DateRange | undefined
+  onDateRangeChange: (dateRange: DateRange | undefined) => void
+  className?: string
+}) {
+  return <DatePickerWithRange date={dateRange} setDate={onDateRangeChange} className={className} />
+}
+
+
 
