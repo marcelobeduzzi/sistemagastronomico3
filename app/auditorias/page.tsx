@@ -51,17 +51,46 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/components/ui/use-toast"
-import { deleteAuditoria, getAuditorias } from "@/lib/api/auditorias/queries"
-import type { Auditoria } from "@/lib/db/schema"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useUser } from "@clerk/nextjs"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { format } from "date-fns"
-import { es } from "date-fns/locale"
 import { Progress } from "@/components/ui/progress"
+import { getAuditorias, deleteAuditoria } from "@/lib/api/auditorias"
+import { useUser } from "@/lib/auth"
+
+// Definición de tipo para Auditoria
+interface Auditoria {
+  id: string
+  name: string
+  description?: string
+  type?: string
+  status?: string
+  date?: string
+  shift?: string
+  local?: string
+  items?: any[]
+  userId?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+// Función para formatear fechas
+function formatDate(dateString: string | undefined): string {
+  if (!dateString) return "No especificada"
+
+  try {
+    const date = new Date(dateString)
+    return date.toLocaleDateString("es-ES", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    })
+  } catch (error) {
+    return dateString
+  }
+}
 
 interface DataTableProps {
   columns: ColumnDef<Auditoria>[]
@@ -69,7 +98,7 @@ interface DataTableProps {
 }
 
 // Función para renderizar el badge de tipo
-const renderTypeBadge = (type: string) => {
+const renderTypeBadge = (type: string | undefined) => {
   // Verificar el tipo de auditoría correctamente
   if (type === "rapida") {
     return <Badge className="bg-blue-100 text-blue-800 border-blue-300">Rápida</Badge>
@@ -79,7 +108,7 @@ const renderTypeBadge = (type: string) => {
 }
 
 // Función para renderizar el badge de estado
-const renderStatusBadge = (status: string) => {
+const renderStatusBadge = (status: string | undefined) => {
   switch (status) {
     case "completed":
       return <Badge className="bg-green-100 text-green-800 border-green-300">Completada</Badge>
@@ -90,7 +119,7 @@ const renderStatusBadge = (status: string) => {
     case "failed":
       return <Badge className="bg-red-100 text-red-800 border-red-300">Fallida</Badge>
     default:
-      return <Badge className="bg-gray-100 text-gray-800 border-gray-300">{status}</Badge>
+      return <Badge className="bg-gray-100 text-gray-800 border-gray-300">Pendiente</Badge>
   }
 }
 
@@ -220,159 +249,6 @@ function DataTable<TData, TValue>({ columns, data }: DataTableProps) {
   )
 }
 
-const columns: ColumnDef<Auditoria>[] = [
-  {
-    id: "select",
-    header: ({ table }) => (
-      <Checkbox
-        checked={table.getIsAllPageRowsSelected()}
-        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-        aria-label="Select all"
-        className="translate-y-[2px]"
-      />
-    ),
-    cell: ({ row }) => (
-      <Checkbox
-        checked={row.getIsSelected()}
-        onCheckedChange={(value) => row.toggleSelected(!!value)}
-        aria-label="Select row"
-        className="translate-y-[2px]"
-      />
-    ),
-    enableSorting: false,
-    enableHiding: false,
-  },
-  {
-    accessorKey: "id",
-    header: "ID",
-  },
-  {
-    accessorKey: "name",
-    header: "Nombre",
-  },
-  {
-    accessorKey: "description",
-    header: "Descripción",
-  },
-  {
-    accessorKey: "type",
-    header: "Tipo",
-    cell: ({ row }) => {
-      // Corregido: Usar el valor real del tipo para determinar qué mostrar
-      return renderTypeBadge(row.original.type || "detallada")
-    },
-  },
-  {
-    accessorKey: "status",
-    header: "Estado",
-    cell: ({ row }) => {
-      return renderStatusBadge(row.original.status || "pending")
-    },
-  },
-  {
-    accessorKey: "date",
-    header: "Fecha",
-    cell: ({ row }) => {
-      const date = row.original.date
-      if (!date) return "No especificada"
-      try {
-        return format(new Date(date), "dd/MM/yyyy", { locale: es })
-      } catch (error) {
-        return date
-      }
-    },
-  },
-  {
-    accessorKey: "shift",
-    header: "Turno",
-    cell: ({ row }) => {
-      // Corregido: Procesar correctamente el valor del turno
-      const shift = row.original.shift?.toLowerCase() || ""
-      if (shift === "morning") return "Mañana"
-      if (shift === "afternoon") return "Tarde"
-      if (shift === "night") return "Noche"
-      return row.original.shift || "No especificado"
-    },
-  },
-  {
-    accessorKey: "local",
-    header: "Local",
-  },
-  {
-    accessorKey: "compliance",
-    header: "Cumplimiento",
-    cell: ({ row }) => {
-      const percentage = calculateCompliancePercentage(row.original)
-      return (
-        <div className="w-full">
-          <div className="flex justify-between mb-1">
-            <span className="text-xs font-medium">{percentage}%</span>
-          </div>
-          <Progress value={percentage} className="h-2" />
-        </div>
-      )
-    },
-  },
-  {
-    id: "actions",
-    enableHiding: false,
-    cell: ({ row }) => {
-      const auditoria = row.original
-      const router = useRouter()
-      const { toast } = useToast()
-
-      return (
-        <div className="flex gap-2">
-          <Button variant="outline" size="icon" onClick={() => router.push(`/auditorias/${auditoria.id}/view`)}>
-            <Eye className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" size="icon" onClick={() => router.push(`/auditorias/${auditoria.id}`)}>
-            <Edit className="h-4 w-4" />
-          </Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="outline" size="icon">
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Esta acción no se puede deshacer. ¿Quieres borrar la auditoría "{auditoria.name}"?
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={async () => {
-                    try {
-                      await deleteAuditoria(auditoria.id)
-                      router.refresh()
-                      toast({
-                        title: "Éxito",
-                        description: "Auditoría borrada.",
-                      })
-                    } catch (error: any) {
-                      toast({
-                        title: "Error",
-                        description: error.message,
-                        variant: "destructive",
-                      })
-                    }
-                  }}
-                >
-                  Borrar
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      )
-    },
-  },
-]
-
 function AuditoriasStats({ auditorias }: { auditorias: Auditoria[] }) {
   // Estadísticas generales
   const totalAuditorias = auditorias.length
@@ -493,7 +369,7 @@ function RecentAuditorias({ auditorias }: { auditorias: Auditoria[] }) {
                     <p className="text-sm font-medium">{auditoria.name}</p>
                     <div className="flex items-center space-x-2">
                       <p className="text-xs text-muted-foreground">
-                        {auditoria.date ? format(new Date(auditoria.date), "dd/MM/yyyy", { locale: es }) : "Sin fecha"}
+                        {auditoria.date ? formatDate(auditoria.date) : "Sin fecha"}
                       </p>
                       <p className="text-xs text-muted-foreground">•</p>
                       <p className="text-xs text-muted-foreground">{auditoria.local || "Sin local"}</p>
@@ -501,7 +377,7 @@ function RecentAuditorias({ auditorias }: { auditorias: Auditoria[] }) {
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
-                  {renderStatusBadge(auditoria.status || "pending")}
+                  {renderStatusBadge(auditoria.status)}
                   <Button variant="ghost" size="icon" onClick={() => router.push(`/auditorias/${auditoria.id}/view`)}>
                     <Eye className="h-4 w-4" />
                   </Button>
@@ -615,6 +491,153 @@ function AuditoriasFilters({
   )
 }
 
+const columns: ColumnDef<Auditoria>[] = [
+  {
+    id: "select",
+    header: ({ table }) => (
+      <Checkbox
+        checked={table.getIsAllPageRowsSelected()}
+        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+        aria-label="Select all"
+        className="translate-y-[2px]"
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        checked={row.getIsSelected()}
+        onCheckedChange={(value) => row.toggleSelected(!!value)}
+        aria-label="Select row"
+        className="translate-y-[2px]"
+      />
+    ),
+    enableSorting: false,
+    enableHiding: false,
+  },
+  {
+    accessorKey: "id",
+    header: "ID",
+  },
+  {
+    accessorKey: "name",
+    header: "Nombre",
+  },
+  {
+    accessorKey: "description",
+    header: "Descripción",
+  },
+  {
+    accessorKey: "type",
+    header: "Tipo",
+    cell: ({ row }) => {
+      // Corregido: Usar el valor real del tipo para determinar qué mostrar
+      return renderTypeBadge(row.original.type)
+    },
+  },
+  {
+    accessorKey: "status",
+    header: "Estado",
+    cell: ({ row }) => {
+      return renderStatusBadge(row.original.status)
+    },
+  },
+  {
+    accessorKey: "date",
+    header: "Fecha",
+    cell: ({ row }) => {
+      return formatDate(row.original.date)
+    },
+  },
+  {
+    accessorKey: "shift",
+    header: "Turno",
+    cell: ({ row }) => {
+      // Corregido: Procesar correctamente el valor del turno
+      const shift = row.original.shift?.toLowerCase() || ""
+      if (shift === "morning") return "Mañana"
+      if (shift === "afternoon") return "Tarde"
+      if (shift === "night") return "Noche"
+      return row.original.shift || "No especificado"
+    },
+  },
+  {
+    accessorKey: "local",
+    header: "Local",
+  },
+  {
+    accessorKey: "compliance",
+    header: "Cumplimiento",
+    cell: ({ row }) => {
+      const percentage = calculateCompliancePercentage(row.original)
+      return (
+        <div className="w-full">
+          <div className="flex justify-between mb-1">
+            <span className="text-xs font-medium">{percentage}%</span>
+          </div>
+          <Progress value={percentage} className="h-2" />
+        </div>
+      )
+    },
+  },
+  {
+    id: "actions",
+    enableHiding: false,
+    cell: ({ row }) => {
+      const auditoria = row.original
+      const router = useRouter()
+      const { toast } = useToast()
+
+      return (
+        <div className="flex gap-2">
+          <Button variant="outline" size="icon" onClick={() => router.push(`/auditorias/${auditoria.id}/view`)}>
+            <Eye className="h-4 w-4" />
+          </Button>
+          <Button variant="outline" size="icon" onClick={() => router.push(`/auditorias/${auditoria.id}`)}>
+            <Edit className="h-4 w-4" />
+          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" size="icon">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Esta acción no se puede deshacer. ¿Quieres borrar la auditoría "{auditoria.name}"?
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={async () => {
+                    try {
+                      await deleteAuditoria(auditoria.id)
+                      router.refresh()
+                      toast({
+                        title: "Éxito",
+                        description: "Auditoría borrada.",
+                      })
+                    } catch (error: any) {
+                      toast({
+                        title: "Error",
+                        description: error.message,
+                        variant: "destructive",
+                      })
+                    }
+                  }}
+                >
+                  Borrar
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      )
+    },
+  },
+]
+
 export default function AuditoriasPage() {
   const [auditorias, setAuditorias] = useState<Auditoria[]>([])
   const [filteredAuditorias, setFilteredAuditorias] = useState<Auditoria[]>([])
@@ -623,10 +646,9 @@ export default function AuditoriasPage() {
   const { isLoaded, isSignedIn, user } = useUser()
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn) return
     const fetchAuditorias = async () => {
       try {
-        const auditorias = await getAuditorias(user.id)
+        const auditorias = await getAuditorias(user?.id)
         // Asegurarse de que los campos type y shift estén correctamente definidos
         const processedData = auditorias.map((audit) => ({
           ...audit,
@@ -638,14 +660,16 @@ export default function AuditoriasPage() {
       } catch (error: any) {
         toast({
           title: "Error",
-          description: error.message,
+          description: error.message || "Error al cargar las auditorías",
           variant: "destructive",
         })
       }
     }
 
-    fetchAuditorias()
-  }, [isLoaded, isSignedIn, user, toast])
+    if (isLoaded && isSignedIn) {
+      fetchAuditorias()
+    }
+  }, [toast, user, isLoaded, isSignedIn])
 
   if (!isLoaded)
     return (
@@ -738,6 +762,8 @@ export default function AuditoriasPage() {
     </div>
   )
 }
+
+
 
 
 
