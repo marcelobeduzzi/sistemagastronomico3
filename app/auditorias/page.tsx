@@ -175,8 +175,7 @@ interface DataTableProps {
 }
 
 // Función para renderizar el badge de tipo
-const renderTypeBadge = (type: string | undefined) => {
-  // Verificar el tipo de auditoría correctamente
+const renderTypeBadge = (type: string) => {
   if (type === "rapida") {
     return <Badge className="bg-blue-100 text-blue-800 border-blue-300">Rápida</Badge>
   } else {
@@ -843,12 +842,6 @@ export default function AuditoriasPage() {
     </div>
   )
 }
-
-
-
-
-
-
 
 
 
