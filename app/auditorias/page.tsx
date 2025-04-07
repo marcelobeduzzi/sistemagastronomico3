@@ -681,18 +681,11 @@ export default function AuditoriasPage() {
               Configuración
             </Link>
           </Button>
-          {/* Botón de auditoría rápida temporalmente oculto
-          <Button asChild>
-            <Link href="/auditorias/nueva-rapida">
-              <Plus className="mr-2 h-4 w-4" />
-              Nueva Auditoría Rápida
-            </Link>
-          </Button>
-          */}
+          {/* Botón de auditoría rápida eliminado según lo solicitado */}
           <Button asChild>
             <Link href="/auditorias/nueva">
               <Plus className="mr-2 h-4 w-4" />
-              Nueva Auditoría Detallada
+              Nueva Auditoría
             </Link>
           </Button>
         </div>
@@ -745,6 +738,8 @@ export default function AuditoriasPage() {
     </div>
   )
 }
+
+
 
 
 
