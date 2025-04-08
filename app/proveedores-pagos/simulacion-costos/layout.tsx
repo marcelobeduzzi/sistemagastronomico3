@@ -1,11 +1,10 @@
-import type React from "react"
+import type { ReactNode } from "react"
 import { DashboardLayout } from "@/components/dashboard-layout"
 
 export default function SimulacionCostosLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: ReactNode
 }) {
   return <DashboardLayout>{children}</DashboardLayout>
 }
-
