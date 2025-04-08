@@ -11,15 +11,28 @@ if (!supabaseUrl || !supabaseKey) {
   })
 }
 
-// Crear una instancia del cliente para exportar directamente
-export const supabase = supabaseUrl && supabaseKey ? createSupabaseClient(supabaseUrl, supabaseKey) : null
+// Singleton: mantener una única instancia del cliente
+let supabaseInstance: ReturnType<typeof createSupabaseClient> | null = null
 
-// Función para crear un cliente de Supabase (para mantener compatibilidad con código existente)
-export function createClient() {
+// Función para obtener la instancia del cliente (patrón singleton)
+function getSupabaseClient() {
   if (!supabaseUrl || !supabaseKey) {
     throw new Error("Variables de entorno de Supabase no definidas")
   }
-  return createSupabaseClient(supabaseUrl, supabaseKey)
+  
+  if (!supabaseInstance) {
+    supabaseInstance = createSupabaseClient(supabaseUrl, supabaseKey)
+  }
+  
+  return supabaseInstance
+}
+
+// Crear una instancia del cliente para exportar directamente
+export const supabase = supabaseUrl && supabaseKey ? getSupabaseClient() : null
+
+// Función para crear un cliente de Supabase (para mantener compatibilidad con código existente)
+export function createClient() {
+  return getSupabaseClient()
 }
 
 export default supabase
