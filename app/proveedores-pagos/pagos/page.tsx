@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { DashboardLayout } from "@/components/dashboard-layout"
+import { DashboardLayout } from "@/app/dashboard-layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -29,8 +29,7 @@ export default function PagosProveedoresPage() {
     const fetchInvoices = async () => {
       try {
         setLoading(true)
-        // Usar un array vacío como fallback en caso de error
-        const data = await invoicesService.getInvoices().catch(() => [])
+        const data = await invoicesService.getInvoices()
         setInvoices(data)
         setFilteredInvoices(data)
       } catch (err: any) {
@@ -51,7 +50,7 @@ export default function PagosProveedoresPage() {
     if (searchTerm) {
       filtered = filtered.filter(
         (invoice) =>
-          invoice.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          invoice.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
           (invoice.supplier?.name && invoice.supplier.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
           (invoice.local && invoice.local.toLowerCase().includes(searchTerm.toLowerCase())),
       )
@@ -227,7 +226,7 @@ export default function PagosProveedoresPage() {
                     </TableRow>
                   ) : (
                     filteredInvoices.map((invoice) => {
-                      // Calcular monto pagado y estado
+                      // Determinar el estado de la factura
                       let totalPaid = 0
                       let status = "Pendiente"
                       let statusClass = "bg-yellow-100 text-yellow-800"
@@ -303,4 +302,3 @@ export default function PagosProveedoresPage() {
     </DashboardLayout>
   )
 }
-

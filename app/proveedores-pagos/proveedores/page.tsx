@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { DashboardLayout } from "@/components/dashboard-layout"
+import { DashboardLayout } from "@/app/dashboard-layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -448,4 +448,3 @@ export default function ProveedoresPage() {
     </DashboardLayout>
   )
 }
-
