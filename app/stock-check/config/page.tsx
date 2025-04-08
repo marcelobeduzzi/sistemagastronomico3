@@ -4,7 +4,7 @@ import { LocationsForm } from "./locations-form"
 import { ManagersForm } from "./managers-form"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { DashboardLayout } from "@/dashboard-layout"
+import { DashboardLayout } from "@/components/dashboard-layout"
 
 export const metadata = {
   title: "Configuración de Planilla de Stock",
@@ -45,3 +45,4 @@ export default function StockSheetConfigPage() {
     </DashboardLayout>
   )
 }
+

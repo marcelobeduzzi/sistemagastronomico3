@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { CreateStockSheetForm } from "../create-stock-sheet-form"
-import { DashboardLayout } from "@/dashboard-layout"
+import { DashboardLayout } from "@/components/dashboard-layout"
 
 export const metadata = {
   title: "Nueva Planilla de Stock",

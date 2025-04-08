@@ -3,7 +3,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { StockSheetDetails } from "./stock-sheet-details"
 import { Skeleton } from "@/components/ui/skeleton"
-import { DashboardLayout } from "@/dashboard-layout"
+import { DashboardLayout } from "@/components/dashboard-layout"
 
 interface StockSheetPageProps {
   params: {
