@@ -1,9 +1,13 @@
-import { DashboardLayout } from "@/app/dashboard-layout"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { StockSheetList } from "@/components/stock-check/stock-sheet-list"
-import { Plus } from "lucide-react"
+import { Suspense } from "react"
 import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { StockSheetList } from "./stock-sheet-list"
+import { Skeleton } from "@/components/ui/skeleton"
+import { DashboardLayout } from "@/app/dashboard-layout"
+
+export const metadata = {
+  title: "Planillas de Stock",
+}
 
 export default function StockCheckPage() {
   return (
@@ -12,23 +16,24 @@ export default function StockCheckPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold tracking-tight">Planillas de Stock</h1>
           <Button asChild>
-            <Link href="/stock-check/create">
-              <Plus className="mr-2 h-4 w-4" />
-              Nueva Planilla
-            </Link>
+            <Link href="/stock-check/new">Nueva Planilla</Link>
           </Button>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Planillas de Stock</CardTitle>
-            <CardDescription>Gestione las planillas de stock para controlar el inventario</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <StockSheetList />
-          </CardContent>
-        </Card>
+        <Suspense fallback={<StockSheetListSkeleton />}>
+          <StockSheetList />
+        </Suspense>
       </div>
     </DashboardLayout>
+  )
+}
+
+function StockSheetListSkeleton() {
+  return (
+    <div className="space-y-4">
+      <Skeleton className="h-8 w-full" />
+      <Skeleton className="h-8 w-full" />
+      <Skeleton className="h-8 w-full" />
+    </div>
   )
 }
