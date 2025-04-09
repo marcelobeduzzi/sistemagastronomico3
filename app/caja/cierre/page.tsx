@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
@@ -12,10 +14,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/use-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowLeft, Save, AlertTriangle, Plus, Trash2, CheckCircle, XCircle } from 'lucide-react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { ArrowLeft, Save, AlertTriangle, Plus, Trash2, CheckCircle, XCircle } from "lucide-react"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 // Lista de locales para seleccionar
 const locales = [
@@ -136,11 +145,11 @@ export default function CierreCajaPage() {
     const fetchAperturasPendientes = async () => {
       try {
         const { data, error } = await supabase
-          .from('cash_register_openings')
-          .select('*')
-          .eq('has_closing', false)
-          .eq('status', 'aprobado')
-          .order('date', { ascending: false })
+          .from("cash_register_openings")
+          .select("*")
+          .eq("has_closing", false)
+          .eq("status", "aprobado")
+          .order("date", { ascending: false })
 
         if (error) throw error
 
@@ -219,7 +228,8 @@ export default function CierreCajaPage() {
 
   // Calcular saldo esperado
   useEffect(() => {
-    const saldoEsperado = formData.initial_balance + formData.cash_sales - formData.total_expenses - formData.total_withdrawals
+    const saldoEsperado =
+      formData.initial_balance + formData.cash_sales - formData.total_expenses - formData.total_withdrawals
 
     setFormData((prev) => ({
       ...prev,
@@ -437,9 +447,9 @@ export default function CierreCajaPage() {
   // Mostrar diálogo de confirmación
   const handleSubmitClick = (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!validateForm()) return
-    
+
     setShowConfirmDialog(true)
   }
 
@@ -459,7 +469,7 @@ export default function CierreCajaPage() {
         responsible: formData.responsible,
         supervisor: needsSupervisor ? formData.supervisor : null,
         supervisor_pin: needsSupervisor ? formData.supervisor_pin : null,
-        
+
         // Ventas
         total_sales: formData.total_sales,
         cash_sales: formData.cash_sales,
@@ -468,7 +478,7 @@ export default function CierreCajaPage() {
         transfer_sales: formData.transfer_sales,
         mercado_pago_sales: formData.mercado_pago_sales,
         other_sales: formData.other_sales,
-        
+
         // Desglose de billetes
         bills_1000: formData.bills_1000,
         bills_500: formData.bills_500,
@@ -478,7 +488,7 @@ export default function CierreCajaPage() {
         bills_20: formData.bills_20,
         bills_10: formData.bills_10,
         coins: formData.coins,
-        
+
         // Cálculos
         initial_balance: formData.initial_balance,
         total_expenses: formData.total_expenses,
@@ -488,11 +498,11 @@ export default function CierreCajaPage() {
         difference: diferencia,
         difference_percentage: porcentajeDiferencia,
         difference_justification: formData.difference_justification,
-        
+
         // Estado
-        status: needsSupervisor ? 'pendiente' : 'aprobado',
+        status: needsSupervisor ? "pendiente" : "aprobado",
         has_alert: Math.abs(porcentajeDiferencia) > 0.5,
-        
+
         // Gastos y retiros como JSON
         expenses: JSON.stringify(gastos),
         withdrawals: JSON.stringify(retiros),
@@ -500,9 +510,9 @@ export default function CierreCajaPage() {
 
       // Insertar en la base de datos
       const { data: cierreInsertado, error: cierreError } = await supabase
-        .from('cash_register_closings')
+        .from("cash_register_closings")
         .insert(cierreData)
-        .select('id')
+        .select("id")
         .single()
 
       if (cierreError) throw cierreError
@@ -510,37 +520,35 @@ export default function CierreCajaPage() {
       // 2. Actualizar la apertura si existe
       if (formData.opening_id) {
         const { error: aperturaError } = await supabase
-          .from('cash_register_openings')
+          .from("cash_register_openings")
           .update({ has_closing: true })
-          .eq('id', formData.opening_id)
+          .eq("id", formData.opening_id)
 
         if (aperturaError) console.error("Error al actualizar apertura:", aperturaError)
       }
 
       // 3. Generar alertas si es necesario
       if (Math.abs(porcentajeDiferencia) > 0.5) {
-        const alertLevel = Math.abs(porcentajeDiferencia) > 2 ? 'high' : 'medium'
-        
+        const alertLevel = Math.abs(porcentajeDiferencia) > 2 ? "high" : "medium"
+
         const alertaData = {
           cash_register_id: cierreInsertado.id,
-          type: 'diferencia_caja',
+          type: "diferencia_caja",
           alert_level: alertLevel,
-          message: `Diferencia ${diferencia > 0 ? 'positiva' : 'negativa'} de $${Math.abs(diferencia)} (${Math.abs(porcentajeDiferencia).toFixed(2)}%)`,
+          message: `Diferencia ${diferencia > 0 ? "positiva" : "negativa"} de $${Math.abs(diferencia)} (${Math.abs(porcentajeDiferencia).toFixed(2)}%)`,
           details: JSON.stringify({
             amount: Math.abs(diferencia),
             percentage: Math.abs(porcentajeDiferencia),
             expected: formData.expected_balance,
-            actual: formData.actual_balance
+            actual: formData.actual_balance,
           }),
-          status: 'pending',
+          status: "pending",
           local_id: formData.local_id,
           local_name: formData.local_name,
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
         }
 
-        const { error: alertaError } = await supabase
-          .from('cash_register_alerts')
-          .insert(alertaData)
+        const { error: alertaError } = await supabase.from("cash_register_alerts").insert(alertaData)
 
         if (alertaError) console.error("Error al generar alerta:", alertaError)
       }
@@ -606,7 +614,7 @@ export default function CierreCajaPage() {
                             <SelectValue placeholder="Seleccionar apertura" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">Nueva apertura</SelectItem>
+                            <SelectItem value="nueva">Nueva apertura</SelectItem>
                             {aperturasPendientes.map((apertura) => (
                               <SelectItem key={apertura.id} value={apertura.id}>
                                 {apertura.local_name} - {apertura.date} ({apertura.shift})
@@ -640,15 +648,12 @@ export default function CierreCajaPage() {
 
                     <div className="space-y-2">
                       <Label htmlFor="date">Fecha</Label>
-                      <Input 
-                        id="date" 
-                        name="date" 
-                        type="date" 
-                        value={formData.date} 
-                        name="date" 
-                        type="date" 
-                        value={formData.date} 
-                        onChange={handleInputChange} 
+                      <Input
+                        id="date"
+                        name="date"
+                        type="date"
+                        value={formData.date}
+                        onChange={handleInputChange}
                         disabled={!!formData.opening_id}
                       />
                     </div>
@@ -951,198 +956,128 @@ export default function CierreCajaPage() {
                 <Card>
                   <CardHeader>
                     <CardTitle>Gastos</CardTitle>
-                    <CardDescription>Gastos realizados durante el turno</CardDescription>
+                    <CardDescription>Registro de gastos realizados</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="concepto">Concepto</Label>
-                        <Input
-                          id="concepto"
-                          name="concepto"
-                          value={nuevoGasto.concepto}
-                          onChange={handleGastoChange}
-                          placeholder="Descripción del gasto"
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="monto">Monto</Label>
-                        <Input
-                          id="monto"
-                          name="monto"
-                          type="number"
-                          min="0"
-                          value={nuevoGasto.monto || ""}
-                          onChange={handleGastoChange}
-                          placeholder="0.00"
-                        />
-                      </div>
-
-                      <div className="flex items-center space-x-2 py-2">
-                        <Checkbox 
-                          id="tieneComprobante" 
-                          checked={nuevoGasto.tieneComprobante} 
-                          onCheckedChange={handleCheckboxChange} 
-                        />
-                        <Label htmlFor="tieneComprobante" className="cursor-pointer">Tiene comprobante</Label>
-                      </div>
-
-                      {nuevoGasto.tieneComprobante && (
-                        <div className="space-y-2">
-                          <Label htmlFor="numeroComprobante">Número de Comprobante</Label>
-                          <Input
-                            id="numeroComprobante"
-                            name="numeroComprobante"
-                            value={nuevoGasto.numeroComprobante || ""}
-                            onChange={handleGastoChange}
-                            placeholder="Número de factura o ticket"
-                          />
+                    {gastos.map((gasto) => (
+                      <div key={gasto.id} className="flex items-center justify-between py-2 border-b">
+                        <div>
+                          <p className="font-medium">{gasto.concepto}</p>
+                          <p className="text-sm text-gray-500">${gasto.monto.toLocaleString()}</p>
                         </div>
-                      )}
-
-                      <div className="flex justify-end">
-                        <Button type="button" onClick={agregarGasto}>
-                          <Plus className="mr-2 h-4 w-4" />
-                          Agregar Gasto
+                        <Button variant="ghost" size="sm" onClick={() => eliminarGasto(gasto.id)}>
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
+                    ))}
+
+                    <div className="space-y-2">
+                      <Label htmlFor="nuevo_gasto_concepto">Nuevo Gasto</Label>
+                      <Input
+                        id="nuevo_gasto_concepto"
+                        name="concepto"
+                        placeholder="Concepto del gasto"
+                        value={nuevoGasto.concepto}
+                        onChange={handleGastoChange}
+                      />
                     </div>
 
-                    {gastos.length > 0 && (
-                      <div className="mt-4 border rounded-md">
-                        <div className="bg-muted p-2 font-medium text-sm grid grid-cols-12 gap-2">
-                          <div className="col-span-5">Concepto</div>
-                          <div className="col-span-3">Monto</div>
-                          <div className="col-span-3">Comprobante</div>
-                          <div className="col-span-1"></div>
-                        </div>
-                        <div className="divide-y">
-                          {gastos.map((gasto) => (
-                            <div key={gasto.id} className="p-2 grid grid-cols-12 gap-2 items-center">
-                              <div className="col-span-5 truncate">{gasto.concepto}</div>
-                              <div className="col-span-3">${gasto.monto.toLocaleString()}</div>
-                              <div className="col-span-3 truncate">
-                                {gasto.tieneComprobante 
-                                  ? (gasto.numeroComprobante || "Sí") 
-                                  : "No"}
-                              </div>
-                              <div className="col-span-1 flex justify-end">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => eliminarGasto(gasto.id)}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="bg-muted p-2 font-medium flex justify-between">
-                          <span>Total Gastos:</span>
-                          <span>${formData.total_expenses.toLocaleString()}</span>
-                        </div>
-                      </div>
-                    )}
+                    <div className="space-y-2">
+                      <Label htmlFor="nuevo_gasto_monto">Monto</Label>
+                      <Input
+                        id="nuevo_gasto_monto"
+                        name="monto"
+                        type="number"
+                        placeholder="Monto del gasto"
+                        value={nuevoGasto.monto || ""}
+                        onChange={handleGastoChange}
+                      />
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="tiene_comprobante"
+                        checked={nuevoGasto.tieneComprobante}
+                        onCheckedChange={handleCheckboxChange}
+                      />
+                      <Label htmlFor="tiene_comprobante">Tiene Comprobante</Label>
+                    </div>
+
+                    <Button className="w-full" onClick={agregarGasto}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Agregar Gasto
+                    </Button>
                   </CardContent>
                 </Card>
 
                 {/* Retiros */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Retiros de Efectivo</CardTitle>
-                    <CardDescription>Retiros realizados durante el turno</CardDescription>
+                    <CardTitle>Retiros</CardTitle>
+                    <CardDescription>Registro de retiros de efectivo</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="retiroConcepto">Concepto</Label>
-                        <Input
-                          id="retiroConcepto"
-                          name="concepto"
-                          value={nuevoRetiro.concepto}
-                          onChange={handleRetiroChange}
-                          placeholder="Motivo del retiro"
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="retiroMonto">Monto</Label>
-                        <Input
-                          id="retiroMonto"
-                          name="monto"
-                          type="number"
-                          min="0"
-                          value={nuevoRetiro.monto || ""}
-                          onChange={handleRetiroChange}
-                          placeholder="0.00"
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="autorizadoPor">Autorizado por</Label>
-                        <Input
-                          id="autorizadoPor"
-                          name="autorizadoPor"
-                          value={nuevoRetiro.autorizadoPor}
-                          onChange={handleRetiroChange}
-                          placeholder="Nombre del autorizante"
-                        />
-                      </div>
-
-                      <div className="flex justify-end">
-                        <Button type="button" onClick={agregarRetiro}>
-                          <Plus className="mr-2 h-4 w-4" />
-                          Agregar Retiro
+                    {retiros.map((retiro) => (
+                      <div key={retiro.id} className="flex items-center justify-between py-2 border-b">
+                        <div>
+                          <p className="font-medium">{retiro.concepto}</p>
+                          <p className="text-sm text-gray-500">Autorizado por: {retiro.autorizadoPor}</p>
+                          <p className="text-sm text-gray-500">${retiro.monto.toLocaleString()}</p>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={() => eliminarRetiro(retiro.id)}>
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
+                    ))}
+
+                    <div className="space-y-2">
+                      <Label htmlFor="nuevo_retiro_concepto">Nuevo Retiro</Label>
+                      <Input
+                        id="nuevo_retiro_concepto"
+                        name="concepto"
+                        placeholder="Concepto del retiro"
+                        value={nuevoRetiro.concepto}
+                        onChange={handleRetiroChange}
+                      />
                     </div>
 
-                    {retiros.length > 0 && (
-                      <div className="mt-4 border rounded-md">
-                        <div className="bg-muted p-2 font-medium text-sm grid grid-cols-12 gap-2">
-                          <div className="col-span-5">Concepto</div>
-                          <div className="col-span-3">Monto</div>
-                          <div className="col-span-3">Autorizado</div>
-                          <div className="col-span-1"></div>
-                        </div>
-                        <div className="divide-y">
-                          {retiros.map((retiro) => (
-                            <div key={retiro.id} className="p-2 grid grid-cols-12 gap-2 items-center">
-                              <div className="col-span-5 truncate">{retiro.concepto}</div>
-                              <div className="col-span-3">${retiro.monto.toLocaleString()}</div>
-                              <div className="col-span-3 truncate">{retiro.autorizadoPor}</div>
-                              <div className="col-span-1 flex justify-end">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => eliminarRetiro(retiro.id)}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="bg-muted p-2 font-medium flex justify-between">
-                          <span>Total Retiros:</span>
-                          <span>${formData.total_withdrawals.toLocaleString()}</span>
-                        </div>
-                      </div>
-                    )}
+                    <div className="space-y-2">
+                      <Label htmlFor="nuevo_retiro_monto">Monto</Label>
+                      <Input
+                        id="nuevo_retiro_monto"
+                        name="monto"
+                        type="number"
+                        placeholder="Monto del retiro"
+                        value={nuevoRetiro.monto || ""}
+                        onChange={handleRetiroChange}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="nuevo_retiro_autorizado_por">Autorizado por</Label>
+                      <Input
+                        id="nuevo_retiro_autorizado_por"
+                        name="autorizadoPor"
+                        placeholder="Nombre de quien autoriza"
+                        value={nuevoRetiro.autorizadoPor}
+                        onChange={handleRetiroChange}
+                      />
+                    </div>
+
+                    <Button className="w-full" onClick={agregarRetiro}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Agregar Retiro
+                    </Button>
                   </CardContent>
-                  <CardFooter className="flex justify-between">
-                    <Button type="button" variant="outline" onClick={() => setActiveTab("efectivo")}>
-                      Anterior
-                    </Button>
-                    <Button type="button" onClick={() => setActiveTab("balance")}>
-                      Continuar
-                    </Button>
-                  </CardFooter>
                 </Card>
+              </div>
+              <div className="flex justify-between">
+                <Button type="button" variant="outline" onClick={() => setActiveTab("efectivo")}>
+                  Anterior
+                </Button>
+                <Button type="button" onClick={() => setActiveTab("balance")}>
+                  Continuar
+                </Button>
               </div>
             </TabsContent>
 
@@ -1151,171 +1086,84 @@ export default function CierreCajaPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Balance Final</CardTitle>
-                  <CardDescription>Resumen y cierre de caja</CardDescription>
+                  <CardDescription>Resumen del cierre de caja</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-medium">Resumen de Ventas</h3>
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <span>Ventas en Efectivo:</span>
-                          <span>${formData.cash_sales.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Ventas con Tarjeta de Crédito:</span>
-                          <span>${formData.credit_card_sales.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Ventas con Tarjeta de Débito:</span>
-                          <span>${formData.debit_card_sales.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Ventas por Transferencia:</span>
-                          <span>${formData.transfer_sales.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Ventas por MercadoPago:</span>
-                          <span>${formData.mercado_pago_sales.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Ventas por Otros Métodos:</span>
-                          <span>${formData.other_sales.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between font-medium pt-2 border-t">
-                          <span>Total Ventas:</span>
-                          <span>${formData.total_sales.toLocaleString()}</span>
-                        </div>
-                      </div>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label>Total Ventas:</Label>
+                      <Input type="text" value={`$${formData.total_sales.toLocaleString()}`} readOnly />
                     </div>
-
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-medium">Cálculo de Efectivo</h3>
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <span>Saldo Inicial:</span>
-                          <span>${formData.initial_balance.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>+ Ventas en Efectivo:</span>
-                          <span>${formData.cash_sales.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>- Gastos:</span>
-                          <span>${formData.total_expenses.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>- Retiros:</span>
-                          <span>${formData.total_withdrawals.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between font-medium pt-2 border-t">
-                          <span>= Saldo Esperado:</span>
-                          <span>${formData.expected_balance.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between font-medium">
-                          <span>Saldo Real (contado):</span>
-                          <span>${formData.actual_balance.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="font-bold">Diferencia:</span>
-                          <div className="flex items-center gap-2">
-                            <span className={`font-bold ${diferencia !== 0 ? (diferencia > 0 ? "text-green-600" : "text-red-600") : ""}`}>
-                              ${diferencia.toLocaleString()} ({diferencia > 0 ? "Sobrante" : diferencia < 0 ? "Faltante" : "Sin diferencia"})
-                            </span>
-                            
-                            {/* Indicador de semáforo */}
-                            <div className="flex items-center gap-1 ml-2">
-                              <div 
-                                className={`h-3 w-3 rounded-full ${
-                                  Math.abs(porcentajeDiferencia) < 0.5 
-                                    ? "bg-green-500" 
-                                    : Math.abs(porcentajeDiferencia) < 2 
-                                      ? "bg-yellow-500" 
-                                      : "bg-red-500"
-                                }`} 
-                              />
-                              <span className="text-xs text-muted-foreground">
-                                {Math.abs(porcentajeDiferencia).toFixed(1)}%
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                    <div>
+                      <Label>Saldo Inicial:</Label>
+                      <Input type="text" value={`$${formData.initial_balance.toLocaleString()}`} readOnly />
+                    </div>
+                    <div>
+                      <Label>Total Gastos:</Label>
+                      <Input type="text" value={`$${formData.total_expenses.toLocaleString()}`} readOnly />
+                    </div>
+                    <div>
+                      <Label>Total Retiros:</Label>
+                      <Input type="text" value={`$${formData.total_withdrawals.toLocaleString()}`} readOnly />
+                    </div>
+                    <div>
+                      <Label>Saldo Esperado:</Label>
+                      <Input type="text" value={`$${formData.expected_balance.toLocaleString()}`} readOnly />
+                    </div>
+                    <div>
+                      <Label>Saldo Real:</Label>
+                      <Input type="text" value={`$${formData.actual_balance.toLocaleString()}`} readOnly />
                     </div>
                   </div>
 
-                  {/* Alerta de diferencia significativa */}
-                  {Math.abs(diferencia) > 0 && (
-                    <div
-                      className={`p-4 border rounded-md ${Math.abs(porcentajeDiferencia) > 2 ? "bg-red-50 border-red-200" : "bg-yellow-50 border-yellow-200"}`}
-                    >
-                      <div className="flex items-start">
-                        <AlertTriangle
-                          className={`h-5 w-5 mr-2 flex-shrink-0 ${Math.abs(porcentajeDiferencia) > 2 ? "text-red-500" : "text-yellow-500"}`}
-                        />
-                        <div>
-                          <h4 className="font-medium">
-                            {Math.abs(porcentajeDiferencia) > 2
-                              ? "Diferencia significativa detectada"
-                              : "Diferencia detectada"}
-                          </h4>
-                          <p className="text-sm mt-1">
-                            {Math.abs(porcentajeDiferencia) > 2
-                              ? "La diferencia supera el 2% del saldo esperado. Se requiere autorización del supervisor."
-                              : "Hay una diferencia entre el saldo esperado y el conteo real. Por favor, justifique la diferencia."}
-                          </p>
-                        </div>
-                      </div>
+                  <div className="mt-6 p-4 border rounded-md bg-amber-500/10">
+                    <div className="flex items-center space-x-2">
+                      {diferencia !== 0 ? (
+                        <AlertTriangle className="h-4 w-4 text-amber-500" />
+                      ) : (
+                        <CheckCircle className="h-4 w-4 text-green-500" />
+                      )}
+                      <Label className="text-sm font-medium">
+                        Diferencia:{" "}
+                        <span className={diferencia !== 0 ? (diferencia > 0 ? "text-green-600" : "text-red-600") : ""}>
+                          ${diferencia.toLocaleString()} ({porcentajeDiferencia.toFixed(2)}%)
+                        </span>
+                      </Label>
                     </div>
-                  )}
-
-                  {/* Justificación de diferencia */}
-                  {Math.abs(diferencia) > 0 && (
-                    <div className="space-y-2">
-                      <Label htmlFor="difference_justification">Justificación de la diferencia</Label>
+                    {diferencia !== 0 && (
                       <Textarea
-                        id="difference_justification"
+                        placeholder="Justificación de la diferencia"
                         name="difference_justification"
                         value={formData.difference_justification}
                         onChange={handleInputChange}
-                        placeholder="Explique el motivo de la diferencia..."
-                        rows={3}
-                        required
+                        className="mt-2"
                       />
-                    </div>
-                  )}
+                    )}
+                  </div>
 
-                  {/* Autorización del supervisor para diferencias significativas */}
                   {needsSupervisor && (
-                    <div className="space-y-4 p-4 border rounded-md bg-red-50 border-red-200">
-                      <h4 className="font-medium">Autorización requerida</h4>
-                      <p className="text-sm">
-                        La diferencia es significativa y requiere autorización de un supervisor para completar el
-                        cierre.
-                      </p>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="mt-6 p-4 border rounded-md bg-red-500/10">
+                      <p className="text-sm font-medium text-red-500">Se requiere autorización del supervisor</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                         <div className="space-y-2">
-                          <Label htmlFor="supervisor">Supervisor</Label>
+                          <Label htmlFor="supervisor">Nombre del Supervisor</Label>
                           <Input
                             id="supervisor"
                             name="supervisor"
+                            placeholder="Nombre del supervisor"
                             value={formData.supervisor}
                             onChange={handleInputChange}
-                            placeholder="Nombre del supervisor"
-                            required
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="supervisor_pin">PIN de autorización</Label>
+                          <Label htmlFor="supervisor_pin">PIN del Supervisor</Label>
                           <Input
                             id="supervisor_pin"
                             name="supervisor_pin"
                             type="password"
+                            placeholder="PIN del supervisor"
                             value={formData.supervisor_pin}
                             onChange={handleInputChange}
-                            placeholder="PIN del supervisor"
-                            required
                           />
                         </div>
                       </div>
@@ -1326,9 +1174,9 @@ export default function CierreCajaPage() {
                   <Button type="button" variant="outline" onClick={() => setActiveTab("gastos")}>
                     Anterior
                   </Button>
-                  <Button type="submit" disabled={isLoading}>
+                  <Button type="submit">
                     <Save className="mr-2 h-4 w-4" />
-                    {isLoading ? "Guardando..." : "Finalizar Cierre"}
+                    Guardar Cierre
                   </Button>
                 </CardFooter>
               </Card>
@@ -1381,4 +1229,3 @@ export default function CierreCajaPage() {
     </DashboardLayout>
   )
 }
-
