@@ -3,7 +3,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { StockSheetList } from "./stock-sheet-list"
 import { Skeleton } from "@/components/ui/skeleton"
-import { DashboardLayout } from "@/app/dashboard-layout"
+import { DashboardLayout } from "@/app/dashboard-layout" // Cambiado de @/components/dashboard-layout
 
 export const metadata = {
   title: "Planillas de Stock",
@@ -37,3 +37,4 @@ function StockSheetListSkeleton() {
     </div>
   )
 }
+
