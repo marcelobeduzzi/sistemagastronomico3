@@ -173,10 +173,15 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         href: "/asistencias",
         icon: Calendar,
       },
-      {
+	  {
         title: "Control de Caja",
         href: "/caja",
         icon: CreditCard,
+      },
+	  {
+        title: "Planilla de Stock",
+        href: "/stock-check",
+        icon: Package,
       },
       {
         title: "Control de Stock",
