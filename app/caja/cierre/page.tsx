@@ -106,16 +106,19 @@ export default function CierreCajaPage() {
     supervisor: "",
     supervisor_pin: "",
 
-    // Ventas
+    // Ventas (renombradas según los nuevos métodos de pago)
     total_sales: 0,
-    cash_sales: 0,
-    credit_card_sales: 0,
-    debit_card_sales: 0,
-    transfer_sales: 0,
-    mercado_pago_sales: 0,
-    other_sales: 0,
+    cash_sales: 0, // Efectivo (se mantiene)
+    posnet_sales: 0, // Reemplaza credit_card_sales
+    rappi_sales: 0, // Reemplaza debit_card_sales
+    mercado_delivery_sales: 0, // Reemplaza transfer_sales
+    pedidos_ya_sales: 0, // Reemplaza mercado_pago_sales
+    // other_sales se elimina
 
-    // Desglose de billetes
+    // Desglose de billetes (agregando nuevas denominaciones)
+    bills_20000: 0, // Nueva denominación
+    bills_10000: 0, // Nueva denominación
+    bills_2000: 0, // Nueva denominación
     bills_1000: 0,
     bills_500: 0,
     bills_200: 0,
@@ -123,7 +126,7 @@ export default function CierreCajaPage() {
     bills_50: 0,
     bills_20: 0,
     bills_10: 0,
-    coins: 0,
+    // coins se elimina
 
     // Cálculos
     initial_balance: 0,
@@ -166,11 +169,10 @@ export default function CierreCajaPage() {
   useEffect(() => {
     const totalVentas =
       formData.cash_sales +
-      formData.credit_card_sales +
-      formData.debit_card_sales +
-      formData.transfer_sales +
-      formData.mercado_pago_sales +
-      formData.other_sales
+      formData.posnet_sales +
+      formData.rappi_sales +
+      formData.mercado_delivery_sales +
+      formData.pedidos_ya_sales
 
     setFormData((prev) => ({
       ...prev,
@@ -178,24 +180,25 @@ export default function CierreCajaPage() {
     }))
   }, [
     formData.cash_sales,
-    formData.credit_card_sales,
-    formData.debit_card_sales,
-    formData.transfer_sales,
-    formData.mercado_pago_sales,
-    formData.other_sales,
+    formData.posnet_sales,
+    formData.rappi_sales,
+    formData.mercado_delivery_sales,
+    formData.pedidos_ya_sales,
   ])
 
   // Calcular el total de efectivo basado en el desglose de billetes
   useEffect(() => {
     const total =
+      formData.bills_20000 * 20000 +
+      formData.bills_10000 * 10000 +
+      formData.bills_2000 * 2000 +
       formData.bills_1000 * 1000 +
       formData.bills_500 * 500 +
       formData.bills_200 * 200 +
       formData.bills_100 * 100 +
       formData.bills_50 * 50 +
       formData.bills_20 * 20 +
-      formData.bills_10 * 10 +
-      formData.coins
+      formData.bills_10 * 10
 
     setTotalEfectivoCalculado(total)
 
@@ -204,6 +207,9 @@ export default function CierreCajaPage() {
       actual_balance: total,
     }))
   }, [
+    formData.bills_20000,
+    formData.bills_10000,
+    formData.bills_2000,
     formData.bills_1000,
     formData.bills_500,
     formData.bills_200,
@@ -211,7 +217,6 @@ export default function CierreCajaPage() {
     formData.bills_50,
     formData.bills_20,
     formData.bills_10,
-    formData.coins,
   ])
 
   // Calcular totales de gastos y retiros
@@ -470,16 +475,18 @@ export default function CierreCajaPage() {
         supervisor: needsSupervisor ? formData.supervisor : null,
         supervisor_pin: needsSupervisor ? formData.supervisor_pin : null,
 
-        // Ventas
+        // Ventas (con los nuevos nombres de campos)
         total_sales: formData.total_sales,
         cash_sales: formData.cash_sales,
-        credit_card_sales: formData.credit_card_sales,
-        debit_card_sales: formData.debit_card_sales,
-        transfer_sales: formData.transfer_sales,
-        mercado_pago_sales: formData.mercado_pago_sales,
-        other_sales: formData.other_sales,
+        posnet_sales: formData.posnet_sales,
+        rappi_sales: formData.rappi_sales,
+        mercado_delivery_sales: formData.mercado_delivery_sales,
+        pedidos_ya_sales: formData.pedidos_ya_sales,
 
-        // Desglose de billetes
+        // Desglose de billetes (con las nuevas denominaciones)
+        bills_20000: formData.bills_20000,
+        bills_10000: formData.bills_10000,
+        bills_2000: formData.bills_2000,
         bills_1000: formData.bills_1000,
         bills_500: formData.bills_500,
         bills_200: formData.bills_200,
@@ -487,7 +494,6 @@ export default function CierreCajaPage() {
         bills_50: formData.bills_50,
         bills_20: formData.bills_20,
         bills_10: formData.bills_10,
-        coins: formData.coins,
 
         // Cálculos
         initial_balance: formData.initial_balance,
@@ -723,61 +729,49 @@ export default function CierreCajaPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="credit_card_sales">Tarjeta de Crédito</Label>
+                      <Label htmlFor="posnet_sales">Posnet</Label>
                       <Input
-                        id="credit_card_sales"
-                        name="credit_card_sales"
+                        id="posnet_sales"
+                        name="posnet_sales"
                         type="number"
                         min="0"
-                        value={formData.credit_card_sales || ""}
+                        value={formData.posnet_sales || ""}
                         onChange={handleNumberChange}
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="debit_card_sales">Tarjeta de Débito</Label>
+                      <Label htmlFor="rappi_sales">Rappi</Label>
                       <Input
-                        id="debit_card_sales"
-                        name="debit_card_sales"
+                        id="rappi_sales"
+                        name="rappi_sales"
                         type="number"
                         min="0"
-                        value={formData.debit_card_sales || ""}
+                        value={formData.rappi_sales || ""}
                         onChange={handleNumberChange}
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="transfer_sales">Transferencia</Label>
+                      <Label htmlFor="mercado_delivery_sales">MercadoDelivery</Label>
                       <Input
-                        id="transfer_sales"
-                        name="transfer_sales"
+                        id="mercado_delivery_sales"
+                        name="mercado_delivery_sales"
                         type="number"
                         min="0"
-                        value={formData.transfer_sales || ""}
+                        value={formData.mercado_delivery_sales || ""}
                         onChange={handleNumberChange}
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="mercado_pago_sales">MercadoPago</Label>
+                      <Label htmlFor="pedidos_ya_sales">PedidosYa</Label>
                       <Input
-                        id="mercado_pago_sales"
-                        name="mercado_pago_sales"
+                        id="pedidos_ya_sales"
+                        name="pedidos_ya_sales"
                         type="number"
                         min="0"
-                        value={formData.mercado_pago_sales || ""}
-                        onChange={handleNumberChange}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="other_sales">Otros métodos</Label>
-                      <Input
-                        id="other_sales"
-                        name="other_sales"
-                        type="number"
-                        min="0"
-                        value={formData.other_sales || ""}
+                        value={formData.pedidos_ya_sales || ""}
                         onChange={handleNumberChange}
                       />
                     </div>
@@ -809,6 +803,51 @@ export default function CierreCajaPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-4">
                       <div className="space-y-2">
+                        <Label htmlFor="bills_20000">Billetes de $20000</Label>
+                        <div className="flex items-center space-x-2">
+                          <Input
+                            id="bills_20000"
+                            name="bills_20000"
+                            type="number"
+                            min="0"
+                            value={formData.bills_20000 || ""}
+                            onChange={handleNumberChange}
+                          />
+                          <span className="text-sm font-medium">= ${formData.bills_20000 * 20000}</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="bills_10000">Billetes de $10000</Label>
+                        <div className="flex items-center space-x-2">
+                          <Input
+                            id="bills_10000"
+                            name="bills_10000"
+                            type="number"
+                            min="0"
+                            value={formData.bills_10000 || ""}
+                            onChange={handleNumberChange}
+                          />
+                          <span className="text-sm font-medium">= ${formData.bills_10000 * 10000}</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="bills_2000">Billetes de $2000</Label>
+                        <div className="flex items-center space-x-2">
+                          <Input
+                            id="bills_2000"
+                            name="bills_2000"
+                            type="number"
+                            min="0"
+                            value={formData.bills_2000 || ""}
+                            onChange={handleNumberChange}
+                          />
+                          <span className="text-sm font-medium">= ${formData.bills_2000 * 2000}</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
                         <Label htmlFor="bills_1000">Billetes de $1000</Label>
                         <div className="flex items-center space-x-2">
                           <Input
@@ -837,7 +876,9 @@ export default function CierreCajaPage() {
                           <span className="text-sm font-medium">= ${formData.bills_500 * 500}</span>
                         </div>
                       </div>
+                    </div>
 
+                    <div className="space-y-4">
                       <div className="space-y-2">
                         <Label htmlFor="bills_200">Billetes de $200</Label>
                         <div className="flex items-center space-x-2">
@@ -867,9 +908,7 @@ export default function CierreCajaPage() {
                           <span className="text-sm font-medium">= ${formData.bills_100 * 100}</span>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="space-y-4">
                       <div className="space-y-2">
                         <Label htmlFor="bills_50">Billetes de $50</Label>
                         <div className="flex items-center space-x-2">
@@ -912,20 +951,6 @@ export default function CierreCajaPage() {
                             onChange={handleNumberChange}
                           />
                           <span className="text-sm font-medium">= ${formData.bills_10 * 10}</span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="coins">Monedas (total)</Label>
-                        <div className="flex items-center space-x-2">
-                          <Input
-                            id="coins"
-                            name="coins"
-                            type="number"
-                            min="0"
-                            value={formData.coins || ""}
-                            onChange={handleNumberChange}
-                          />
                         </div>
                       </div>
                     </div>
@@ -1229,4 +1254,5 @@ export default function CierreCajaPage() {
     </DashboardLayout>
   )
 }
+
 
