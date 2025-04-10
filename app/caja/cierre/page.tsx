@@ -221,8 +221,17 @@ export default function CierreCajaPage() {
 
   // Calcular totales de gastos y retiros
   useEffect(() => {
-    const totalGastos = gastos.reduce((sum, gasto) => sum + gasto.monto, 0)
-    const totalRetiros = retiros.reduce((sum, retiro) => sum + retiro.monto, 0)
+    const totalGastos = gastos.reduce((sum, gasto) => {
+      const monto = typeof gasto.monto === "number" ? gasto.monto : 0
+      return sum + monto
+    }, 0)
+
+    const totalRetiros = retiros.reduce((sum, retiro) => {
+      const monto = typeof retiro.monto === "number" ? retiro.monto : 0
+      return sum + monto
+    }, 0)
+
+    console.log("Totales calculados:", { totalGastos, totalRetiros })
 
     setFormData((prev) => ({
       ...prev,
@@ -233,8 +242,18 @@ export default function CierreCajaPage() {
 
   // Calcular saldo esperado
   useEffect(() => {
+    // El saldo esperado es: Saldo Inicial + Ventas en Efectivo - Total Gastos - Total Retiros
     const saldoEsperado =
       formData.initial_balance + formData.cash_sales - formData.total_expenses - formData.total_withdrawals
+
+    // Verificar que los valores sean números válidos
+    console.log("Cálculo de saldo esperado:", {
+      initial_balance: formData.initial_balance,
+      cash_sales: formData.cash_sales,
+      total_expenses: formData.total_expenses,
+      total_withdrawals: formData.total_withdrawals,
+      resultado: saldoEsperado,
+    })
 
     setFormData((prev) => ({
       ...prev,
@@ -272,9 +291,17 @@ export default function CierreCajaPage() {
   // Manejar cambios en campos numéricos
   const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
+    const numericValue = value === "" ? 0 : Number.parseFloat(value)
+
+    // Verificar que el valor sea un número válido
+    if (isNaN(numericValue)) {
+      console.error(`Valor inválido para ${name}: ${value}`)
+      return
+    }
+
     setFormData((prev) => ({
       ...prev,
-      [name]: value === "" ? 0 : Number(value),
+      [name]: numericValue,
     }))
   }
 
@@ -891,11 +918,15 @@ export default function CierreCajaPage() {
                             onChange={handleNumberChange}
                           />
                           <span className="text-sm font-medium">= ${formData.bills_200 * 200}</span>
+                            min="0"
+                            value={formData.bills_200 || ""}
+                            onChange={handleNumberChange}
+                          />
+                          <span className="text-sm font-medium">= ${formData.bills_200 * 200}</span>
                         </div>
                       </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="bills_100">Billetes de $100</Label>
+                             <Label htmlFor="bills_100">Billetes de $100</Label>
                         <div className="flex items-center space-x-2">
                           <Input
                             id="bills_100"
@@ -1251,8 +1282,9 @@ export default function CierreCajaPage() {
           </DialogContent>
         </Dialog>
       </div>
-    </DashboardLayout>
+  </DashboardLayout>
   )
 }
+
 
 
