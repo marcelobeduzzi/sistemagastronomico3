@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { dbService } from "@/lib/db-service"
 import type { Employee, Local, WorkShift, EmployeeStatus, UserRole } from "@/types"
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save } from "lucide-react"
 import Link from "next/link"
 import { useToast } from "@/components/ui/use-toast"
 
@@ -74,13 +74,43 @@ export default function NuevoEmpleadoPage() {
     setIsSubmitting(true)
 
     try {
-      // Convert string dates to ISO format
-      const employeeData = {
-        ...formData,
-        birthDate: new Date(formData.birthDate).toISOString(),
-        hireDate: new Date(formData.hireDate).toISOString(),
+      // Validar fechas antes de convertirlas
+      let birthDateISO = null
+      let hireDateISO = null
+
+      // Solo convertir si hay una fecha válida
+      if (formData.birthDate) {
+        try {
+          // Asegurarse de que la fecha tenga el formato correcto para evitar problemas de zona horaria
+          const [year, month, day] = formData.birthDate.split("-").map(Number)
+          const birthDate = new Date(year, month - 1, day, 12, 0, 0)
+          birthDateISO = birthDate.toISOString()
+        } catch (dateError) {
+          console.error("Error al procesar fecha de nacimiento:", dateError)
+          birthDateISO = null
+        }
       }
 
+      if (formData.hireDate) {
+        try {
+          // Asegurarse de que la fecha tenga el formato correcto para evitar problemas de zona horaria
+          const [year, month, day] = formData.hireDate.split("-").map(Number)
+          const hireDate = new Date(year, month - 1, day, 12, 0, 0)
+          hireDateISO = hireDate.toISOString()
+        } catch (dateError) {
+          console.error("Error al procesar fecha de contratación:", dateError)
+          hireDateISO = null
+        }
+      }
+
+      // Preparar los datos del empleado con las fechas validadas
+      const employeeData = {
+        ...formData,
+        birthDate: birthDateISO,
+        hireDate: hireDateISO,
+      }
+
+      console.log("Datos a enviar:", employeeData)
       const newEmployee = await dbService.createEmployee(employeeData)
 
       toast({
@@ -400,4 +430,5 @@ export default function NuevoEmpleadoPage() {
     </DashboardLayout>
   )
 }
+
 
