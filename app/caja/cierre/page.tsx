@@ -1229,3 +1229,4 @@ export default function CierreCajaPage() {
     </DashboardLayout>
   )
 }
+
