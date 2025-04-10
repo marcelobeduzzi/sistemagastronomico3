@@ -918,15 +918,15 @@ export default function CierreCajaPage() {
                             onChange={handleNumberChange}
                           />
                           <span className="text-sm font-medium">= ${formData.bills_200 * 200}</span>
-                            min="0"
-                            value={formData.bills_200 || ""}
-                            onChange={handleNumberChange}
+                          min="0" value={formData.bills_200 || ""}
+                          onChange={handleNumberChange}
                           />
                           <span className="text-sm font-medium">= ${formData.bills_200 * 200}</span>
                         </div>
                       </div>
 
-                             <Label htmlFor="bills_100">Billetes de $100</Label>
+                      <div className="space-y-2">
+                        <Label htmlFor="bills_100">Billetes de $100</Label>
                         <div className="flex items-center space-x-2">
                           <Input
                             id="bills_100"
@@ -1282,9 +1282,10 @@ export default function CierreCajaPage() {
           </DialogContent>
         </Dialog>
       </div>
-  </DashboardLayout>
+    </DashboardLayout>
   )
 }
+
 
 
 
