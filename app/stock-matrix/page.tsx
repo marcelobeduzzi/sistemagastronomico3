@@ -139,12 +139,19 @@ export default function StockMatrixPage() {
             variant: "destructive",
           })
         } else {
-          // Filtrar los encargados y supervisores manualmente
-          const filteredEmployees = (employeesData || []).filter(
-            (emp) =>
-              emp.position &&
-              (emp.position.toLowerCase() === "encargado" || emp.position.toLowerCase() === "supervisor"),
-          )
+          // Filtrar los encargados y supervisores manualmente con más flexibilidad
+          const filteredEmployees = (employeesData || []).filter((emp) => {
+            if (!emp.position) return false
+
+            const positionLower = emp.position.toLowerCase()
+            return (
+              positionLower.includes("encargad") || // Captura "encargado" y "encargada"
+              positionLower.includes("supervisor")
+            )
+          })
+
+          // Agregar un log para depuración
+          console.log("Empleados filtrados:", filteredEmployees)
 
           // Transformar los datos de empleados al formato de Manager
           const managers: Manager[] = filteredEmployees.map((emp) => ({
@@ -1185,6 +1192,7 @@ export default function StockMatrixPage() {
     </DashboardLayout>
   )
 }
+
 
 
 
