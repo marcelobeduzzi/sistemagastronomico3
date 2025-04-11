@@ -1,4 +1,4 @@
-"use client"
+"u"use client"
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
@@ -47,7 +47,7 @@ type StockSheetData = {
   id?: number
   date: string
   location_id: number
-  manager_id: number
+  manager_id: string | number // Cambiado para aceptar string o number
   shift: "mañana" | "tarde"
   status: "borrador" | "parcial" | "completado"
   created_by: string
@@ -110,10 +110,10 @@ export default function StockMatrixPage() {
   const [sheetData, setSheetData] = useState<StockSheetData>({
     date: format(new Date(), "yyyy-MM-dd"),
     location_id: 0,
-    manager_id: 0,
+    manager_id: "", // Cambiado a string vacío
     shift: "mañana",
     status: "borrador",
-    created_by: "Usuario Actual", // Esto vendría del contexto de autenticación
+    created_by: "Usuario Actual",
     updated_by: "Usuario Actual",
   })
 
@@ -272,11 +272,11 @@ export default function StockMatrixPage() {
 
           // Si el encargado actual no pertenece al local seleccionado, resetear la selección
           if (sheetData.manager_id) {
-            const currentManagerStillValid = filtered.some((m) => m.id === sheetData.manager_id)
+            const currentManagerStillValid = filtered.some((m) => m.id.toString() === sheetData.manager_id.toString())
             if (!currentManagerStillValid) {
               setSheetData((prev) => ({
                 ...prev,
-                manager_id: 0,
+                manager_id: "",
               }))
             }
           }
@@ -295,14 +295,15 @@ export default function StockMatrixPage() {
     try {
       console.log(`Cambiando ${name} a:`, value)
 
-      // Asegurarse de que los IDs sean números
-      if (name === "location_id" || name === "manager_id") {
+      // Solo convertir a número el location_id
+      if (name === "location_id") {
         const numValue = typeof value === "string" ? Number.parseInt(value, 10) : value
         setSheetData((prev) => ({
           ...prev,
           [name]: numValue,
         }))
       } else {
+        // Para manager_id y otros campos, usar el valor tal cual
         setSheetData((prev) => ({
           ...prev,
           [name]: value,
@@ -942,7 +943,7 @@ export default function StockMatrixPage() {
                   value={sheetData.manager_id ? sheetData.manager_id.toString() : ""}
                   onValueChange={(value) => {
                     console.log("Encargado seleccionado:", value)
-                    handleSheetDataChange("manager_id", Number.parseInt(value, 10))
+                    handleSheetDataChange("manager_id", value)
                   }}
                 >
                   <SelectTrigger id="manager">
@@ -1306,6 +1307,7 @@ export default function StockMatrixPage() {
     </DashboardLayout>
   )
 }
+
 
 
 
