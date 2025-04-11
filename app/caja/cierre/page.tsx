@@ -481,47 +481,53 @@ export default function CierreCajaPage() {
   // Mostrar diálogo de confirmación
   const handleSubmitClick = (e: React.FormEvent) => {
     e.preventDefault()
+    console.log("Botón de guardar cierre clickeado")
 
-    if (!validateForm()) return
+    if (!validateForm()) {
+      console.log("Validación del formulario fallida")
+      return
+    }
 
+    console.log("Mostrando diálogo de confirmación")
     setShowConfirmDialog(true)
   }
 
   // Guardar el cierre de caja
   const handleSubmit = async () => {
+    console.log("Iniciando proceso de guardado")
     try {
       setIsLoading(true)
       setShowConfirmDialog(false)
 
       // Verificar si ya existe una apertura para este local, fecha y turno
       if (!formData.opening_id) {
-        // Codificar correctamente el valor del turno para la consulta
-        const encodedShift = encodeURIComponent(formData.shift)
+        console.log("No hay apertura seleccionada, verificando existentes")
 
-        console.log("Verificando apertura existente:", {
-          local_id: formData.local_id,
-          date: formData.date,
-          shift: encodedShift,
-        })
+        try {
+          const { data: existingOpenings, error: checkError } = await supabase
+            .from("cash_register_openings")
+            .select("*")
+            .eq("local_id", formData.local_id)
+            .eq("date", formData.date)
+            .eq("shift", formData.shift)
+            .eq("has_closing", false)
 
-        const { data: existingOpenings, error: checkError } = await supabase
-          .from("cash_register_openings")
-          .select("*")
-          .eq("local_id", formData.local_id)
-          .eq("date", formData.date)
-          .eq("shift", formData.shift)
-          .eq("has_closing", false)
+          console.log("Resultado de verificación:", { existingOpenings, checkError })
 
-        if (checkError) {
-          console.error("Error al verificar aperturas existentes:", checkError)
-          throw new Error("Error al verificar aperturas existentes")
-        }
+          if (checkError) {
+            console.error("Error al verificar aperturas existentes:", checkError)
+            throw new Error("Error al verificar aperturas existentes")
+          }
 
-        if (existingOpenings && existingOpenings.length > 0) {
-          // Si existe una apertura, usarla
-          console.log("Apertura existente encontrada:", existingOpenings[0])
-          formData.opening_id = existingOpenings[0].id
-          formData.initial_balance = existingOpenings[0].initial_amount
+          if (existingOpenings && existingOpenings.length > 0) {
+            // Si existe una apertura, usarla
+            console.log("Apertura existente encontrada:", existingOpenings[0])
+            formData.opening_id = existingOpenings[0].id
+            formData.initial_balance = existingOpenings[0].initial_amount
+          }
+        } catch (checkErr) {
+          console.error("Error en la verificación de aperturas:", checkErr)
+          // Continuar con el proceso aunque falle la verificación
         }
       }
 
@@ -536,18 +542,16 @@ export default function CierreCajaPage() {
         supervisor: needsSupervisor ? formData.supervisor : null,
         supervisor_pin: needsSupervisor ? formData.supervisor_pin : null,
 
-        // Ventas (con los nuevos nombres de campos)
+        // Mapear los campos de ventas a los nombres correctos en la tabla
         total_sales: formData.total_sales,
         cash_sales: formData.cash_sales,
-        posnet_sales: formData.posnet_sales,
-        rappi_sales: formData.rappi_sales,
-        mercado_delivery_sales: formData.mercado_delivery_sales,
-        pedidos_ya_sales: formData.pedidos_ya_sales,
+        credit_card_sales: formData.posnet_sales, // Mapear posnet_sales a credit_card_sales
+        debit_card_sales: formData.rappi_sales, // Mapear rappi_sales a debit_card_sales
+        transfer_sales: formData.mercado_delivery_sales, // Mapear mercado_delivery_sales a transfer_sales
+        mercado_pago_sales: formData.pedidos_ya_sales, // Mapear pedidos_ya_sales a mercado_pago_sales
+        other_sales: 0, // Valor por defecto
 
-        // Desglose de billetes (con las nuevas denominaciones)
-        bills_20000: formData.bills_20000,
-        bills_10000: formData.bills_10000,
-        bills_2000: formData.bills_2000,
+        // Mapear solo los campos de billetes que existen en la tabla
         bills_1000: formData.bills_1000,
         bills_500: formData.bills_500,
         bills_200: formData.bills_200,
@@ -555,6 +559,7 @@ export default function CierreCajaPage() {
         bills_50: formData.bills_50,
         bills_20: formData.bills_20,
         bills_10: formData.bills_10,
+        coins: 0, // Valor por defecto para monedas
 
         // Cálculos
         initial_balance: formData.initial_balance,
@@ -578,70 +583,86 @@ export default function CierreCajaPage() {
       console.log("Guardando cierre de caja:", cierreData)
 
       // Insertar en la base de datos
-      const { data: cierreInsertado, error: cierreError } = await supabase
-        .from("cash_register_closings")
-        .insert(cierreData)
-        .select("id")
-        .single()
+      try {
+        const { data: cierreInsertado, error: cierreError } = await supabase
+          .from("cash_register_closings")
+          .insert(cierreData)
+          .select("id")
+          .single()
 
-      if (cierreError) {
-        console.error("Error al insertar cierre:", cierreError)
-        throw cierreError
-      }
+        console.log("Respuesta de inserción:", { cierreInsertado, cierreError })
 
-      console.log("Cierre insertado correctamente:", cierreInsertado)
-
-      // 2. Actualizar la apertura si existe
-      if (formData.opening_id) {
-        console.log("Actualizando apertura:", formData.opening_id)
-        const { error: aperturaError } = await supabase
-          .from("cash_register_openings")
-          .update({ has_closing: true })
-          .eq("id", formData.opening_id)
-
-        if (aperturaError) {
-          console.error("Error al actualizar apertura:", aperturaError)
-        }
-      }
-
-      // 3. Generar alertas si es necesario
-      if (Math.abs(porcentajeDiferencia) > 0.5) {
-        const alertLevel = Math.abs(porcentajeDiferencia) > 2 ? "high" : "medium"
-
-        const alertaData = {
-          cash_register_id: cierreInsertado.id,
-          type: "diferencia_caja",
-          alert_level: alertLevel,
-          message: `Diferencia ${diferencia > 0 ? "positiva" : "negativa"} de $${Math.abs(diferencia)} (${Math.abs(porcentajeDiferencia).toFixed(2)}%)`,
-          details: JSON.stringify({
-            amount: Math.abs(diferencia),
-            percentage: Math.abs(porcentajeDiferencia),
-            expected: formData.expected_balance,
-            actual: formData.actual_balance,
-          }),
-          status: "pending",
-          local_id: formData.local_id,
-          local_name: formData.local_name,
-          created_at: new Date().toISOString(),
+        if (cierreError) {
+          console.error("Error al insertar cierre:", cierreError)
+          throw cierreError
         }
 
-        console.log("Generando alerta:", alertaData)
-        const { error: alertaError } = await supabase.from("cash_register_alerts").insert(alertaData)
+        console.log("Cierre insertado correctamente:", cierreInsertado)
 
-        if (alertaError) {
-          console.error("Error al generar alerta:", alertaError)
+        // 2. Actualizar la apertura si existe
+        if (formData.opening_id) {
+          console.log("Actualizando apertura:", formData.opening_id)
+          try {
+            const { error: aperturaError } = await supabase
+              .from("cash_register_openings")
+              .update({ has_closing: true })
+              .eq("id", formData.opening_id)
+
+            if (aperturaError) {
+              console.error("Error al actualizar apertura:", aperturaError)
+            }
+          } catch (updateErr) {
+            console.error("Error en la actualización de apertura:", updateErr)
+          }
         }
+
+        // 3. Generar alertas si es necesario
+        if (Math.abs(porcentajeDiferencia) > 0.5) {
+          const alertLevel = Math.abs(porcentajeDiferencia) > 2 ? "high" : "medium"
+
+          const alertaData = {
+            cash_register_id: cierreInsertado.id,
+            type: "diferencia_caja",
+            alert_level: alertLevel,
+            message: `Diferencia ${diferencia > 0 ? "positiva" : "negativa"} de ${Math.abs(diferencia)} (${Math.abs(porcentajeDiferencia).toFixed(2)}%)`,
+            details: JSON.stringify({
+              amount: Math.abs(diferencia),
+              percentage: Math.abs(porcentajeDiferencia),
+              expected: formData.expected_balance,
+              actual: formData.actual_balance,
+            }),
+            status: "pending",
+            local_id: formData.local_id,
+            local_name: formData.local_name,
+            created_at: new Date().toISOString(),
+          }
+
+          console.log("Generando alerta:", alertaData)
+          try {
+            const { error: alertaError } = await supabase.from("cash_register_alerts").insert(alertaData)
+
+            if (alertaError) {
+              console.error("Error al generar alerta:", alertaError)
+            }
+          } catch (alertErr) {
+            console.error("Error en la generación de alerta:", alertErr)
+          }
+        }
+
+        toast({
+          title: "Cierre registrado",
+          description: "El cierre de caja se ha registrado correctamente",
+        })
+
+        // Redireccionar a la página de cajas
+        console.log("Redireccionando a /caja")
+        router.push("/caja")
+      } catch (insertErr) {
+        console.error("Error en la inserción del cierre:", insertErr)
+        throw insertErr
       }
-
-      toast({
-        title: "Cierre registrado",
-        description: "El cierre de caja se ha registrado correctamente",
-      })
-
-      // Redireccionar a la página de cajas
-      router.push("/caja")
     } catch (error) {
-      console.error("Error al guardar el cierre:", error)
+      console.error("Error general al guardar el cierre:", error)
       toast({
         title: "Error",
         description: "Ocurrió un error al registrar el cierre de caja",
@@ -1327,7 +1348,7 @@ export default function CierreCajaPage() {
                 <XCircle className="mr-2 h-4 w-4" />
                 Cancelar
               </Button>
-              <Button onClick={handleSubmit} disabled={isLoading}>
+              <Button onClick={() => handleSubmit()} disabled={isLoading}>
                 <CheckCircle className="mr-2 h-4 w-4" />
                 {isLoading ? "Guardando..." : "Confirmar"}
               </Button>
@@ -1338,6 +1359,8 @@ export default function CierreCajaPage() {
     </DashboardLayout>
   )
 }
+
+
 
 
 
