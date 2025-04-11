@@ -531,13 +531,13 @@ export default function StockMatrixPage() {
                           </div>
                           {userRole === "encargado" && !product.opening_locked && (
                             <Button
-                              size="sm"
-                              variant="outline"
+                              size="icon"
+                              variant="ghost"
                               onClick={() => handleLockField(product.product_id, "opening")}
-                              className="flex items-center"
+                              className="h-8 w-8"
+                              title="Guardar"
                             >
-                              <Save className="h-4 w-4 mr-1" />
-                              Guardar
+                              <Save className="h-4 w-4" />
                             </Button>
                           )}
                         </div>
@@ -559,22 +559,22 @@ export default function StockMatrixPage() {
                           {userRole === "encargado" && !product.incoming_locked && (
                             <div className="flex gap-1">
                               <Button
-                                size="sm"
-                                variant="outline"
+                                size="icon"
+                                variant="ghost"
                                 onClick={() => handleAddIncoming(product.product_id)}
-                                className="flex items-center"
+                                className="h-8 w-8"
+                                title="Agregar ingreso"
                               >
-                                <Plus className="h-4 w-4 mr-1" />
-                                Agregar
+                                <Plus className="h-4 w-4" />
                               </Button>
                               <Button
-                                size="sm"
-                                variant="outline"
+                                size="icon"
+                                variant="ghost"
                                 onClick={() => finalizeIncoming(product.product_id)}
-                                className="flex items-center"
+                                className="h-8 w-8"
+                                title="Finalizar ingresos"
                               >
-                                <Check className="h-4 w-4 mr-1" />
-                                Finalizar
+                                <Check className="h-4 w-4" />
                               </Button>
                             </div>
                           )}
@@ -603,13 +603,13 @@ export default function StockMatrixPage() {
                           </div>
                           {userRole === "encargado" && !product.closing_locked && (
                             <Button
-                              size="sm"
-                              variant="outline"
+                              size="icon"
+                              variant="ghost"
                               onClick={() => handleLockField(product.product_id, "closing")}
-                              className="flex items-center"
+                              className="h-8 w-8"
+                              title="Guardar"
                             >
-                              <Save className="h-4 w-4 mr-1" />
-                              Guardar
+                              <Save className="h-4 w-4" />
                             </Button>
                           )}
                         </div>
@@ -765,5 +765,6 @@ export default function StockMatrixPage() {
     </DashboardLayout>
   )
 }
+
 
 
