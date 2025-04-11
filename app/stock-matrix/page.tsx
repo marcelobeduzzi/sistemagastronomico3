@@ -1,4 +1,4 @@
-"use client"
+"u"use client"
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
@@ -81,7 +81,7 @@ type ProductStockData = {
 // Componente principal
 export default function StockMatrixPage() {
   const router = useRouter()
-  const [userRole, setUserRole] = useState<"encargado" | "administrador">("administrador") // Simulamos el rol
+  const [userRole, setUserRole] = useState<"encargado" | "administrador">("encargado") // Cambiado a "encargado" por defecto
   const [isLoading, setIsLoading] = useState(false)
   const [locations, setLocations] = useState<Location[]>([])
   const [managers, setManagers] = useState<Manager[]>([])
@@ -353,7 +353,22 @@ export default function StockMatrixPage() {
             <h1 className="text-3xl font-bold">Planilla Stock Matriz</h1>
             <p className="text-muted-foreground">Formato tipo planilla para control de stock</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            {/* Selector de rol para facilitar pruebas */}
+            <div className="flex items-center mr-4">
+              <Label htmlFor="role-selector" className="mr-2">
+                Rol:
+              </Label>
+              <Select value={userRole} onValueChange={(value) => setUserRole(value as "encargado" | "administrador")}>
+                <SelectTrigger id="role-selector" className="w-[180px]">
+                  <SelectValue placeholder="Seleccionar rol" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="encargado">Encargado</SelectItem>
+                  <SelectItem value="administrador">Administrador</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <Button variant="outline" onClick={() => router.push("/stock-check")}>
               <ArrowLeft className="mr-2 h-4 w-4" />
               Volver
@@ -496,97 +511,107 @@ export default function StockMatrixPage() {
 
                       {/* Apertura - Solo editable por encargado y si no está bloqueado */}
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Input
-                            type="number"
-                            min="0"
-                            value={product.opening_quantity || ""}
-                            onChange={(e) =>
-                              handleStockDataChange(
-                                product.product_id,
-                                "opening_quantity",
-                                e.target.value === "" ? null : Number.parseInt(e.target.value),
-                              )
-                            }
-                            disabled={product.opening_locked || userRole !== "encargado"}
-                            className="w-16 text-center"
-                          />
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              min="0"
+                              value={product.opening_quantity || ""}
+                              onChange={(e) =>
+                                handleStockDataChange(
+                                  product.product_id,
+                                  "opening_quantity",
+                                  e.target.value === "" ? null : Number.parseInt(e.target.value),
+                                )
+                              }
+                              disabled={product.opening_locked || userRole !== "encargado"}
+                              className="w-20 text-center"
+                            />
+                            {product.opening_locked && <Lock className="h-4 w-4 text-muted-foreground" />}
+                          </div>
                           {userRole === "encargado" && !product.opening_locked && (
                             <Button
-                              size="icon"
-                              variant="ghost"
+                              size="sm"
+                              variant="outline"
                               onClick={() => handleLockField(product.product_id, "opening")}
-                              title="Guardar y bloquear"
+                              className="flex items-center"
                             >
-                              <Save className="h-4 w-4" />
+                              <Save className="h-4 w-4 mr-1" />
+                              Guardar
                             </Button>
                           )}
-                          {product.opening_locked && <Lock className="h-4 w-4 text-muted-foreground" />}
                         </div>
                       </TableCell>
 
                       {/* Ingreso de Mercadería - Solo editable por encargado y si no está bloqueado */}
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Input
-                            type="number"
-                            min="0"
-                            value={product.incoming_quantity || ""}
-                            disabled={true}
-                            className="w-16 text-center"
-                          />
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              min="0"
+                              value={product.incoming_quantity || ""}
+                              disabled={true}
+                              className="w-20 text-center"
+                            />
+                            {product.incoming_locked && <Lock className="h-4 w-4 text-muted-foreground" />}
+                          </div>
                           {userRole === "encargado" && !product.incoming_locked && (
                             <div className="flex gap-1">
                               <Button
-                                size="icon"
-                                variant="ghost"
+                                size="sm"
+                                variant="outline"
                                 onClick={() => handleAddIncoming(product.product_id)}
-                                title="Agregar ingreso"
+                                className="flex items-center"
                               >
-                                <Plus className="h-4 w-4" />
+                                <Plus className="h-4 w-4 mr-1" />
+                                Agregar
                               </Button>
                               <Button
-                                size="icon"
-                                variant="ghost"
+                                size="sm"
+                                variant="outline"
                                 onClick={() => finalizeIncoming(product.product_id)}
-                                title="Finalizar ingresos"
+                                className="flex items-center"
                               >
-                                <Check className="h-4 w-4" />
+                                <Check className="h-4 w-4 mr-1" />
+                                Finalizar
                               </Button>
                             </div>
                           )}
-                          {product.incoming_locked && <Lock className="h-4 w-4 text-muted-foreground" />}
                         </div>
                       </TableCell>
 
                       {/* Stock de Cierre - Solo editable por encargado y si no está bloqueado */}
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Input
-                            type="number"
-                            min="0"
-                            value={product.closing_quantity || ""}
-                            onChange={(e) =>
-                              handleStockDataChange(
-                                product.product_id,
-                                "closing_quantity",
-                                e.target.value === "" ? null : Number.parseInt(e.target.value),
-                              )
-                            }
-                            disabled={product.closing_locked || userRole !== "encargado"}
-                            className="w-16 text-center"
-                          />
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              min="0"
+                              value={product.closing_quantity || ""}
+                              onChange={(e) =>
+                                handleStockDataChange(
+                                  product.product_id,
+                                  "closing_quantity",
+                                  e.target.value === "" ? null : Number.parseInt(e.target.value),
+                                )
+                              }
+                              disabled={product.closing_locked || userRole !== "encargado"}
+                              className="w-20 text-center"
+                            />
+                            {product.closing_locked && <Lock className="h-4 w-4 text-muted-foreground" />}
+                          </div>
                           {userRole === "encargado" && !product.closing_locked && (
                             <Button
-                              size="icon"
-                              variant="ghost"
+                              size="sm"
+                              variant="outline"
                               onClick={() => handleLockField(product.product_id, "closing")}
-                              title="Guardar y bloquear"
+                              className="flex items-center"
                             >
-                              <Save className="h-4 w-4" />
+                              <Save className="h-4 w-4 mr-1" />
+                              Guardar
                             </Button>
                           )}
-                          {product.closing_locked && <Lock className="h-4 w-4 text-muted-foreground" />}
                         </div>
                       </TableCell>
 
@@ -606,7 +631,7 @@ export default function StockMatrixPage() {
                                   e.target.value === "" ? null : Number.parseInt(e.target.value),
                                 )
                               }
-                              className="w-16 text-center"
+                              className="w-20 text-center"
                             />
                           </TableCell>
 
@@ -623,7 +648,7 @@ export default function StockMatrixPage() {
                                   e.target.value === "" ? null : Number.parseInt(e.target.value),
                                 )
                               }
-                              className="w-16 text-center"
+                              className="w-20 text-center"
                             />
                           </TableCell>
 
@@ -641,7 +666,7 @@ export default function StockMatrixPage() {
                                 )
                               }
                               disabled={!product.has_internal_consumption}
-                              className="w-16 text-center"
+                              className="w-20 text-center"
                             />
                           </TableCell>
 
@@ -740,3 +765,4 @@ export default function StockMatrixPage() {
     </DashboardLayout>
   )
 }
+
