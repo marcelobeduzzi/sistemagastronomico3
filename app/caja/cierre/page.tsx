@@ -428,9 +428,12 @@ export default function CierreCajaPage() {
     setRetiros(retiros.filter((retiro) => retiro.id !== id))
   }
 
-  // Validar el formulario
+  // Modificar la función validateForm para agregar más logs de depuración
   const validateForm = () => {
+    console.log("Iniciando validación del formulario", formData)
+
     if (!formData.local_id) {
+      console.log("Error: Local no seleccionado")
       toast({
         title: "Error",
         description: "Debes seleccionar un local",
@@ -440,6 +443,7 @@ export default function CierreCajaPage() {
     }
 
     if (!formData.responsible) {
+      console.log("Error: Responsable no ingresado")
       toast({
         title: "Error",
         description: "Debes ingresar el nombre del responsable",
@@ -448,7 +452,9 @@ export default function CierreCajaPage() {
       return false
     }
 
+    console.log("Ventas totales:", formData.total_sales)
     if (formData.total_sales <= 0) {
+      console.log("Error: Total de ventas debe ser mayor a cero")
       toast({
         title: "Error",
         description: "El total de ventas debe ser mayor a cero",
@@ -457,7 +463,9 @@ export default function CierreCajaPage() {
       return false
     }
 
+    console.log("Diferencia:", diferencia, "Justificación:", formData.difference_justification)
     if (Math.abs(diferencia) > 0 && !formData.difference_justification) {
+      console.log("Error: Falta justificación para la diferencia")
       toast({
         title: "Error",
         description: "Debes justificar la diferencia en el saldo",
@@ -466,7 +474,16 @@ export default function CierreCajaPage() {
       return false
     }
 
+    console.log(
+      "Necesita supervisor:",
+      needsSupervisor,
+      "Supervisor:",
+      formData.supervisor,
+      "PIN:",
+      formData.supervisor_pin,
+    )
     if (needsSupervisor && (!formData.supervisor || !formData.supervisor_pin)) {
+      console.log("Error: Falta información del supervisor")
       toast({
         title: "Error",
         description: "Se requiere autorización del supervisor para diferencias significativas",
@@ -475,15 +492,20 @@ export default function CierreCajaPage() {
       return false
     }
 
+    console.log("Validación exitosa")
     return true
   }
 
-  // Mostrar diálogo de confirmación
+  // También modificar el handleSubmitClick para asegurar que el evento se maneje correctamente
   const handleSubmitClick = (e: React.FormEvent) => {
     e.preventDefault()
     console.log("Botón de guardar cierre clickeado")
 
-    if (!validateForm()) {
+    // Asegurarse de que el formulario sea válido
+    const isValid = validateForm()
+    console.log("¿El formulario es válido?", isValid)
+
+    if (!isValid) {
       console.log("Validación del formulario fallida")
       return
     }
@@ -1359,6 +1381,7 @@ export default function CierreCajaPage() {
     </DashboardLayout>
   )
 }
+
 
 
 
