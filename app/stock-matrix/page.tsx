@@ -711,7 +711,7 @@ export default function StockMatrixPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {locations.length === 0 ? (
-                      <SelectItem value="" disabled>
+                      <SelectItem value="no_locations" disabled>
                         No hay locales disponibles
                       </SelectItem>
                     ) : (
@@ -736,7 +736,7 @@ export default function StockMatrixPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {managers.length === 0 ? (
-                      <SelectItem value="" disabled>
+                      <SelectItem value="no_managers" disabled>
                         No hay encargados disponibles
                       </SelectItem>
                     ) : (
@@ -1092,6 +1092,7 @@ export default function StockMatrixPage() {
     </DashboardLayout>
   )
 }
+
 
 
 
