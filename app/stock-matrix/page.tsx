@@ -104,6 +104,7 @@ export default function StockMatrixPage() {
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null)
   const [incomingAmount, setIncomingAmount] = useState<number>(0)
   const [dataLoaded, setDataLoaded] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // Estado para los datos de la planilla
   const [sheetData, setSheetData] = useState<StockSheetData>({
@@ -121,111 +122,132 @@ export default function StockMatrixPage() {
     async function fetchData() {
       try {
         setIsLoading(true)
-        const supabase = createClient()
+        setError(null)
+
+        // Crear cliente de Supabase con manejo de errores
+        let supabase
+        try {
+          supabase = createClient()
+        } catch (err) {
+          console.error("Error al crear cliente de Supabase:", err)
+          setError("Error al conectar con la base de datos. Por favor, recargue la página.")
+          setIsLoading(false)
+          return
+        }
 
         // Fetch encargados desde la tabla de empleados
-        // Primero, vamos a obtener todos los empleados activos
-        const { data: employeesData, error: employeesError } = await supabase
-          .from("employees")
-          .select("id, first_name, last_name, local, position, status")
-          .eq("status", "active")
-          .order("last_name")
+        try {
+          const { data: employeesData, error: employeesError } = await supabase
+            .from("employees")
+            .select("id, first_name, last_name, local, position, status")
+            .eq("status", "active")
+            .order("last_name")
 
-        if (employeesError) {
-          console.error("Error al cargar empleados:", employeesError)
-          toast({
-            title: "Error",
-            description: "No se pudieron cargar los empleados",
-            variant: "destructive",
-          })
-        } else {
-          // Filtrar los encargados y supervisores manualmente con más flexibilidad
-          const filteredEmployees = (employeesData || []).filter((emp) => {
-            if (!emp.position) return false
-
-            const positionLower = emp.position.toLowerCase()
-            return (
-              positionLower.includes("encargad") || // Captura "encargado" y "encargada"
-              positionLower.includes("supervisor")
-            )
-          })
-
-          // Agregar un log para depuración
-          console.log("Empleados filtrados:", filteredEmployees)
-
-          // Transformar los datos de empleados al formato de Manager
-          const managers: Manager[] = filteredEmployees.map((emp) => ({
-            id: emp.id,
-            name: `${emp.first_name} ${emp.last_name}`,
-            local: emp.local,
-          }))
-
-          setAllManagers(managers)
-
-          // Si ya hay un local seleccionado, filtrar los encargados
-          if (sheetData.location_id) {
-            const selectedLocation = locations.find((loc) => loc.id === sheetData.location_id)
-            if (selectedLocation) {
-              const filtered = managers.filter((manager) => manager.local === selectedLocation.name)
-              setFilteredManagers(filtered)
-            }
+          if (employeesError) {
+            console.error("Error al cargar empleados:", employeesError)
+            toast({
+              title: "Error",
+              description: "No se pudieron cargar los empleados",
+              variant: "destructive",
+            })
           } else {
-            setFilteredManagers(managers)
+            // Filtrar los encargados y supervisores manualmente con más flexibilidad
+            const filteredEmployees = (employeesData || []).filter((emp) => {
+              if (!emp.position) return false
+
+              const positionLower = emp.position.toLowerCase()
+              return (
+                positionLower.includes("encargad") || // Captura "encargado" y "encargada"
+                positionLower.includes("supervisor")
+              )
+            })
+
+            // Agregar un log para depuración
+            console.log("Empleados filtrados:", filteredEmployees)
+
+            // Transformar los datos de empleados al formato de Manager
+            const managers: Manager[] = filteredEmployees.map((emp) => ({
+              id: emp.id,
+              name: `${emp.first_name} ${emp.last_name}`,
+              local: emp.local,
+            }))
+
+            setAllManagers(managers)
+
+            // Si ya hay un local seleccionado, filtrar los encargados
+            if (sheetData.location_id) {
+              const selectedLocation = locations.find((loc) => loc.id === sheetData.location_id)
+              if (selectedLocation) {
+                const filtered = managers.filter((manager) => manager.local === selectedLocation.name)
+                setFilteredManagers(filtered)
+              }
+            } else {
+              setFilteredManagers(managers)
+            }
           }
+        } catch (err) {
+          console.error("Error al procesar empleados:", err)
+          // No interrumpir el flujo, continuar con los productos
         }
 
         // Fetch product configs
-        const { data: productConfigsData, error: productConfigsError } = await supabase
-          .from("product_config")
-          .select("id, product_name, unit_value, category, has_internal_consumption")
-          .eq("active", true)
-          .order("category", { ascending: true })
-          .order("id", { ascending: true })
+        try {
+          const { data: productConfigsData, error: productConfigsError } = await supabase
+            .from("product_config")
+            .select("id, product_name, unit_value, category, has_internal_consumption")
+            .eq("active", true)
+            .order("category", { ascending: true })
+            .order("id", { ascending: true })
 
-        if (productConfigsError) {
-          console.error("Error al cargar productos:", productConfigsError)
-          toast({
-            title: "Error",
-            description: "No se pudieron cargar los productos",
-            variant: "destructive",
-          })
-        } else if (productConfigsData && productConfigsData.length > 0) {
-          setProductConfigs(productConfigsData)
+          if (productConfigsError) {
+            console.error("Error al cargar productos:", productConfigsError)
+            toast({
+              title: "Error",
+              description: "No se pudieron cargar los productos",
+              variant: "destructive",
+            })
+          } else if (productConfigsData && productConfigsData.length > 0) {
+            setProductConfigs(productConfigsData)
 
-          // Inicializar datos de stock para cada producto
-          const initialStockData: ProductStockData[] = productConfigsData.map((product) => ({
-            product_id: product.id,
-            product_name: product.product_name,
-            category: product.category,
-            unit_value: product.unit_value,
-            has_internal_consumption: product.has_internal_consumption,
+            // Inicializar datos de stock para cada producto
+            const initialStockData: ProductStockData[] = productConfigsData.map((product) => ({
+              product_id: product.id,
+              product_name: product.product_name,
+              category: product.category,
+              unit_value: product.unit_value,
+              has_internal_consumption: product.has_internal_consumption,
 
-            opening_quantity: null,
-            opening_locked: false,
-            incoming_quantity: null,
-            incoming_locked: false,
-            closing_quantity: null,
-            closing_locked: false,
+              opening_quantity: null,
+              opening_locked: false,
+              incoming_quantity: null,
+              incoming_locked: false,
+              closing_quantity: null,
+              closing_locked: false,
 
-            units_sold: null,
-            discarded_quantity: null,
-            internal_consumption: null,
+              units_sold: null,
+              discarded_quantity: null,
+              internal_consumption: null,
 
-            difference: null,
-          }))
+              difference: null,
+            }))
 
-          setStockData(initialStockData)
-        } else {
-          toast({
-            title: "Advertencia",
-            description: "No hay productos configurados en el sistema",
-            variant: "warning",
-          })
+            setStockData(initialStockData)
+          } else {
+            toast({
+              title: "Advertencia",
+              description: "No hay productos configurados en el sistema",
+              variant: "warning",
+            })
+          }
+        } catch (err) {
+          console.error("Error al procesar productos:", err)
+          setError("Error al cargar los productos. Por favor, recargue la página.")
         }
 
         setDataLoaded(true)
       } catch (error: any) {
         console.error("Error fetching data:", error.message)
+        setError("Error al cargar los datos. Por favor, recargue la página.")
         toast({
           title: "Error",
           description: "No se pudieron cargar los datos necesarios",
@@ -241,152 +263,196 @@ export default function StockMatrixPage() {
 
   // Filtrar encargados cuando cambia el local seleccionado
   useEffect(() => {
-    if (sheetData.location_id && allManagers.length > 0) {
-      const selectedLocation = locations.find((loc) => loc.id === sheetData.location_id)
-      if (selectedLocation) {
-        const filtered = allManagers.filter((manager) => manager.local === selectedLocation.name)
-        setFilteredManagers(filtered)
+    try {
+      if (sheetData.location_id && allManagers.length > 0) {
+        const selectedLocation = locations.find((loc) => loc.id === sheetData.location_id)
+        if (selectedLocation) {
+          const filtered = allManagers.filter((manager) => manager.local === selectedLocation.name)
+          setFilteredManagers(filtered)
 
-        // Si el encargado actual no pertenece al local seleccionado, resetear la selección
-        if (sheetData.manager_id) {
-          const currentManagerStillValid = filtered.some((m) => m.id === sheetData.manager_id)
-          if (!currentManagerStillValid) {
-            setSheetData((prev) => ({
-              ...prev,
-              manager_id: 0,
-            }))
+          // Si el encargado actual no pertenece al local seleccionado, resetear la selección
+          if (sheetData.manager_id) {
+            const currentManagerStillValid = filtered.some((m) => m.id === sheetData.manager_id)
+            if (!currentManagerStillValid) {
+              setSheetData((prev) => ({
+                ...prev,
+                manager_id: 0,
+              }))
+            }
           }
         }
+      } else {
+        setFilteredManagers(allManagers)
       }
-    } else {
-      setFilteredManagers(allManagers)
+    } catch (err) {
+      console.error("Error al filtrar encargados:", err)
+      // No mostrar error al usuario para no interrumpir la experiencia
     }
   }, [sheetData.location_id, allManagers, locations])
 
   // Manejar cambios en los campos del formulario principal
   const handleSheetDataChange = (name: string, value: any) => {
-    setSheetData((prev) => ({
-      ...prev,
-      [name]: value,
-    }))
+    try {
+      setSheetData((prev) => ({
+        ...prev,
+        [name]: value,
+      }))
+    } catch (err) {
+      console.error(`Error al cambiar ${name}:`, err)
+    }
   }
 
   // Manejar cambios en los datos de stock
   const handleStockDataChange = (productId: number, field: string, value: number | null) => {
-    setStockData((prev) => prev.map((item) => (item.product_id === productId ? { ...item, [field]: value } : item)))
+    try {
+      setStockData((prev) => prev.map((item) => (item.product_id === productId ? { ...item, [field]: value } : item)))
+    } catch (err) {
+      console.error(`Error al cambiar ${field} para producto ${productId}:`, err)
+    }
   }
 
   // Bloquear un campo después de guardarlo
   const handleLockField = (productId: number, field: "opening" | "incoming" | "closing") => {
-    setStockData((prev) =>
-      prev.map((item) => (item.product_id === productId ? { ...item, [`${field}_locked`]: true } : item)),
-    )
+    try {
+      setStockData((prev) =>
+        prev.map((item) => (item.product_id === productId ? { ...item, [`${field}_locked`]: true } : item)),
+      )
 
-    toast({
-      title: "Campo bloqueado",
-      description: `El valor ha sido guardado y bloqueado para edición`,
-    })
+      toast({
+        title: "Campo bloqueado",
+        description: `El valor ha sido guardado y bloqueado para edición`,
+      })
+    } catch (err) {
+      console.error(`Error al bloquear ${field} para producto ${productId}:`, err)
+    }
   }
 
   // Abrir diálogo para agregar ingreso de mercadería
   const handleAddIncoming = (productId: number) => {
-    setSelectedProductId(productId)
-    setIncomingAmount(0)
-    setShowIncomingDialog(true)
+    try {
+      setSelectedProductId(productId)
+      setIncomingAmount(0)
+      setShowIncomingDialog(true)
+    } catch (err) {
+      console.error(`Error al abrir diálogo para producto ${productId}:`, err)
+    }
   }
 
   // Confirmar ingreso de mercadería
   const confirmIncoming = () => {
-    if (!selectedProductId || incomingAmount <= 0) {
-      toast({
-        title: "Error",
-        description: "Ingrese una cantidad válida",
-        variant: "destructive",
-      })
-      return
-    }
+    try {
+      if (!selectedProductId || incomingAmount <= 0) {
+        toast({
+          title: "Error",
+          description: "Ingrese una cantidad válida",
+          variant: "destructive",
+        })
+        return
+      }
 
-    setStockData((prev) =>
-      prev.map((item) => {
-        if (item.product_id === selectedProductId) {
-          const currentAmount = item.incoming_quantity || 0
-          return {
-            ...item,
-            incoming_quantity: currentAmount + incomingAmount,
+      setStockData((prev) =>
+        prev.map((item) => {
+          if (item.product_id === selectedProductId) {
+            const currentAmount = item.incoming_quantity || 0
+            return {
+              ...item,
+              incoming_quantity: currentAmount + incomingAmount,
+            }
           }
-        }
-        return item
-      }),
-    )
+          return item
+        }),
+      )
 
-    setShowIncomingDialog(false)
+      setShowIncomingDialog(false)
 
-    toast({
-      title: "Ingreso registrado",
-      description: `Se agregaron ${incomingAmount} unidades al ingreso de mercadería`,
-    })
+      toast({
+        title: "Ingreso registrado",
+        description: `Se agregaron ${incomingAmount} unidades al ingreso de mercadería`,
+      })
+    } catch (err) {
+      console.error("Error al confirmar ingreso:", err)
+      setShowIncomingDialog(false)
+    }
   }
 
   // Finalizar ingreso de mercadería
   const finalizeIncoming = (productId: number) => {
-    handleLockField(productId, "incoming")
+    try {
+      handleLockField(productId, "incoming")
+    } catch (err) {
+      console.error(`Error al finalizar ingreso para producto ${productId}:`, err)
+    }
   }
 
   // Calcular diferencias
   const calculateDifference = (productId: number) => {
-    const product = stockData.find((p) => p.product_id === productId)
+    try {
+      const product = stockData.find((p) => p.product_id === productId)
 
-    if (!product) return null
+      if (!product) return null
 
-    const opening = product.opening_quantity || 0
-    const incoming = product.incoming_quantity || 0
-    const sold = product.units_sold || 0
-    const discarded = product.discarded_quantity || 0
-    const closing = product.closing_quantity || 0
+      const opening = product.opening_quantity || 0
+      const incoming = product.incoming_quantity || 0
+      const sold = product.units_sold || 0
+      const discarded = product.discarded_quantity || 0
+      const closing = product.closing_quantity || 0
 
-    // Fórmula: (1 + 2 + 4 - 3 - 6)
-    // Apertura + Ingreso + Decomisos - Vendidas - Cierre
-    return opening + incoming + discarded - sold - closing
+      // Fórmula: (1 + 2 + 4 - 3 - 6)
+      // Apertura + Ingreso + Decomisos - Vendidas - Cierre
+      return opening + incoming + discarded - sold - closing
+    } catch (err) {
+      console.error(`Error al calcular diferencia para producto ${productId}:`, err)
+      return null
+    }
   }
 
   // Actualizar todas las diferencias
   const updateAllDifferences = () => {
-    setStockData((prev) =>
-      prev.map((item) => ({
-        ...item,
-        difference: calculateDifference(item.product_id),
-      })),
-    )
+    try {
+      setStockData((prev) =>
+        prev.map((item) => ({
+          ...item,
+          difference: calculateDifference(item.product_id),
+        })),
+      )
+    } catch (err) {
+      console.error("Error al actualizar diferencias:", err)
+    }
   }
 
   // Validar datos antes de guardar
   const validateData = () => {
-    console.log("Validando datos...")
-    console.log("Location ID:", sheetData.location_id)
-    console.log("Manager ID:", sheetData.manager_id)
+    try {
+      console.log("Validando datos...")
+      console.log("Location ID:", sheetData.location_id)
+      console.log("Manager ID:", sheetData.manager_id)
 
-    if (!sheetData.location_id) {
-      console.error("Error de validación: No se ha seleccionado un local")
-      toast({
-        title: "Error",
-        description: "Debe seleccionar un local",
-        variant: "destructive",
-      })
+      if (!sheetData.location_id) {
+        console.error("Error de validación: No se ha seleccionado un local")
+        toast({
+          title: "Error",
+          description: "Debe seleccionar un local",
+          variant: "destructive",
+        })
+        return false
+      }
+
+      if (!sheetData.manager_id) {
+        console.error("Error de validación: No se ha seleccionado un encargado")
+        toast({
+          title: "Error",
+          description: "Debe seleccionar un encargado",
+          variant: "destructive",
+        })
+        return false
+      }
+
+      console.log("Validación exitosa")
+      return true
+    } catch (err) {
+      console.error("Error en validación:", err)
       return false
     }
-
-    if (!sheetData.manager_id) {
-      console.error("Error de validación: No se ha seleccionado un encargado")
-      toast({
-        title: "Error",
-        description: "Debe seleccionar un encargado",
-        variant: "destructive",
-      })
-      return false
-    }
-
-    console.log("Validación exitosa")
-    return true
   }
 
   // Guardar planilla completa
@@ -719,16 +785,48 @@ export default function StockMatrixPage() {
 
   // Exportar a Excel
   const handleExportToExcel = () => {
-    toast({
-      title: "Exportando",
-      description: "Exportando datos a Excel...",
-    })
-    // Aquí iría la lógica para exportar a Excel
+    try {
+      toast({
+        title: "Exportando",
+        description: "Exportando datos a Excel...",
+      })
+      // Aquí iría la lógica para exportar a Excel
+    } catch (err) {
+      console.error("Error al exportar a Excel:", err)
+    }
   }
 
   // Ver lista de planillas
   const handleViewSheetList = () => {
-    router.push("/stock-matrix/list")
+    try {
+      router.push("/stock-matrix/list")
+    } catch (err) {
+      console.error("Error al navegar a la lista de planillas:", err)
+    }
+  }
+
+  // Si hay un error crítico, mostrar mensaje de error
+  if (error) {
+    return (
+      <DashboardLayout>
+        <div className="container mx-auto py-6">
+          <Card className="border-red-300">
+            <CardHeader>
+              <CardTitle className="text-red-600">Error</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p>{error}</p>
+              <div className="mt-4">
+                <Button onClick={() => router.push("/stock-check")}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Volver
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    )
   }
 
   return (
@@ -1192,6 +1290,7 @@ export default function StockMatrixPage() {
     </DashboardLayout>
   )
 }
+
 
 
 
