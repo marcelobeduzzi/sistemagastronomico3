@@ -1,4 +1,4 @@
-"u"use client"
+"use client"
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
@@ -30,7 +30,7 @@ type Location = {
 }
 
 type Manager = {
-  id: number
+  id: string // Cambiado a string para manejar UUIDs
   name: string
   local: string
 }
@@ -47,7 +47,7 @@ type StockSheetData = {
   id?: number
   date: string
   location_id: number
-  manager_id: string | number // Cambiado para aceptar string o number
+  manager_id: string // Cambiado a string para manejar UUIDs
   shift: "mañana" | "tarde"
   status: "borrador" | "parcial" | "completado"
   created_by: string
@@ -272,7 +272,7 @@ export default function StockMatrixPage() {
 
           // Si el encargado actual no pertenece al local seleccionado, resetear la selección
           if (sheetData.manager_id) {
-            const currentManagerStillValid = filtered.some((m) => m.id.toString() === sheetData.manager_id.toString())
+            const currentManagerStillValid = filtered.some((m) => m.id === sheetData.manager_id)
             if (!currentManagerStillValid) {
               setSheetData((prev) => ({
                 ...prev,
@@ -956,7 +956,7 @@ export default function StockMatrixPage() {
                       </SelectItem>
                     ) : (
                       filteredManagers.map((manager) => (
-                        <SelectItem key={manager.id} value={manager.id.toString()}>
+                        <SelectItem key={manager.id} value={manager.id}>
                           {manager.name}
                         </SelectItem>
                       ))
@@ -1307,6 +1307,7 @@ export default function StockMatrixPage() {
     </DashboardLayout>
   )
 }
+
 
 
 
