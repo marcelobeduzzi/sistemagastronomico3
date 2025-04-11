@@ -124,25 +124,32 @@ export default function StockMatrixPage() {
         const supabase = createClient()
 
         // Fetch encargados desde la tabla de empleados
+        // Primero, vamos a obtener todos los empleados activos
         const { data: employeesData, error: employeesError } = await supabase
           .from("employees")
-          .select("id, firstName, lastName, local, position")
-          .in("position", ["encargado", "Encargado", "supervisor", "Supervisor"])
+          .select("id, first_name, last_name, local, position, status")
           .eq("status", "active")
-          .order("lastName")
+          .order("last_name")
 
         if (employeesError) {
-          console.error("Error al cargar encargados:", employeesError)
+          console.error("Error al cargar empleados:", employeesError)
           toast({
             title: "Error",
-            description: "No se pudieron cargar los encargados",
+            description: "No se pudieron cargar los empleados",
             variant: "destructive",
           })
         } else {
+          // Filtrar los encargados y supervisores manualmente
+          const filteredEmployees = (employeesData || []).filter(
+            (emp) =>
+              emp.position &&
+              (emp.position.toLowerCase() === "encargado" || emp.position.toLowerCase() === "supervisor"),
+          )
+
           // Transformar los datos de empleados al formato de Manager
-          const managers: Manager[] = (employeesData || []).map((emp) => ({
+          const managers: Manager[] = filteredEmployees.map((emp) => ({
             id: emp.id,
-            name: `${emp.firstName} ${emp.lastName}`,
+            name: `${emp.first_name} ${emp.last_name}`,
             local: emp.local,
           }))
 
@@ -1178,6 +1185,7 @@ export default function StockMatrixPage() {
     </DashboardLayout>
   )
 }
+
 
 
 
