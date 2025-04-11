@@ -32,6 +32,7 @@ type Location = {
 type Manager = {
   id: number
   name: string
+  local: string
 }
 
 type ProductConfig = {
@@ -79,13 +80,24 @@ type ProductStockData = {
   has_internal_consumption: boolean
 }
 
+// Lista fija de locales
+const FIXED_LOCATIONS: Location[] = [
+  { id: 1, name: "BR Cabildo" },
+  { id: 2, name: "BR Carranza" },
+  { id: 3, name: "BR Pacífico" },
+  { id: 4, name: "BR Lavalle" },
+  { id: 5, name: "BR Rivadavia" },
+  { id: 6, name: "BR Aguero" },
+]
+
 // Componente principal
 export default function StockMatrixPage() {
   const router = useRouter()
   const [userRole, setUserRole] = useState<"encargado" | "administrador">("encargado")
   const [isLoading, setIsLoading] = useState(false)
-  const [locations, setLocations] = useState<Location[]>([])
-  const [managers, setManagers] = useState<Manager[]>([])
+  const [locations] = useState<Location[]>(FIXED_LOCATIONS)
+  const [allManagers, setAllManagers] = useState<Manager[]>([])
+  const [filteredManagers, setFilteredManagers] = useState<Manager[]>([])
   const [productConfigs, setProductConfigs] = useState<ProductConfig[]>([])
   const [stockData, setStockData] = useState<ProductStockData[]>([])
   const [showIncomingDialog, setShowIncomingDialog] = useState(false)
@@ -111,40 +123,41 @@ export default function StockMatrixPage() {
         setIsLoading(true)
         const supabase = createClient()
 
-        // Fetch locations
-        const { data: locationsData, error: locationsError } = await supabase
-          .from("locations")
-          .select("id, name")
-          .eq("active", true)
-          .order("name")
+        // Fetch encargados desde la tabla de empleados
+        const { data: employeesData, error: employeesError } = await supabase
+          .from("employees")
+          .select("id, firstName, lastName, local, position")
+          .in("position", ["encargado", "Encargado", "supervisor", "Supervisor"])
+          .eq("status", "active")
+          .order("lastName")
 
-        if (locationsError) {
-          console.error("Error al cargar locales:", locationsError)
-          toast({
-            title: "Error",
-            description: "No se pudieron cargar los locales",
-            variant: "destructive",
-          })
-        } else {
-          setLocations(locationsData || [])
-        }
-
-        // Fetch managers
-        const { data: managersData, error: managersError } = await supabase
-          .from("managers")
-          .select("id, name")
-          .eq("active", true)
-          .order("name")
-
-        if (managersError) {
-          console.error("Error al cargar encargados:", managersError)
+        if (employeesError) {
+          console.error("Error al cargar encargados:", employeesError)
           toast({
             title: "Error",
             description: "No se pudieron cargar los encargados",
             variant: "destructive",
           })
         } else {
-          setManagers(managersData || [])
+          // Transformar los datos de empleados al formato de Manager
+          const managers: Manager[] = (employeesData || []).map((emp) => ({
+            id: emp.id,
+            name: `${emp.firstName} ${emp.lastName}`,
+            local: emp.local,
+          }))
+
+          setAllManagers(managers)
+
+          // Si ya hay un local seleccionado, filtrar los encargados
+          if (sheetData.location_id) {
+            const selectedLocation = locations.find((loc) => loc.id === sheetData.location_id)
+            if (selectedLocation) {
+              const filtered = managers.filter((manager) => manager.local === selectedLocation.name)
+              setFilteredManagers(filtered)
+            }
+          } else {
+            setFilteredManagers(managers)
+          }
         }
 
         // Fetch product configs
@@ -211,6 +224,30 @@ export default function StockMatrixPage() {
 
     fetchData()
   }, [])
+
+  // Filtrar encargados cuando cambia el local seleccionado
+  useEffect(() => {
+    if (sheetData.location_id && allManagers.length > 0) {
+      const selectedLocation = locations.find((loc) => loc.id === sheetData.location_id)
+      if (selectedLocation) {
+        const filtered = allManagers.filter((manager) => manager.local === selectedLocation.name)
+        setFilteredManagers(filtered)
+
+        // Si el encargado actual no pertenece al local seleccionado, resetear la selección
+        if (sheetData.manager_id) {
+          const currentManagerStillValid = filtered.some((m) => m.id === sheetData.manager_id)
+          if (!currentManagerStillValid) {
+            setSheetData((prev) => ({
+              ...prev,
+              manager_id: 0,
+            }))
+          }
+        }
+      }
+    } else {
+      setFilteredManagers(allManagers)
+    }
+  }, [sheetData.location_id, allManagers, locations])
 
   // Manejar cambios en los campos del formulario principal
   const handleSheetDataChange = (name: string, value: any) => {
@@ -310,7 +347,12 @@ export default function StockMatrixPage() {
 
   // Validar datos antes de guardar
   const validateData = () => {
+    console.log("Validando datos...")
+    console.log("Location ID:", sheetData.location_id)
+    console.log("Manager ID:", sheetData.manager_id)
+
     if (!sheetData.location_id) {
+      console.error("Error de validación: No se ha seleccionado un local")
       toast({
         title: "Error",
         description: "Debe seleccionar un local",
@@ -320,6 +362,7 @@ export default function StockMatrixPage() {
     }
 
     if (!sheetData.manager_id) {
+      console.error("Error de validación: No se ha seleccionado un encargado")
       toast({
         title: "Error",
         description: "Debe seleccionar un encargado",
@@ -328,6 +371,7 @@ export default function StockMatrixPage() {
       return false
     }
 
+    console.log("Validación exitosa")
     return true
   }
 
@@ -337,8 +381,29 @@ export default function StockMatrixPage() {
 
     try {
       setIsLoading(true)
+      console.log("Iniciando guardado de planilla...")
 
       const supabase = createClient()
+
+      // Verificar si las tablas existen
+      try {
+        console.log("Verificando tablas en la base de datos...")
+        const { error: tableCheckError } = await supabase.from("stock_matrix_sheets").select("id").limit(1)
+
+        if (tableCheckError) {
+          console.error("Error al verificar tabla stock_matrix_sheets:", tableCheckError)
+          toast({
+            title: "Error de base de datos",
+            description: "La tabla stock_matrix_sheets no existe. Por favor, ejecute el script de migración.",
+            variant: "destructive",
+          })
+          setIsLoading(false)
+          return
+        }
+      } catch (checkError) {
+        console.error("Error al verificar tablas:", checkError)
+        throw new Error("No se pudo verificar la existencia de las tablas necesarias")
+      }
 
       // 1. Guardar la planilla principal
       let sheetId = sheetData.id
@@ -476,11 +541,32 @@ export default function StockMatrixPage() {
 
     try {
       setIsLoading(true)
+      console.log("Iniciando finalización de planilla...")
 
       // Actualizar todas las diferencias antes de finalizar
       updateAllDifferences()
 
       const supabase = createClient()
+
+      // Verificar si las tablas existen
+      try {
+        console.log("Verificando tablas en la base de datos...")
+        const { error: tableCheckError } = await supabase.from("stock_matrix_sheets").select("id").limit(1)
+
+        if (tableCheckError) {
+          console.error("Error al verificar tabla stock_matrix_sheets:", tableCheckError)
+          toast({
+            title: "Error de base de datos",
+            description: "La tabla stock_matrix_sheets no existe. Por favor, ejecute el script de migración.",
+            variant: "destructive",
+          })
+          setIsLoading(false)
+          return
+        }
+      } catch (checkError) {
+        console.error("Error al verificar tablas:", checkError)
+        throw new Error("No se pudo verificar la existencia de las tablas necesarias")
+      }
 
       // 1. Guardar o actualizar la planilla principal
       let sheetId = sheetData.id
@@ -735,12 +821,12 @@ export default function StockMatrixPage() {
                     <SelectValue placeholder="Seleccionar encargado" />
                   </SelectTrigger>
                   <SelectContent>
-                    {managers.length === 0 ? (
+                    {filteredManagers.length === 0 ? (
                       <SelectItem value="no_managers" disabled>
-                        No hay encargados disponibles
+                        {sheetData.location_id ? "No hay encargados para este local" : "Seleccione un local primero"}
                       </SelectItem>
                     ) : (
-                      managers.map((manager) => (
+                      filteredManagers.map((manager) => (
                         <SelectItem key={manager.id} value={manager.id.toString()}>
                           {manager.name}
                         </SelectItem>
@@ -1092,6 +1178,7 @@ export default function StockMatrixPage() {
     </DashboardLayout>
   )
 }
+
 
 
 
