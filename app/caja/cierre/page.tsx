@@ -291,13 +291,15 @@ export default function CierreCajaPage() {
   // Manejar cambios en campos numéricos
   const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
-    const numericValue = value === "" ? 0 : Number.parseFloat(value)
+    // Asegurarse de que el valor sea un número válido
+    const numericValue = value === "" ? 0 : Number(value)
 
-    // Verificar que el valor sea un número válido
     if (isNaN(numericValue)) {
       console.error(`Valor inválido para ${name}: ${value}`)
       return
     }
+
+    console.log(`Cambiando ${name} a: ${numericValue}`)
 
     setFormData((prev) => ({
       ...prev,
@@ -491,6 +493,38 @@ export default function CierreCajaPage() {
       setIsLoading(true)
       setShowConfirmDialog(false)
 
+      // Verificar si ya existe una apertura para este local, fecha y turno
+      if (!formData.opening_id) {
+        // Codificar correctamente el valor del turno para la consulta
+        const encodedShift = encodeURIComponent(formData.shift)
+
+        console.log("Verificando apertura existente:", {
+          local_id: formData.local_id,
+          date: formData.date,
+          shift: encodedShift,
+        })
+
+        const { data: existingOpenings, error: checkError } = await supabase
+          .from("cash_register_openings")
+          .select("*")
+          .eq("local_id", formData.local_id)
+          .eq("date", formData.date)
+          .eq("shift", formData.shift)
+          .eq("has_closing", false)
+
+        if (checkError) {
+          console.error("Error al verificar aperturas existentes:", checkError)
+          throw new Error("Error al verificar aperturas existentes")
+        }
+
+        if (existingOpenings && existingOpenings.length > 0) {
+          // Si existe una apertura, usarla
+          console.log("Apertura existente encontrada:", existingOpenings[0])
+          formData.opening_id = existingOpenings[0].id
+          formData.initial_balance = existingOpenings[0].initial_amount
+        }
+      }
+
       // 1. Guardar el cierre de caja
       const cierreData = {
         opening_id: formData.opening_id || null,
@@ -541,6 +575,8 @@ export default function CierreCajaPage() {
         withdrawals: JSON.stringify(retiros),
       }
 
+      console.log("Guardando cierre de caja:", cierreData)
+
       // Insertar en la base de datos
       const { data: cierreInsertado, error: cierreError } = await supabase
         .from("cash_register_closings")
@@ -548,16 +584,24 @@ export default function CierreCajaPage() {
         .select("id")
         .single()
 
-      if (cierreError) throw cierreError
+      if (cierreError) {
+        console.error("Error al insertar cierre:", cierreError)
+        throw cierreError
+      }
+
+      console.log("Cierre insertado correctamente:", cierreInsertado)
 
       // 2. Actualizar la apertura si existe
       if (formData.opening_id) {
+        console.log("Actualizando apertura:", formData.opening_id)
         const { error: aperturaError } = await supabase
           .from("cash_register_openings")
           .update({ has_closing: true })
           .eq("id", formData.opening_id)
 
-        if (aperturaError) console.error("Error al actualizar apertura:", aperturaError)
+        if (aperturaError) {
+          console.error("Error al actualizar apertura:", aperturaError)
+        }
       }
 
       // 3. Generar alertas si es necesario
@@ -581,9 +625,12 @@ export default function CierreCajaPage() {
           created_at: new Date().toISOString(),
         }
 
+        console.log("Generando alerta:", alertaData)
         const { error: alertaError } = await supabase.from("cash_register_alerts").insert(alertaData)
 
-        if (alertaError) console.error("Error al generar alerta:", alertaError)
+        if (alertaError) {
+          console.error("Error al generar alerta:", alertaError)
+        }
       }
 
       toast({
@@ -918,10 +965,6 @@ export default function CierreCajaPage() {
                             onChange={handleNumberChange}
                           />
                           <span className="text-sm font-medium">= ${formData.bills_200 * 200}</span>
-                          min="0" value={formData.bills_200 || ""}
-                          onChange={handleNumberChange}
-                          />
-                          <span className="text-sm font-medium">= ${formData.bills_200 * 200}</span>
                         </div>
                       </div>
 
@@ -1236,6 +1279,16 @@ export default function CierreCajaPage() {
                   </Button>
                 </CardFooter>
               </Card>
+              {/* Añade este código justo antes del return en la pestaña de Balance Final */}
+              {console.log("Valores finales para el balance:", {
+                initial_balance: formData.initial_balance,
+                cash_sales: formData.cash_sales, // Asegúrate de que este valor sea correcto
+                total_sales: formData.total_sales,
+                total_expenses: formData.total_expenses,
+                total_withdrawals: formData.total_withdrawals,
+                expected_balance: formData.expected_balance,
+                actual_balance: formData.actual_balance,
+              })}
             </TabsContent>
           </Tabs>
         </form>
@@ -1285,6 +1338,7 @@ export default function CierreCajaPage() {
     </DashboardLayout>
   )
 }
+
 
 
 
