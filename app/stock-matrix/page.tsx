@@ -293,10 +293,21 @@ export default function StockMatrixPage() {
   // Manejar cambios en los campos del formulario principal
   const handleSheetDataChange = (name: string, value: any) => {
     try {
-      setSheetData((prev) => ({
-        ...prev,
-        [name]: value,
-      }))
+      console.log(`Cambiando ${name} a:`, value)
+
+      // Asegurarse de que los IDs sean números
+      if (name === "location_id" || name === "manager_id") {
+        const numValue = typeof value === "string" ? Number.parseInt(value, 10) : value
+        setSheetData((prev) => ({
+          ...prev,
+          [name]: numValue,
+        }))
+      } else {
+        setSheetData((prev) => ({
+          ...prev,
+          [name]: value,
+        }))
+      }
     } catch (err) {
       console.error(`Error al cambiar ${name}:`, err)
     }
@@ -424,8 +435,10 @@ export default function StockMatrixPage() {
   const validateData = () => {
     try {
       console.log("Validando datos...")
-      console.log("Location ID:", sheetData.location_id)
-      console.log("Manager ID:", sheetData.manager_id)
+      console.log("Datos completos de la planilla:", sheetData)
+      console.log("Location ID:", sheetData.location_id, "tipo:", typeof sheetData.location_id)
+      console.log("Manager ID:", sheetData.manager_id, "tipo:", typeof sheetData.manager_id)
+      console.log("Managers disponibles:", filteredManagers)
 
       if (!sheetData.location_id) {
         console.error("Error de validación: No se ha seleccionado un local")
@@ -927,7 +940,10 @@ export default function StockMatrixPage() {
                 <Label htmlFor="manager">Encargado</Label>
                 <Select
                   value={sheetData.manager_id ? sheetData.manager_id.toString() : ""}
-                  onValueChange={(value) => handleSheetDataChange("manager_id", Number.parseInt(value))}
+                  onValueChange={(value) => {
+                    console.log("Encargado seleccionado:", value)
+                    handleSheetDataChange("manager_id", Number.parseInt(value, 10))
+                  }}
                 >
                   <SelectTrigger id="manager">
                     <SelectValue placeholder="Seleccionar encargado" />
@@ -1290,6 +1306,7 @@ export default function StockMatrixPage() {
     </DashboardLayout>
   )
 }
+
 
 
 
