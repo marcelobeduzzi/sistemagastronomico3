@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "@/components/ui/use-toast"
 import { createClient } from "@/lib/supabase/client"
-import { ArrowLeft, Save, Plus, Check, AlertTriangle, Lock, Download } from "lucide-react"
+import { ArrowLeft, Save, Plus, Check, AlertTriangle, Lock, Download, List } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -47,6 +47,7 @@ type StockSheetData = {
   date: string
   location_id: number
   manager_id: number
+  shift: "mañana" | "tarde"
   status: "borrador" | "parcial" | "completado"
   created_by: string
   updated_by: string
@@ -81,7 +82,7 @@ type ProductStockData = {
 // Componente principal
 export default function StockMatrixPage() {
   const router = useRouter()
-  const [userRole, setUserRole] = useState<"encargado" | "administrador">("encargado") // Cambiado a "encargado" por defecto
+  const [userRole, setUserRole] = useState<"encargado" | "administrador">("encargado")
   const [isLoading, setIsLoading] = useState(false)
   const [locations, setLocations] = useState<Location[]>([])
   const [managers, setManagers] = useState<Manager[]>([])
@@ -90,12 +91,14 @@ export default function StockMatrixPage() {
   const [showIncomingDialog, setShowIncomingDialog] = useState(false)
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null)
   const [incomingAmount, setIncomingAmount] = useState<number>(0)
+  const [dataLoaded, setDataLoaded] = useState(false)
 
   // Estado para los datos de la planilla
   const [sheetData, setSheetData] = useState<StockSheetData>({
     date: format(new Date(), "yyyy-MM-dd"),
     location_id: 0,
     manager_id: 0,
+    shift: "mañana",
     status: "borrador",
     created_by: "Usuario Actual", // Esto vendría del contexto de autenticación
     updated_by: "Usuario Actual",
@@ -115,8 +118,16 @@ export default function StockMatrixPage() {
           .eq("active", true)
           .order("name")
 
-        if (locationsError) throw locationsError
-        setLocations(locationsData || [])
+        if (locationsError) {
+          console.error("Error al cargar locales:", locationsError)
+          toast({
+            title: "Error",
+            description: "No se pudieron cargar los locales",
+            variant: "destructive",
+          })
+        } else {
+          setLocations(locationsData || [])
+        }
 
         // Fetch managers
         const { data: managersData, error: managersError } = await supabase
@@ -125,8 +136,16 @@ export default function StockMatrixPage() {
           .eq("active", true)
           .order("name")
 
-        if (managersError) throw managersError
-        setManagers(managersData || [])
+        if (managersError) {
+          console.error("Error al cargar encargados:", managersError)
+          toast({
+            title: "Error",
+            description: "No se pudieron cargar los encargados",
+            variant: "destructive",
+          })
+        } else {
+          setManagers(managersData || [])
+        }
 
         // Fetch product configs
         const { data: productConfigsData, error: productConfigsError } = await supabase
@@ -136,12 +155,18 @@ export default function StockMatrixPage() {
           .order("category", { ascending: true })
           .order("id", { ascending: true })
 
-        if (productConfigsError) throw productConfigsError
-        setProductConfigs(productConfigsData || [])
+        if (productConfigsError) {
+          console.error("Error al cargar productos:", productConfigsError)
+          toast({
+            title: "Error",
+            description: "No se pudieron cargar los productos",
+            variant: "destructive",
+          })
+        } else if (productConfigsData && productConfigsData.length > 0) {
+          setProductConfigs(productConfigsData)
 
-        // Inicializar datos de stock para cada producto
-        const initialStockData: ProductStockData[] =
-          productConfigsData?.map((product) => ({
+          // Inicializar datos de stock para cada producto
+          const initialStockData: ProductStockData[] = productConfigsData.map((product) => ({
             product_id: product.id,
             product_name: product.product_name,
             category: product.category,
@@ -160,9 +185,18 @@ export default function StockMatrixPage() {
             internal_consumption: null,
 
             difference: null,
-          })) || []
+          }))
 
-        setStockData(initialStockData)
+          setStockData(initialStockData)
+        } else {
+          toast({
+            title: "Advertencia",
+            description: "No hay productos configurados en el sistema",
+            variant: "warning",
+          })
+        }
+
+        setDataLoaded(true)
       } catch (error: any) {
         console.error("Error fetching data:", error.message)
         toast({
@@ -274,29 +308,161 @@ export default function StockMatrixPage() {
     )
   }
 
+  // Validar datos antes de guardar
+  const validateData = () => {
+    if (!sheetData.location_id) {
+      toast({
+        title: "Error",
+        description: "Debe seleccionar un local",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    if (!sheetData.manager_id) {
+      toast({
+        title: "Error",
+        description: "Debe seleccionar un encargado",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    return true
+  }
+
   // Guardar planilla completa
   const handleSaveSheet = async () => {
+    if (!validateData()) return
+
     try {
       setIsLoading(true)
 
-      // Aquí iría la lógica para guardar en la base de datos
-      // Por ahora solo simulamos
+      const supabase = createClient()
+
+      // 1. Guardar la planilla principal
+      let sheetId = sheetData.id
+
+      if (sheetId) {
+        // Actualizar planilla existente
+        const { error: updateError } = await supabase
+          .from("stock_matrix_sheets")
+          .update({
+            date: sheetData.date,
+            location_id: sheetData.location_id,
+            manager_id: sheetData.manager_id,
+            shift: sheetData.shift,
+            status: "parcial",
+            updated_by: sheetData.updated_by,
+          })
+          .eq("id", sheetId)
+
+        if (updateError) {
+          console.error("Error al actualizar la planilla:", updateError)
+          throw new Error("No se pudo actualizar la planilla")
+        }
+      } else {
+        // Crear nueva planilla
+        const { data: insertData, error: insertError } = await supabase
+          .from("stock_matrix_sheets")
+          .insert({
+            date: sheetData.date,
+            location_id: sheetData.location_id,
+            manager_id: sheetData.manager_id,
+            shift: sheetData.shift,
+            status: "parcial",
+            created_by: sheetData.created_by,
+            updated_by: sheetData.updated_by,
+          })
+          .select()
+
+        if (insertError) {
+          console.error("Error al crear la planilla:", insertError)
+          throw new Error("No se pudo crear la planilla")
+        }
+
+        if (!insertData || insertData.length === 0) {
+          throw new Error("No se pudo obtener el ID de la planilla creada")
+        }
+
+        sheetId = insertData[0].id
+
+        // Actualizar el ID en el estado
+        setSheetData((prev) => ({
+          ...prev,
+          id: sheetId,
+        }))
+      }
+
+      // 2. Guardar los detalles de stock
+      for (const product of stockData) {
+        const detailData = {
+          stock_sheet_id: sheetId,
+          product_id: product.product_id,
+          product_name: product.product_name,
+          category: product.category,
+          unit_value: product.unit_value,
+          opening_quantity: product.opening_quantity,
+          opening_locked: product.opening_locked,
+          incoming_quantity: product.incoming_quantity,
+          incoming_locked: product.incoming_locked,
+          closing_quantity: product.closing_quantity,
+          closing_locked: product.closing_locked,
+          units_sold: product.units_sold,
+          discarded_quantity: product.discarded_quantity,
+          internal_consumption: product.internal_consumption,
+          difference: product.difference,
+          has_internal_consumption: product.has_internal_consumption,
+        }
+
+        // Verificar si ya existe un detalle para este producto
+        const { data: existingDetail, error: checkError } = await supabase
+          .from("stock_matrix_details")
+          .select("id")
+          .eq("stock_sheet_id", sheetId)
+          .eq("product_id", product.product_id)
+          .maybeSingle()
+
+        if (checkError) {
+          console.error("Error al verificar detalle existente:", checkError)
+          continue
+        }
+
+        if (existingDetail) {
+          // Actualizar detalle existente
+          const { error: updateError } = await supabase
+            .from("stock_matrix_details")
+            .update(detailData)
+            .eq("id", existingDetail.id)
+
+          if (updateError) {
+            console.error("Error al actualizar detalle:", updateError)
+          }
+        } else {
+          // Insertar nuevo detalle
+          const { error: insertError } = await supabase.from("stock_matrix_details").insert(detailData)
+
+          if (insertError) {
+            console.error("Error al insertar detalle:", insertError)
+          }
+        }
+      }
+
+      // Actualizar estado a parcial
+      setSheetData((prev) => ({
+        ...prev,
+        status: "parcial",
+      }))
 
       toast({
         title: "Planilla guardada",
         description: "Los datos han sido guardados correctamente",
       })
-
-      // Actualizar estado a parcial o completado según corresponda
-      setSheetData((prev) => ({
-        ...prev,
-        status: "parcial",
-      }))
     } catch (error: any) {
       console.error("Error saving data:", error.message)
       toast({
         title: "Error",
-        description: "No se pudieron guardar los datos",
+        description: error.message || "No se pudieron guardar los datos",
         variant: "destructive",
       })
     } finally {
@@ -306,29 +472,144 @@ export default function StockMatrixPage() {
 
   // Finalizar planilla
   const handleFinalizeSheet = async () => {
+    if (!validateData()) return
+
     try {
       setIsLoading(true)
 
       // Actualizar todas las diferencias antes de finalizar
       updateAllDifferences()
 
-      // Aquí iría la lógica para guardar y finalizar en la base de datos
+      const supabase = createClient()
 
-      toast({
-        title: "Planilla finalizada",
-        description: "La planilla ha sido finalizada correctamente",
-      })
+      // 1. Guardar o actualizar la planilla principal
+      let sheetId = sheetData.id
+
+      if (sheetId) {
+        // Actualizar planilla existente
+        const { error: updateError } = await supabase
+          .from("stock_matrix_sheets")
+          .update({
+            date: sheetData.date,
+            location_id: sheetData.location_id,
+            manager_id: sheetData.manager_id,
+            shift: sheetData.shift,
+            status: "completado",
+            updated_by: sheetData.updated_by,
+          })
+          .eq("id", sheetId)
+
+        if (updateError) {
+          console.error("Error al actualizar la planilla:", updateError)
+          throw new Error("No se pudo actualizar la planilla")
+        }
+      } else {
+        // Crear nueva planilla
+        const { data: insertData, error: insertError } = await supabase
+          .from("stock_matrix_sheets")
+          .insert({
+            date: sheetData.date,
+            location_id: sheetData.location_id,
+            manager_id: sheetData.manager_id,
+            shift: sheetData.shift,
+            status: "completado",
+            created_by: sheetData.created_by,
+            updated_by: sheetData.updated_by,
+          })
+          .select()
+
+        if (insertError) {
+          console.error("Error al crear la planilla:", insertError)
+          throw new Error("No se pudo crear la planilla")
+        }
+
+        if (!insertData || insertData.length === 0) {
+          throw new Error("No se pudo obtener el ID de la planilla creada")
+        }
+
+        sheetId = insertData[0].id
+
+        // Actualizar el ID en el estado
+        setSheetData((prev) => ({
+          ...prev,
+          id: sheetId,
+        }))
+      }
+
+      // 2. Guardar los detalles de stock con todos los campos bloqueados
+      for (const product of stockData) {
+        const detailData = {
+          stock_sheet_id: sheetId,
+          product_id: product.product_id,
+          product_name: product.product_name,
+          category: product.category,
+          unit_value: product.unit_value,
+          opening_quantity: product.opening_quantity,
+          opening_locked: true,
+          incoming_quantity: product.incoming_quantity,
+          incoming_locked: true,
+          closing_quantity: product.closing_quantity,
+          closing_locked: true,
+          units_sold: product.units_sold,
+          discarded_quantity: product.discarded_quantity,
+          internal_consumption: product.internal_consumption,
+          difference: product.difference,
+          has_internal_consumption: product.has_internal_consumption,
+        }
+
+        // Verificar si ya existe un detalle para este producto
+        const { data: existingDetail, error: checkError } = await supabase
+          .from("stock_matrix_details")
+          .select("id")
+          .eq("stock_sheet_id", sheetId)
+          .eq("product_id", product.product_id)
+          .maybeSingle()
+
+        if (checkError) {
+          console.error("Error al verificar detalle existente:", checkError)
+          continue
+        }
+
+        if (existingDetail) {
+          // Actualizar detalle existente
+          const { error: updateError } = await supabase
+            .from("stock_matrix_details")
+            .update(detailData)
+            .eq("id", existingDetail.id)
+
+          if (updateError) {
+            console.error("Error al actualizar detalle:", updateError)
+          }
+        } else {
+          // Insertar nuevo detalle
+          const { error: insertError } = await supabase.from("stock_matrix_details").insert(detailData)
+
+          if (insertError) {
+            console.error("Error al insertar detalle:", insertError)
+          }
+        }
+      }
 
       // Actualizar estado a completado
       setSheetData((prev) => ({
         ...prev,
         status: "completado",
       }))
+
+      toast({
+        title: "Planilla finalizada",
+        description: "La planilla ha sido finalizada correctamente",
+      })
+
+      // Redirigir a la lista de planillas después de un breve retraso
+      setTimeout(() => {
+        router.push("/stock-matrix/list")
+      }, 1500)
     } catch (error: any) {
       console.error("Error finalizing data:", error.message)
       toast({
         title: "Error",
-        description: "No se pudo finalizar la planilla",
+        description: error.message || "No se pudo finalizar la planilla",
         variant: "destructive",
       })
     } finally {
@@ -343,6 +624,11 @@ export default function StockMatrixPage() {
       description: "Exportando datos a Excel...",
     })
     // Aquí iría la lógica para exportar a Excel
+  }
+
+  // Ver lista de planillas
+  const handleViewSheetList = () => {
+    router.push("/stock-matrix/list")
   }
 
   return (
@@ -369,6 +655,10 @@ export default function StockMatrixPage() {
                 </SelectContent>
               </Select>
             </div>
+            <Button variant="outline" onClick={handleViewSheetList}>
+              <List className="mr-2 h-4 w-4" />
+              Ver Planillas
+            </Button>
             <Button variant="outline" onClick={() => router.push("/stock-check")}>
               <ArrowLeft className="mr-2 h-4 w-4" />
               Volver
@@ -386,7 +676,7 @@ export default function StockMatrixPage() {
             <CardTitle>Información General</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="date">Fecha</Label>
                 <Input
@@ -398,20 +688,39 @@ export default function StockMatrixPage() {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="shift">Turno</Label>
+                <Select value={sheetData.shift} onValueChange={(value) => handleSheetDataChange("shift", value)}>
+                  <SelectTrigger id="shift">
+                    <SelectValue placeholder="Seleccionar turno" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mañana">Mañana</SelectItem>
+                    <SelectItem value="tarde">Tarde</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="location">Local</Label>
                 <Select
-                  value={sheetData.location_id.toString()}
+                  value={sheetData.location_id ? sheetData.location_id.toString() : ""}
                   onValueChange={(value) => handleSheetDataChange("location_id", Number.parseInt(value))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="location">
                     <SelectValue placeholder="Seleccionar local" />
                   </SelectTrigger>
                   <SelectContent>
-                    {locations.map((location) => (
-                      <SelectItem key={location.id} value={location.id.toString()}>
-                        {location.name}
+                    {locations.length === 0 ? (
+                      <SelectItem value="" disabled>
+                        No hay locales disponibles
                       </SelectItem>
-                    ))}
+                    ) : (
+                      locations.map((location) => (
+                        <SelectItem key={location.id} value={location.id.toString()}>
+                          {location.name}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -419,18 +728,24 @@ export default function StockMatrixPage() {
               <div className="space-y-2">
                 <Label htmlFor="manager">Encargado</Label>
                 <Select
-                  value={sheetData.manager_id.toString()}
+                  value={sheetData.manager_id ? sheetData.manager_id.toString() : ""}
                   onValueChange={(value) => handleSheetDataChange("manager_id", Number.parseInt(value))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="manager">
                     <SelectValue placeholder="Seleccionar encargado" />
                   </SelectTrigger>
                   <SelectContent>
-                    {managers.map((manager) => (
-                      <SelectItem key={manager.id} value={manager.id.toString()}>
-                        {manager.name}
+                    {managers.length === 0 ? (
+                      <SelectItem value="" disabled>
+                        No hay encargados disponibles
                       </SelectItem>
-                    ))}
+                    ) : (
+                      managers.map((manager) => (
+                        <SelectItem key={manager.id} value={manager.id.toString()}>
+                          {manager.name}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -465,242 +780,252 @@ export default function StockMatrixPage() {
             <CardTitle>Detalle de Stock</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="rounded-md border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead rowSpan={2} className="w-[180px]">
-                      Producto
-                    </TableHead>
-                    <TableHead rowSpan={2} className="w-[100px]">
-                      Categoría
-                    </TableHead>
-                    <TableHead colSpan={3} className="text-center border-b">
-                      Encargado
-                    </TableHead>
-                    {userRole === "administrador" && (
+            {isLoading ? (
+              <div className="text-center py-8">Cargando datos...</div>
+            ) : !dataLoaded ? (
+              <div className="text-center py-8">Error al cargar los datos</div>
+            ) : productConfigs.length === 0 ? (
+              <div className="text-center py-8">
+                No hay productos configurados. Por favor, configure los productos antes de continuar.
+              </div>
+            ) : (
+              <div className="rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead rowSpan={2} className="w-[180px]">
+                        Producto
+                      </TableHead>
+                      <TableHead rowSpan={2} className="w-[100px]">
+                        Categoría
+                      </TableHead>
                       <TableHead colSpan={3} className="text-center border-b">
-                        Administrador
+                        Encargado
                       </TableHead>
-                    )}
-                    {userRole === "administrador" && (
-                      <TableHead rowSpan={2} className="text-center w-[120px]">
-                        Diferencia
-                      </TableHead>
-                    )}
-                  </TableRow>
-                  <TableRow className="bg-muted/50">
-                    <TableHead className="text-center w-[120px]">1. Apertura</TableHead>
-                    <TableHead className="text-center w-[120px]">2. Ingreso</TableHead>
-                    <TableHead className="text-center w-[120px]">6. Cierre</TableHead>
+                      {userRole === "administrador" && (
+                        <TableHead colSpan={3} className="text-center border-b">
+                          Administrador
+                        </TableHead>
+                      )}
+                      {userRole === "administrador" && (
+                        <TableHead rowSpan={2} className="text-center w-[120px]">
+                          Diferencia
+                        </TableHead>
+                      )}
+                    </TableRow>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="text-center w-[120px]">1. Apertura</TableHead>
+                      <TableHead className="text-center w-[120px]">2. Ingreso</TableHead>
+                      <TableHead className="text-center w-[120px]">6. Cierre</TableHead>
 
-                    {userRole === "administrador" && (
-                      <>
-                        <TableHead className="text-center w-[120px]">3. Vendidas</TableHead>
-                        <TableHead className="text-center w-[120px]">4. Decomisos</TableHead>
-                        <TableHead className="text-center w-[120px]">5. Consumos</TableHead>
-                      </>
-                    )}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {stockData.map((product) => (
-                    <TableRow key={product.product_id}>
-                      <TableCell className="font-medium">{product.product_name}</TableCell>
-                      <TableCell>{product.category}</TableCell>
-
-                      {/* Apertura - Solo editable por encargado y si no está bloqueado */}
-                      <TableCell>
-                        <div className="flex flex-col gap-2">
-                          <div className="flex items-center gap-2">
-                            <Input
-                              type="number"
-                              min="0"
-                              value={product.opening_quantity || ""}
-                              onChange={(e) =>
-                                handleStockDataChange(
-                                  product.product_id,
-                                  "opening_quantity",
-                                  e.target.value === "" ? null : Number.parseInt(e.target.value),
-                                )
-                              }
-                              disabled={product.opening_locked || userRole !== "encargado"}
-                              className="w-20 text-center"
-                            />
-                            {product.opening_locked && <Lock className="h-4 w-4 text-muted-foreground" />}
-                          </div>
-                          {userRole === "encargado" && !product.opening_locked && (
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => handleLockField(product.product_id, "opening")}
-                              className="h-8 w-8"
-                              title="Guardar"
-                            >
-                              <Save className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-
-                      {/* Ingreso de Mercadería - Solo editable por encargado y si no está bloqueado */}
-                      <TableCell>
-                        <div className="flex flex-col gap-2">
-                          <div className="flex items-center gap-2">
-                            <Input
-                              type="number"
-                              min="0"
-                              value={product.incoming_quantity || ""}
-                              disabled={true}
-                              className="w-20 text-center"
-                            />
-                            {product.incoming_locked && <Lock className="h-4 w-4 text-muted-foreground" />}
-                          </div>
-                          {userRole === "encargado" && !product.incoming_locked && (
-                            <div className="flex gap-1">
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => handleAddIncoming(product.product_id)}
-                                className="h-8 w-8"
-                                title="Agregar ingreso"
-                              >
-                                <Plus className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => finalizeIncoming(product.product_id)}
-                                className="h-8 w-8"
-                                title="Finalizar ingresos"
-                              >
-                                <Check className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-
-                      {/* Stock de Cierre - Solo editable por encargado y si no está bloqueado */}
-                      <TableCell>
-                        <div className="flex flex-col gap-2">
-                          <div className="flex items-center gap-2">
-                            <Input
-                              type="number"
-                              min="0"
-                              value={product.closing_quantity || ""}
-                              onChange={(e) =>
-                                handleStockDataChange(
-                                  product.product_id,
-                                  "closing_quantity",
-                                  e.target.value === "" ? null : Number.parseInt(e.target.value),
-                                )
-                              }
-                              disabled={product.closing_locked || userRole !== "encargado"}
-                              className="w-20 text-center"
-                            />
-                            {product.closing_locked && <Lock className="h-4 w-4 text-muted-foreground" />}
-                          </div>
-                          {userRole === "encargado" && !product.closing_locked && (
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => handleLockField(product.product_id, "closing")}
-                              className="h-8 w-8"
-                              title="Guardar"
-                            >
-                              <Save className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-
-                      {/* Campos solo visibles para administradores */}
                       {userRole === "administrador" && (
                         <>
-                          {/* Unidades Vendidas */}
-                          <TableCell>
-                            <Input
-                              type="number"
-                              min="0"
-                              value={product.units_sold || ""}
-                              onChange={(e) =>
-                                handleStockDataChange(
-                                  product.product_id,
-                                  "units_sold",
-                                  e.target.value === "" ? null : Number.parseInt(e.target.value),
-                                )
-                              }
-                              className="w-20 text-center"
-                            />
-                          </TableCell>
-
-                          {/* Decomisos */}
-                          <TableCell>
-                            <Input
-                              type="number"
-                              min="0"
-                              value={product.discarded_quantity || ""}
-                              onChange={(e) =>
-                                handleStockDataChange(
-                                  product.product_id,
-                                  "discarded_quantity",
-                                  e.target.value === "" ? null : Number.parseInt(e.target.value),
-                                )
-                              }
-                              className="w-20 text-center"
-                            />
-                          </TableCell>
-
-                          {/* Consumos Internos - Solo si el producto los tiene */}
-                          <TableCell>
-                            <Input
-                              type="number"
-                              min="0"
-                              value={product.internal_consumption || ""}
-                              onChange={(e) =>
-                                handleStockDataChange(
-                                  product.product_id,
-                                  "internal_consumption",
-                                  e.target.value === "" ? null : Number.parseInt(e.target.value),
-                                )
-                              }
-                              disabled={!product.has_internal_consumption}
-                              className="w-20 text-center"
-                            />
-                          </TableCell>
-
-                          {/* Diferencia - Calculada automáticamente */}
-                          <TableCell>
-                            <div className="flex items-center justify-between">
-                              <span
-                                className={
-                                  product.difference === null
-                                    ? ""
-                                    : product.difference === 0
-                                      ? "text-green-600 font-medium"
-                                      : product.difference > 0
-                                        ? "text-amber-600 font-medium"
-                                        : "text-red-600 font-medium"
-                                }
-                              >
-                                {product.difference === null ? "-" : product.difference}
-                              </span>
-
-                              {product.difference !== null && product.difference !== 0 && (
-                                <AlertTriangle
-                                  className={`h-4 w-4 ${product.difference > 0 ? "text-amber-600" : "text-red-600"}`}
-                                />
-                              )}
-                            </div>
-                          </TableCell>
+                          <TableHead className="text-center w-[120px]">3. Vendidas</TableHead>
+                          <TableHead className="text-center w-[120px]">4. Decomisos</TableHead>
+                          <TableHead className="text-center w-[120px]">5. Consumos</TableHead>
                         </>
                       )}
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {stockData.map((product) => (
+                      <TableRow key={product.product_id}>
+                        <TableCell className="font-medium">{product.product_name}</TableCell>
+                        <TableCell>{product.category}</TableCell>
+
+                        {/* Apertura - Solo editable por encargado y si no está bloqueado */}
+                        <TableCell>
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                min="0"
+                                value={product.opening_quantity || ""}
+                                onChange={(e) =>
+                                  handleStockDataChange(
+                                    product.product_id,
+                                    "opening_quantity",
+                                    e.target.value === "" ? null : Number.parseInt(e.target.value),
+                                  )
+                                }
+                                disabled={product.opening_locked || userRole !== "encargado"}
+                                className="w-20 text-center"
+                              />
+                              {product.opening_locked && <Lock className="h-4 w-4 text-muted-foreground" />}
+                            </div>
+                            {userRole === "encargado" && !product.opening_locked && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => handleLockField(product.product_id, "opening")}
+                                className="h-8 w-8"
+                                title="Guardar"
+                              >
+                                <Save className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+
+                        {/* Ingreso de Mercadería - Solo editable por encargado y si no está bloqueado */}
+                        <TableCell>
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                min="0"
+                                value={product.incoming_quantity || ""}
+                                disabled={true}
+                                className="w-20 text-center"
+                              />
+                              {product.incoming_locked && <Lock className="h-4 w-4 text-muted-foreground" />}
+                            </div>
+                            {userRole === "encargado" && !product.incoming_locked && (
+                              <div className="flex gap-1">
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => handleAddIncoming(product.product_id)}
+                                  className="h-8 w-8"
+                                  title="Agregar ingreso"
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => finalizeIncoming(product.product_id)}
+                                  className="h-8 w-8"
+                                  title="Finalizar ingresos"
+                                >
+                                  <Check className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+
+                        {/* Stock de Cierre - Solo editable por encargado y si no está bloqueado */}
+                        <TableCell>
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                min="0"
+                                value={product.closing_quantity || ""}
+                                onChange={(e) =>
+                                  handleStockDataChange(
+                                    product.product_id,
+                                    "closing_quantity",
+                                    e.target.value === "" ? null : Number.parseInt(e.target.value),
+                                  )
+                                }
+                                disabled={product.closing_locked || userRole !== "encargado"}
+                                className="w-20 text-center"
+                              />
+                              {product.closing_locked && <Lock className="h-4 w-4 text-muted-foreground" />}
+                            </div>
+                            {userRole === "encargado" && !product.closing_locked && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => handleLockField(product.product_id, "closing")}
+                                className="h-8 w-8"
+                                title="Guardar"
+                              >
+                                <Save className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+
+                        {/* Campos solo visibles para administradores */}
+                        {userRole === "administrador" && (
+                          <>
+                            {/* Unidades Vendidas */}
+                            <TableCell>
+                              <Input
+                                type="number"
+                                min="0"
+                                value={product.units_sold || ""}
+                                onChange={(e) =>
+                                  handleStockDataChange(
+                                    product.product_id,
+                                    "units_sold",
+                                    e.target.value === "" ? null : Number.parseInt(e.target.value),
+                                  )
+                                }
+                                className="w-20 text-center"
+                              />
+                            </TableCell>
+
+                            {/* Decomisos */}
+                            <TableCell>
+                              <Input
+                                type="number"
+                                min="0"
+                                value={product.discarded_quantity || ""}
+                                onChange={(e) =>
+                                  handleStockDataChange(
+                                    product.product_id,
+                                    "discarded_quantity",
+                                    e.target.value === "" ? null : Number.parseInt(e.target.value),
+                                  )
+                                }
+                                className="w-20 text-center"
+                              />
+                            </TableCell>
+
+                            {/* Consumos Internos - Solo si el producto los tiene */}
+                            <TableCell>
+                              <Input
+                                type="number"
+                                min="0"
+                                value={product.internal_consumption || ""}
+                                onChange={(e) =>
+                                  handleStockDataChange(
+                                    product.product_id,
+                                    "internal_consumption",
+                                    e.target.value === "" ? null : Number.parseInt(e.target.value),
+                                  )
+                                }
+                                disabled={!product.has_internal_consumption}
+                                className="w-20 text-center"
+                              />
+                            </TableCell>
+
+                            {/* Diferencia - Calculada automáticamente */}
+                            <TableCell>
+                              <div className="flex items-center justify-between">
+                                <span
+                                  className={
+                                    product.difference === null
+                                      ? ""
+                                      : product.difference === 0
+                                        ? "text-green-600 font-medium"
+                                        : product.difference > 0
+                                          ? "text-amber-600 font-medium"
+                                          : "text-red-600 font-medium"
+                                  }
+                                >
+                                  {product.difference === null ? "-" : product.difference}
+                                </span>
+
+                                {product.difference !== null && product.difference !== 0 && (
+                                  <AlertTriangle
+                                    className={`h-4 w-4 ${product.difference > 0 ? "text-amber-600" : "text-red-600"}`}
+                                  />
+                                )}
+                              </div>
+                            </TableCell>
+                          </>
+                        )}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
 
             <div className="flex justify-between mt-6">
               <Button variant="outline" onClick={() => router.push("/stock-check")}>
@@ -714,7 +1039,7 @@ export default function StockMatrixPage() {
                   </Button>
                 )}
 
-                <Button onClick={handleSaveSheet} disabled={isLoading}>
+                <Button onClick={handleSaveSheet} disabled={isLoading || !dataLoaded || productConfigs.length === 0}>
                   <Save className="mr-2 h-4 w-4" />
                   Guardar
                 </Button>
@@ -722,7 +1047,9 @@ export default function StockMatrixPage() {
                 <Button
                   variant="default"
                   onClick={handleFinalizeSheet}
-                  disabled={isLoading || sheetData.status === "completado"}
+                  disabled={
+                    isLoading || !dataLoaded || productConfigs.length === 0 || sheetData.status === "completado"
+                  }
                 >
                   <Check className="mr-2 h-4 w-4" />
                   Finalizar
@@ -765,6 +1092,7 @@ export default function StockMatrixPage() {
     </DashboardLayout>
   )
 }
+
 
 
 
