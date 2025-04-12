@@ -11,8 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "@/components/ui/use-toast"
-import { createClient } from "@/lib/supabase/client"
-import { ArrowLeft, Save, Plus, Check, AlertTriangle, Lock, Download, List } from "lucide-react"
+import { ArrowLeft, Save, Plus, Check, AlertTriangle, Lock, Download, List, Loader2 } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -22,6 +21,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
+import { createClient } from "@/lib/supabase/client"
+import { ProtectedRoute } from "@/components/protected-route"
 
 // Tipos
 type Location = {
@@ -91,10 +92,10 @@ const FIXED_LOCATIONS: Location[] = [
 ]
 
 // Componente principal
-export default function StockMatrixPage() {
+function StockMatrixPageContent() {
   const router = useRouter()
   const [userRole, setUserRole] = useState<"encargado" | "administrador">("encargado")
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [locations] = useState<Location[]>(FIXED_LOCATIONS)
   const [allManagers, setAllManagers] = useState<Manager[]>([])
   const [filteredManagers, setFilteredManagers] = useState<Manager[]>([])
@@ -105,6 +106,8 @@ export default function StockMatrixPage() {
   const [incomingAmount, setIncomingAmount] = useState<number>(0)
   const [dataLoaded, setDataLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [authChecking, setAuthChecking] = useState(true)
 
   // Estado para los datos de la planilla
   const [sheetData, setSheetData] = useState<StockSheetData>({
@@ -117,148 +120,176 @@ export default function StockMatrixPage() {
     updated_by: "Usuario Actual",
   })
 
-  // Cargar datos iniciales
+  // Verificar autenticación con Supabase directamente
   useEffect(() => {
-    async function fetchData() {
+    async function checkAuth() {
       try {
         setIsLoading(true)
-        setError(null)
+        setAuthChecking(true)
 
-        // Crear cliente de Supabase con manejo de errores
-        let supabase
-        try {
-          supabase = createClient()
-        } catch (err) {
-          console.error("Error al crear cliente de Supabase:", err)
-          setError("Error al conectar con la base de datos. Por favor, recargue la página.")
-          setIsLoading(false)
+        console.log("Iniciando verificación de autenticación")
+        const supabase = createClient()
+
+        // Intentar obtener la sesión directamente
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+
+        if (sessionError || !sessionData.session) {
+          console.log("No hay sesión activa, redirigiendo a login")
+          router.push("/login")
           return
         }
 
-        // Fetch encargados desde la tabla de empleados
-        try {
-          const { data: employeesData, error: employeesError } = await supabase
-            .from("employees")
-            .select("id, first_name, last_name, local, position, status")
-            .eq("status", "active")
-            .order("last_name")
+        console.log("Sesión activa encontrada")
+        setAuthChecking(false)
 
-          if (employeesError) {
-            console.error("Error al cargar empleados:", employeesError)
-            toast({
-              title: "Error",
-              description: "No se pudieron cargar los empleados",
-              variant: "destructive",
-            })
-          } else {
-            // Filtrar los encargados y supervisores manualmente con más flexibilidad
-            const filteredEmployees = (employeesData || []).filter((emp) => {
-              if (!emp.position) return false
-
-              const positionLower = emp.position.toLowerCase()
-              return (
-                positionLower.includes("encargad") || // Captura "encargado" y "encargada"
-                positionLower.includes("supervisor")
-              )
-            })
-
-            // Agregar un log para depuración
-            console.log("Empleados filtrados:", filteredEmployees)
-
-            // Transformar los datos de empleados al formato de Manager
-            const managers: Manager[] = filteredEmployees.map((emp) => ({
-              id: emp.id,
-              name: `${emp.first_name} ${emp.last_name}`,
-              local: emp.local,
-            }))
-
-            setAllManagers(managers)
-
-            // Si ya hay un local seleccionado, filtrar los encargados
-            if (sheetData.location_id) {
-              const selectedLocation = locations.find((loc) => loc.id === sheetData.location_id)
-              if (selectedLocation) {
-                const filtered = managers.filter((manager) => manager.local === selectedLocation.name)
-                setFilteredManagers(filtered)
-              }
-            } else {
-              setFilteredManagers(managers)
-            }
-          }
-        } catch (err) {
-          console.error("Error al procesar empleados:", err)
-          // No interrumpir el flujo, continuar con los productos
-        }
-
-        // Fetch product configs
-        try {
-          const { data: productConfigsData, error: productConfigsError } = await supabase
-            .from("product_config")
-            .select("id, product_name, unit_value, category, has_internal_consumption")
-            .eq("active", true)
-            .order("category", { ascending: true })
-            .order("id", { ascending: true })
-
-          if (productConfigsError) {
-            console.error("Error al cargar productos:", productConfigsError)
-            toast({
-              title: "Error",
-              description: "No se pudieron cargar los productos",
-              variant: "destructive",
-            })
-          } else if (productConfigsData && productConfigsData.length > 0) {
-            setProductConfigs(productConfigsData)
-
-            // Inicializar datos de stock para cada producto
-            const initialStockData: ProductStockData[] = productConfigsData.map((product) => ({
-              product_id: product.id,
-              product_name: product.product_name,
-              category: product.category,
-              unit_value: product.unit_value,
-              has_internal_consumption: product.has_internal_consumption,
-
-              opening_quantity: null,
-              opening_locked: false,
-              incoming_quantity: null,
-              incoming_locked: false,
-              closing_quantity: null,
-              closing_locked: false,
-
-              units_sold: null,
-              discarded_quantity: null,
-              internal_consumption: null,
-
-              difference: null,
-            }))
-
-            setStockData(initialStockData)
-          } else {
-            toast({
-              title: "Advertencia",
-              description: "No hay productos configurados en el sistema",
-              variant: "warning",
-            })
-          }
-        } catch (err) {
-          console.error("Error al procesar productos:", err)
-          setError("Error al cargar los productos. Por favor, recargue la página.")
-        }
-
-        setDataLoaded(true)
-      } catch (error: any) {
-        console.error("Error fetching data:", error.message)
-        setError("Error al cargar los datos. Por favor, recargue la página.")
-        toast({
-          title: "Error",
-          description: "No se pudieron cargar los datos necesarios",
-          variant: "destructive",
-        })
-      } finally {
-        setIsLoading(false)
+        // Continuar con la carga de datos
+        fetchData()
+      } catch (err) {
+        console.error("Error general al verificar autenticación:", err)
+        router.push("/login")
       }
     }
 
-    fetchData()
+    checkAuth()
+  }, [router])
+
+  // Cargar datos iniciales
+  async function fetchData() {
+    try {
+      setIsLoading(true)
+      setError(null)
+
+      // Verificar autenticación nuevamente
+      const supabase = createClient()
+      const { data: sessionData } = await supabase.auth.getSession()
+
+      if (!sessionData.session) {
+        console.log("No hay sesión activa, redirigiendo a login")
+        router.push("/login")
+        return
+      }
+
+      // Fetch encargados desde la tabla de empleados
+      try {
+        const { data: employeesData, error: employeesError } = await supabase
+          .from("employees")
+          .select("id, first_name, last_name, local, position, status")
+          .eq("status", "active")
+          .order("last_name")
+
+        if (employeesError) {
+          console.error("Error al cargar empleados:", employeesError)
+          toast({
+            title: "Error",
+            description: "No se pudieron cargar los empleados",
+            variant: "destructive",
+          })
+        } else {
+          // Filtrar los encargados y supervisores manualmente con más flexibilidad
+          const filteredEmployees = (employeesData || []).filter((emp) => {
+            if (!emp.position) return false
+
+            const positionLower = emp.position.toLowerCase()
+            return (
+              positionLower.includes("encargad") || // Captura "encargado" y "encargada"
+              positionLower.includes("supervisor")
+            )
+          })
+
+          // Agregar un log para depuración
+          console.log("Empleados filtrados:", filteredEmployees)
+
+          // Transformar los datos de empleados al formato de Manager
+          const managers: Manager[] = filteredEmployees.map((emp) => ({
+            id: emp.id,
+            name: `${emp.first_name} ${emp.last_name}`,
+            local: emp.local,
+          }))
+
+          setAllManagers(managers)
+
+          // Si ya hay un local seleccionado, filtrar los encargados
+          if (sheetData.location_id) {
+            const selectedLocation = locations.find((loc) => loc.id === sheetData.location_id)
+            if (selectedLocation) {
+              const filtered = managers.filter((manager) => manager.local === selectedLocation.name)
+              setFilteredManagers(filtered)
+            }
+          } else {
+            setFilteredManagers(managers)
+          }
+        }
+      } catch (err) {
+        console.error("Error al procesar empleados:", err)
+        // No interrumpir el flujo, continuar con los productos
+      }
+
+      // Fetch product configs
+      try {
+        const { data: productConfigsData, error: productConfigsError } = await supabase
+          .from("product_config")
+          .select("id, product_name, unit_value, category, has_internal_consumption")
+          .eq("active", true)
+          .order("category", { ascending: true })
+          .order("id", { ascending: true })
+
+        if (productConfigsError) {
+          console.error("Error al cargar productos:", productConfigsError)
+          toast({
+            title: "Error",
+            description: "No se pudieron cargar los productos",
+            variant: "destructive",
+          })
+        } else if (productConfigsData && productConfigsData.length > 0) {
+          setProductConfigs(productConfigsData)
+
+          // Inicializar datos de stock para cada producto
+          const initialStockData: ProductStockData[] = productConfigsData.map((product) => ({
+            product_id: product.id,
+            product_name: product.product_name,
+            category: product.category,
+            unit_value: product.unit_value,
+            has_internal_consumption: product.has_internal_consumption,
+
+            opening_quantity: null,
+            opening_locked: false,
+            incoming_quantity: null,
+            incoming_locked: false,
+            closing_quantity: null,
+            closing_locked: false,
+
+            units_sold: null,
+            discarded_quantity: null,
+            internal_consumption: null,
+
+            difference: null,
+          }))
+
+          setStockData(initialStockData)
+        } else {
+          toast({
+            title: "Advertencia",
+            description: "No hay productos configurados en el sistema",
+            variant: "warning",
+          })
+        }
+      } catch (err) {
+        console.error("Error al procesar productos:", err)
+        setError("Error al cargar los productos. Por favor, recargue la página.")
+      }
+
+      setDataLoaded(true)
+    } catch (error: any) {
+      console.error("Error fetching data:", error.message)
+      setError("Error al cargar los datos. Por favor, recargue la página.")
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los datos necesarios",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
 
     // Verificar si hay un ID en la URL para cargar una planilla existente
     const params = new URLSearchParams(window.location.search)
@@ -266,7 +297,7 @@ export default function StockMatrixPage() {
     if (sheetId) {
       loadExistingSheet(Number.parseInt(sheetId))
     }
-  }, [])
+  }
 
   // Filtrar encargados cuando cambia el local seleccionado
   useEffect(() => {
@@ -484,7 +515,17 @@ export default function StockMatrixPage() {
       setIsLoading(true)
       console.log("Iniciando guardado de planilla...")
 
+      // Verificar autenticación
       const supabase = createClient()
+      const { data: sessionData } = await supabase.auth.getSession()
+
+      if (!sessionData.session) {
+        console.error("Sesión expirada durante el guardado")
+        setAuthError("Tu sesión ha expirado. Por favor, inicia sesión nuevamente.")
+        setIsLoading(false)
+        router.push("/login")
+        return
+      }
 
       // Verificar si las tablas existen
       try {
@@ -644,10 +685,20 @@ export default function StockMatrixPage() {
       setIsLoading(true)
       console.log("Iniciando finalización de planilla...")
 
+      // Verificar autenticación
+      const supabase = createClient()
+      const { data: sessionData } = await supabase.auth.getSession()
+
+      if (!sessionData.session) {
+        console.error("Sesión expirada durante la finalización")
+        setAuthError("Tu sesión ha expirado. Por favor, inicia sesión nuevamente.")
+        setIsLoading(false)
+        router.push("/login")
+        return
+      }
+
       // Actualizar todas las diferencias antes de finalizar
       updateAllDifferences()
-
-      const supabase = createClient()
 
       // Verificar si las tablas existen
       try {
@@ -826,35 +877,22 @@ export default function StockMatrixPage() {
     }
   }
 
-  // Si hay un error crítico, mostrar mensaje de error
-  if (error) {
-    return (
-      <DashboardLayout>
-        <div className="container mx-auto py-6">
-          <Card className="border-red-300">
-            <CardHeader>
-              <CardTitle className="text-red-600">Error</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p>{error}</p>
-              <div className="mt-4">
-                <Button onClick={() => router.push("/stock-check")}>
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Volver
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </DashboardLayout>
-    )
-  }
-
   // Función para cargar una planilla existente
   const loadExistingSheet = async (sheetId: number) => {
     try {
       setIsLoading(true)
+
+      // Verificar autenticación
       const supabase = createClient()
+      const { data: sessionData } = await supabase.auth.getSession()
+
+      if (!sessionData.session) {
+        console.error("Sesión expirada durante la carga de planilla")
+        setAuthError("Tu sesión ha expirado. Por favor, inicia sesión nuevamente.")
+        setIsLoading(false)
+        router.push("/login")
+        return
+      }
 
       // Cargar datos de la planilla
       const { data: sheetData, error: sheetError } = await supabase
@@ -865,7 +903,30 @@ export default function StockMatrixPage() {
 
       if (sheetError) {
         console.error("Error al cargar la planilla:", sheetError)
+
+        // Si el error es 'no se encontró el registro', manejarlo de forma amigable
+        if (sheetError.code === "PGRST116") {
+          toast({
+            title: "Planilla no encontrada",
+            description: "La planilla que intentas ver no existe o ha sido eliminada",
+            variant: "destructive",
+          })
+          // Redirigir a la lista de planillas después de un breve retraso
+          setTimeout(() => {
+            router.push("/stock-matrix/list")
+          }, 1500)
+          return
+        }
+
         throw new Error("No se pudo cargar la planilla")
+      }
+
+      // Verificar si la planilla está completada
+      if (sheetData.status === "completado") {
+        toast({
+          title: "Planilla finalizada",
+          description: "Esta planilla ya ha sido finalizada y no puede ser editada",
+        })
       }
 
       // Actualizar el estado con los datos de la planilla
@@ -876,8 +937,8 @@ export default function StockMatrixPage() {
         manager_id: sheetData.manager_id,
         shift: sheetData.shift,
         status: sheetData.status,
-        created_by: sheetData.created_by,
-        updated_by: sheetData.updated_by,
+        created_by: sheetData.created_by || "Usuario Actual",
+        updated_by: sheetData.updated_by || "Usuario Actual",
       })
 
       // Cargar los detalles de la planilla
@@ -930,21 +991,91 @@ export default function StockMatrixPage() {
         description: error.message || "No se pudo cargar la planilla",
         variant: "destructive",
       })
+
+      // En caso de error, redirigir a la lista de planillas
+      setTimeout(() => {
+        router.push("/stock-matrix/list")
+      }, 1500)
     } finally {
       setIsLoading(false)
     }
   }
 
+  const handleLogin = () => {
+    router.push("/login")
+  }
+
+  // Si hay un error de autenticación, mostrar mensaje de error
+  if (authError) {
+    return (
+      <DashboardLayout>
+        <div className="container mx-auto py-6">
+          <Card className="border-red-300">
+            <CardHeader>
+              <CardTitle className="text-red-600">Error de autenticación</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center justify-center py-10 space-y-6">
+              <p>{authError}</p>
+              <Button onClick={handleLogin}>Iniciar sesión</Button>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  // Si está verificando autenticación, mostrar pantalla de carga
+  if (authChecking) {
+    return (
+      <DashboardLayout>
+        <div className="container mx-auto py-6">
+          <Card>
+            <CardContent className="flex items-center justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin mr-2" />
+              <p>Verificando sesión...</p>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  // Si hay un error crítico, mostrar mensaje de error
+  if (error) {
+    return (
+      <DashboardLayout>
+        <div className="container mx-auto py-6">
+          <Card className="border-red-300">
+            <CardHeader>
+              <CardTitle className="text-red-600">Error</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p>{error}</p>
+              <div className="mt-4">
+                <Button onClick={() => router.push("/stock-check")}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Volver
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  // Contenido principal
   return (
     <DashboardLayout>
       <div className="container mx-auto py-6">
+        {/* Contenido principal */}
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-3xl font-bold">Planilla Stock Matriz</h1>
             <p className="text-muted-foreground">Formato tipo planilla para control de stock</p>
           </div>
           <div className="flex gap-2 items-center">
-            {/* Selector de rol para facilitar pruebas */}
+            {/* Selector de rol */}
             <div className="flex items-center mr-4">
               <Label htmlFor="role-selector" className="mr-2">
                 Rol:
@@ -959,7 +1090,7 @@ export default function StockMatrixPage() {
                 </SelectContent>
               </Select>
             </div>
-            <Button variant="outline" onClick={handleViewSheetList}>
+            <Button variant="outline" onClick={() => router.push("/stock-matrix/list")}>
               <List className="mr-2 h-4 w-4" />
               Ver Planillas
             </Button>
@@ -1400,17 +1531,10 @@ export default function StockMatrixPage() {
   )
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+export default function StockMatrixPage() {
+  return (
+    <ProtectedRoute requiredRole="admin">
+      <StockMatrixPageContent />
+    </ProtectedRoute>
+  )
+}
