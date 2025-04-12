@@ -30,7 +30,7 @@ type Location = {
 }
 
 type Manager = {
-  id: string // Cambiado a string para manejar UUIDs
+  id: string // UUID del encargado
   name: string
   local: string
 }
@@ -47,7 +47,7 @@ type StockSheetData = {
   id?: number
   date: string
   location_id: number
-  manager_id: string // Cambiado a string para manejar UUIDs
+  manager_id: string // UUID del encargado
   shift: "mañana" | "tarde"
   status: "borrador" | "parcial" | "completado"
   created_by: string
@@ -110,7 +110,7 @@ export default function StockMatrixPage() {
   const [sheetData, setSheetData] = useState<StockSheetData>({
     date: format(new Date(), "yyyy-MM-dd"),
     location_id: 0,
-    manager_id: "", // Cambiado a string vacío
+    manager_id: "", // UUID del encargado
     shift: "mañana",
     status: "borrador",
     created_by: "Usuario Actual",
@@ -509,7 +509,7 @@ export default function StockMatrixPage() {
           .update({
             date: sheetData.date,
             location_id: sheetData.location_id,
-            manager_id: sheetData.manager_id,
+            manager_id: sheetData.manager_id, // Usar directamente el UUID
             shift: sheetData.shift,
             status: "parcial",
             updated_by: sheetData.updated_by,
@@ -527,7 +527,7 @@ export default function StockMatrixPage() {
           .insert({
             date: sheetData.date,
             location_id: sheetData.location_id,
-            manager_id: sheetData.manager_id,
+            manager_id: sheetData.manager_id, // Usar directamente el UUID
             shift: sheetData.shift,
             status: "parcial",
             created_by: sheetData.created_by,
@@ -672,7 +672,7 @@ export default function StockMatrixPage() {
           .update({
             date: sheetData.date,
             location_id: sheetData.location_id,
-            manager_id: sheetData.manager_id,
+            manager_id: sheetData.manager_id, // Usar directamente el UUID
             shift: sheetData.shift,
             status: "completado",
             updated_by: sheetData.updated_by,
@@ -690,7 +690,7 @@ export default function StockMatrixPage() {
           .insert({
             date: sheetData.date,
             location_id: sheetData.location_id,
-            manager_id: sheetData.manager_id,
+            manager_id: sheetData.manager_id, // Usar directamente el UUID
             shift: sheetData.shift,
             status: "completado",
             created_by: sheetData.created_by,
@@ -1307,6 +1307,8 @@ export default function StockMatrixPage() {
     </DashboardLayout>
   )
 }
+
+
 
 
 
