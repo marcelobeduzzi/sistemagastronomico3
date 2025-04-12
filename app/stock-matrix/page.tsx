@@ -259,6 +259,13 @@ export default function StockMatrixPage() {
     }
 
     fetchData()
+
+    // Verificar si hay un ID en la URL para cargar una planilla existente
+    const params = new URLSearchParams(window.location.search)
+    const sheetId = params.get("id")
+    if (sheetId) {
+      loadExistingSheet(Number.parseInt(sheetId))
+    }
   }, [])
 
   // Filtrar encargados cuando cambia el local seleccionado
@@ -843,6 +850,91 @@ export default function StockMatrixPage() {
     )
   }
 
+  // Función para cargar una planilla existente
+  const loadExistingSheet = async (sheetId: number) => {
+    try {
+      setIsLoading(true)
+      const supabase = createClient()
+
+      // Cargar datos de la planilla
+      const { data: sheetData, error: sheetError } = await supabase
+        .from("stock_matrix_sheets")
+        .select("*")
+        .eq("id", sheetId)
+        .single()
+
+      if (sheetError) {
+        console.error("Error al cargar la planilla:", sheetError)
+        throw new Error("No se pudo cargar la planilla")
+      }
+
+      // Actualizar el estado con los datos de la planilla
+      setSheetData({
+        id: sheetData.id,
+        date: sheetData.date,
+        location_id: sheetData.location_id,
+        manager_id: sheetData.manager_id,
+        shift: sheetData.shift,
+        status: sheetData.status,
+        created_by: sheetData.created_by,
+        updated_by: sheetData.updated_by,
+      })
+
+      // Cargar los detalles de la planilla
+      const { data: detailsData, error: detailsError } = await supabase
+        .from("stock_matrix_details")
+        .select("*")
+        .eq("stock_sheet_id", sheetId)
+
+      if (detailsError) {
+        console.error("Error al cargar los detalles:", detailsError)
+        throw new Error("No se pudieron cargar los detalles de la planilla")
+      }
+
+      // Actualizar el estado de los productos con los datos cargados
+      if (detailsData && detailsData.length > 0) {
+        setStockData((prev) => {
+          return prev.map((product) => {
+            // Buscar si existe un detalle para este producto
+            const detail = detailsData.find((d) => d.product_id === product.product_id)
+            if (detail) {
+              return {
+                ...product,
+                id: detail.id,
+                stock_sheet_id: detail.stock_sheet_id,
+                opening_quantity: detail.opening_quantity,
+                opening_locked: detail.opening_locked,
+                incoming_quantity: detail.incoming_quantity,
+                incoming_locked: detail.incoming_locked,
+                closing_quantity: detail.closing_quantity,
+                closing_locked: detail.closing_locked,
+                units_sold: detail.units_sold,
+                discarded_quantity: detail.discarded_quantity,
+                internal_consumption: detail.internal_consumption,
+                difference: detail.difference,
+              }
+            }
+            return product
+          })
+        })
+      }
+
+      toast({
+        title: "Planilla cargada",
+        description: "Los datos de la planilla se han cargado correctamente",
+      })
+    } catch (error: any) {
+      console.error("Error loading sheet:", error.message)
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo cargar la planilla",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
     <DashboardLayout>
       <div className="container mx-auto py-6">
@@ -1307,6 +1399,7 @@ export default function StockMatrixPage() {
     </DashboardLayout>
   )
 }
+
 
 
 

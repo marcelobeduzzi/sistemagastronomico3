@@ -65,16 +65,14 @@ export default function StockMatrixListPage() {
         const { data: sheetsData, error: sheetsError } = await supabase
           .from("stock_matrix_sheets")
           .select(`
-            id,
-            date,
-            location_id,
-            locations(name),
-            manager_id,
-            managers(name),
-            shift,
-            status,
-            created_at
-          `)
+    id,
+    date,
+    location_id,
+    manager_id,
+    shift,
+    status,
+    created_at
+  `)
           .order("date", { ascending: false })
 
         if (sheetsError) {
@@ -88,17 +86,22 @@ export default function StockMatrixListPage() {
           setFilteredSheets([])
         } else {
           // Transformar los datos para que tengan el formato correcto
-          const formattedSheets: StockSheet[] = (sheetsData || []).map((sheet) => ({
-            id: sheet.id,
-            date: sheet.date,
-            location_id: sheet.location_id,
-            location_name: sheet.locations?.name || "Desconocido",
-            manager_id: sheet.manager_id,
-            manager_name: sheet.managers?.name || "Desconocido",
-            shift: sheet.shift,
-            status: sheet.status,
-            created_at: sheet.created_at,
-          }))
+          const formattedSheets: StockSheet[] = (sheetsData || []).map((sheet) => {
+            // Buscar el nombre del local basado en el ID
+            const location = locations.find((loc) => loc.id === sheet.location_id)
+
+            return {
+              id: sheet.id,
+              date: sheet.date,
+              location_id: sheet.location_id,
+              location_name: location?.name || "Desconocido",
+              manager_id: sheet.manager_id,
+              manager_name: "Encargado", // Valor por defecto, luego podemos mejorarlo
+              shift: sheet.shift,
+              status: sheet.status,
+              created_at: sheet.created_at,
+            }
+          })
 
           setStockSheets(formattedSheets)
           setFilteredSheets(formattedSheets)
@@ -312,3 +315,4 @@ export default function StockMatrixListPage() {
     </DashboardLayout>
   )
 }
+
