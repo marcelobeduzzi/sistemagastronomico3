@@ -238,6 +238,11 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         href: "/pedidos-brozziano",
         icon: ShoppingCart,
       },
+	   {
+        title: "Productividad Empleados",
+        href: "/productividad",
+        icon: PieChart,
+      },
       {
         title: "Facturación",
         href: "/facturacion",
