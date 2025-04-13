@@ -90,7 +90,7 @@ const FIXED_LOCATIONS: Location[] = [
   { id: 6, name: "BR Aguero" },
 ]
 
-function StockMatrixPageContent() {
+export default function StockMatrixPageContent() {
   const router = useRouter()
   const [userRole, setUserRole] = useState<"encargado" | "administrador">("encargado")
   const [isLoading, setIsLoading] = useState(true)
@@ -1529,4 +1529,3 @@ function StockMatrixPageContent() {
   )
 }
 
-export default StockMatrixPageContent
