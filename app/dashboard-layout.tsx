@@ -39,6 +39,9 @@ import { Header } from "@/components/header"
 // Import the loading spinner
 import { LoadingSpinner } from "@/components/loading-spinner"
 
+// Importa el componente SessionRefreshHandler
+import { SessionRefreshHandler } from "@/components/session-refresh-handler"
+
 interface NavItem {
   title: string
   href: string
@@ -173,12 +176,12 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         href: "/asistencias",
         icon: Calendar,
       },
-	  {
+      {
         title: "Control de Caja",
         href: "/caja",
         icon: CreditCard,
       },
-	  {
+      {
         title: "Planilla de Stock",
         href: "/stock-check",
         icon: Package,
@@ -191,6 +194,11 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
       {
         title: "Control de Stock Prueba",
         href: "/stock",
+        icon: Package,
+      },
+	   {
+        title: "Planilla Stock Matrix",
+        href: "/stock-matrix",
         icon: Package,
       },
       {
@@ -358,80 +366,88 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
 
   // Update the return statement to handle loading and errors
   return (
-    <div className="flex min-h-screen bg-background">
-      {/* Sidebar para desktop */}
-      <aside className="hidden w-64 flex-col border-r bg-card px-4 py-6 md:flex">{sidebarContent}</aside>
+    <div className="flex min-h-screen flex-col">
+      {/* Agrega el SessionRefreshHandler */}
+      <SessionRefreshHandler />
 
-      {/* Sidebar móvil */}
-      <Sheet>
-        <SheetTrigger asChild>
-          <Button variant="outline" size="icon" className="md:hidden absolute top-4 left-4 z-10">
-            <Menu className="h-5 w-5" />
-            <span className="sr-only">Abrir menú</span>
-          </Button>
-        </SheetTrigger>
-        <SheetContent side="left" className="w-64 p-0">
-          <div className="flex flex-col h-full">
-            <div className="p-4 border-b">
-              <h1 className="text-xl font-bold">Quadrifoglio</h1>
-              <p className="text-sm text-muted-foreground">Sistema de Gestión</p>
-            </div>
-            <nav className="flex-1 overflow-auto p-4 space-y-1">
-              {navItems.map((item) => (
-                <NavLink
-                  key={item.title}
-                  item={item}
-                  pathname={pathname}
-                  toggleSubmenu={toggleSubmenu}
-                  openSubmenu={openSubmenu}
-                />
-              ))}
-            </nav>
-            <div className="p-4 border-t">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
-                    <span className="text-sm font-medium">{user?.name ? user.name.charAt(0) : "U"}</span>
+      <div className="flex min-h-screen bg-background">
+        {/* Sidebar para desktop */}
+        <aside className="hidden w-64 flex-col border-r bg-card px-4 py-6 md:flex">{sidebarContent}</aside>
+
+        {/* Sidebar móvil */}
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button variant="outline" size="icon" className="md:hidden absolute top-4 left-4 z-10">
+              <Menu className="h-5 w-5" />
+              <span className="sr-only">Abrir menú</span>
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="w-64 p-0">
+            <div className="flex flex-col h-full">
+              <div className="p-4 border-b">
+                <h1 className="text-xl font-bold">Quadrifoglio</h1>
+                <p className="text-sm text-muted-foreground">Sistema de Gestión</p>
+              </div>
+              <nav className="flex-1 overflow-auto p-4 space-y-1">
+                {navItems.map((item) => (
+                  <NavLink
+                    key={item.title}
+                    item={item}
+                    pathname={pathname}
+                    toggleSubmenu={toggleSubmenu}
+                    openSubmenu={openSubmenu}
+                  />
+                ))}
+              </nav>
+              <div className="p-4 border-t">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                      <span className="text-sm font-medium">{user?.name ? user.name.charAt(0) : "U"}</span>
+                    </div>
+                    <div className="ml-2">
+                      <p className="text-sm font-medium">{user?.name || "Usuario"}</p>
+                      <p className="text-xs text-muted-foreground">{user?.email || "usuario@quadrifoglio.com"}</p>
+                    </div>
                   </div>
-                  <div className="ml-2">
-                    <p className="text-sm font-medium">{user?.name || "Usuario"}</p>
-                    <p className="text-xs text-muted-foreground">{user?.email || "usuario@quadrifoglio.com"}</p>
-                  </div>
+                  <Button variant="ghost" size="icon" onClick={handleLogout}>
+                    <LogOut className="h-4 w-4" />
+                  </Button>
                 </div>
-                <Button variant="ghost" size="icon" onClick={handleLogout}>
-                  <LogOut className="h-4 w-4" />
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        {/* Main content */}
+        <main className="flex-1 overflow-auto">
+          <Header />
+
+          {error ? (
+            <div className="flex-1 p-8 flex items-center justify-center">
+              <div className="bg-destructive/10 p-4 rounded-md text-destructive max-w-md">
+                <h3 className="font-semibold mb-2">Error</h3>
+                <p>{error}</p>
+                <Button variant="outline" className="mt-4" onClick={() => setError(null)}>
+                  Cerrar
                 </Button>
               </div>
             </div>
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      {/* Main content */}
-      <main className="flex-1 overflow-auto">
-        <Header />
-
-        {error ? (
-          <div className="flex-1 p-8 flex items-center justify-center">
-            <div className="bg-destructive/10 p-4 rounded-md text-destructive max-w-md">
-              <h3 className="font-semibold mb-2">Error</h3>
-              <p>{error}</p>
-              <Button variant="outline" className="mt-4" onClick={() => setError(null)}>
-                Cerrar
-              </Button>
+          ) : isLoading ? (
+            <div className="flex-1 p-8 flex items-center justify-center">
+              <LoadingSpinner />
             </div>
-          </div>
-        ) : isLoading ? (
-          <div className="flex-1 p-8 flex items-center justify-center">
-            <LoadingSpinner />
-          </div>
-        ) : (
-          children
-        )}
-      </main>
+          ) : (
+            children
+          )}
+        </main>
+      </div>
     </div>
   )
 }
+
+export default DashboardLayout
+
 
 
 

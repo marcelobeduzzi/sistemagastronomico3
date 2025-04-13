@@ -1,8 +1,8 @@
 "use client"
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
-import { useRouter } from "next/navigation"
-import { supabase } from "./supabase-client"
+import { useRouter, usePathname } from "next/navigation"
+import { supabase } from "./supabase/client"
 import { supervisorService, type SupervisorWithPin } from "./supervisor-service"
 import type { User } from "@/types/auth"
 
@@ -17,19 +17,47 @@ type AuthContextType = {
   validateSupervisorPin: (pin: string) => Promise<boolean>
   supervisors: SupervisorWithPin[]
   updateSupervisorPin: (userId: string, newPin: string) => Promise<boolean>
+  refreshSession: () => Promise<boolean>
 }
 
 // Crear el contexto
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+// Lista de rutas que no requieren autenticación
+const publicRoutes = ["/login", "/forgot-password", "/reset-password", "/secure-redirect"]
+
 // Proveedor de autenticación
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
-  const [isLoading, setIsLoading] = useState(true) // Cambiado a true para mostrar carga inicial
+  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [supervisors, setSupervisors] = useState<SupervisorWithPin[]>([])
   const [supervisorsLoaded, setSupervisorsLoaded] = useState(false)
+  const [authChecked, setAuthChecked] = useState(false)
   const router = useRouter()
+  const pathname = usePathname()
+
+  // Función para refrescar la sesión
+  const refreshSession = async () => {
+    try {
+      const { data, error } = await supabase.auth.refreshSession()
+      if (error) {
+        console.error("Error refreshing session:", error)
+        return false
+      }
+
+      if (data.session) {
+        console.log("Session refreshed successfully")
+        return true
+      } else {
+        console.log("No session to refresh")
+        return false
+      }
+    } catch (err) {
+      console.error("Session refresh error:", err)
+      return false
+    }
+  }
 
   // Cargar supervisores desde la base de datos
   useEffect(() => {
@@ -79,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null)
       } finally {
         setIsLoading(false)
+        setAuthChecked(true)
       }
     }
 
@@ -109,6 +138,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe()
     }
   }, [])
+
+  // Efecto para manejar la redirección basada en la autenticación
+  useEffect(() => {
+    // Solo redirigir si ya se verificó la autenticación y no estamos cargando
+    if (!isLoading && authChecked) {
+      const isPublicRoute = publicRoutes.some((route) => pathname?.startsWith(route))
+
+      if (!user && !isPublicRoute) {
+        console.log("Redirigiendo a login desde:", pathname)
+        router.push("/login")
+      }
+    }
+  }, [user, isLoading, router, authChecked, pathname])
+
+  // Efecto para refrescar periódicamente la sesión
+  useEffect(() => {
+    if (user) {
+      // Refrescar la sesión cada 10 minutos para mantenerla activa
+      const refreshInterval = setInterval(
+        () => {
+          refreshSession().catch(console.error)
+        },
+        10 * 60 * 1000,
+      ) // 10 minutos
+
+      return () => clearInterval(refreshInterval)
+    }
+  }, [user])
 
   // Función de login simplificada
   const login = async (email: string, password: string) => {
@@ -248,6 +305,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         validateSupervisorPin,
         supervisors,
         updateSupervisorPin,
+        refreshSession,
       }}
     >
       {children}
@@ -266,6 +324,7 @@ export function useAuth() {
 
 // Importar mockUsers para poder agregar nuevos supervisores
 import { mockUsers } from "@/lib/mock-data"
+
 
 
 
