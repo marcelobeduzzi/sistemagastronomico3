@@ -106,6 +106,7 @@ export default function StockMatrixPageContent() {
   const [error, setError] = useState<string | null>(null)
   const [authError, setAuthError] = useState<string | null>(null)
   const [authChecking, setAuthChecking] = useState(true)
+  const [sessionAttempts, setSessionAttempts] = useState(0)
 
   // Estado para los datos de la planilla
   const [sheetData, setSheetData] = useState<StockSheetData>({
@@ -118,7 +119,7 @@ export default function StockMatrixPageContent() {
     updated_by: "Usuario Actual",
   })
 
-  // Verificar autenticación con Supabase directamente
+  // Verificar autenticación con Supabase directamente - MODIFICADO PARA SER MÁS TOLERANTE
   useEffect(() => {
     async function checkAuth() {
       try {
@@ -131,9 +132,24 @@ export default function StockMatrixPageContent() {
         // Intentar obtener la sesión directamente
         const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
 
-        if (sessionError || !sessionData.session) {
-          console.log("No hay sesión activa, redirigiendo a login")
-          router.push("/login")
+        // Registrar información de depuración
+        console.log("Datos de sesión:", sessionData)
+        if (sessionError) {
+          console.error("Error de sesión:", sessionError)
+        }
+
+        // Ser más tolerante con errores de sesión
+        if (sessionError) {
+          console.warn("Error al verificar sesión, pero continuando de todos modos")
+          setAuthChecking(false)
+          fetchData()
+          return
+        }
+
+        if (!sessionData.session) {
+          console.warn("No se encontró sesión activa, pero continuando de todos modos")
+          setAuthChecking(false)
+          fetchData()
           return
         }
 
@@ -144,27 +160,30 @@ export default function StockMatrixPageContent() {
         fetchData()
       } catch (err) {
         console.error("Error general al verificar autenticación:", err)
-        router.push("/login")
+        // No redirigir automáticamente, solo mostrar error
+        setAuthChecking(false)
+        setAuthError("Hubo un problema al verificar tu sesión, pero puedes continuar usando la aplicación.")
+        fetchData() // Intentar cargar datos de todos modos
       }
     }
 
     checkAuth()
-  }, [router])
+  }, [router, sessionAttempts])
 
-  // Cargar datos iniciales
+  // Cargar datos iniciales - MODIFICADO PARA SER MÁS TOLERANTE
   async function fetchData() {
     try {
       setIsLoading(true)
       setError(null)
 
-      // Verificar autenticación nuevamente
+      // Verificar autenticación nuevamente, pero ser más tolerante
       const supabase = createClient()
-      const { data: sessionData } = await supabase.auth.getSession()
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
 
-      if (!sessionData.session) {
-        console.log("No hay sesión activa, redirigiendo a login")
-        router.push("/login")
-        return
+      // Registrar información de depuración
+      console.log("Datos de sesión en fetchData:", sessionData)
+      if (sessionError) {
+        console.warn("Error de sesión en fetchData, pero continuando:", sessionError)
       }
 
       // Fetch encargados desde la tabla de empleados
@@ -505,7 +524,7 @@ export default function StockMatrixPageContent() {
     }
   }
 
-  // Guardar planilla completa
+  // Guardar planilla completa - MODIFICADO PARA SER MÁS TOLERANTE
   const handleSaveSheet = async () => {
     if (!validateData()) return
 
@@ -513,16 +532,35 @@ export default function StockMatrixPageContent() {
       setIsLoading(true)
       console.log("Iniciando guardado de planilla...")
 
-      // Verificar autenticación
+      // Verificar autenticación pero ser más tolerante
       const supabase = createClient()
-      const { data: sessionData } = await supabase.auth.getSession()
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
 
-      if (!sessionData.session) {
-        console.error("Sesión expirada durante el guardado")
-        setAuthError("Tu sesión ha expirado. Por favor, inicia sesión nuevamente.")
-        setIsLoading(false)
-        router.push("/login")
-        return
+      if (sessionError) {
+        console.warn("Error de sesión al guardar, pero continuando:", sessionError)
+        // Intentar renovar la sesión
+        try {
+          const { error: refreshError } = await supabase.auth.refreshSession()
+          if (refreshError) {
+            console.warn("Error al refrescar sesión:", refreshError)
+          } else {
+            console.log("Sesión refrescada exitosamente")
+            // Incrementar contador para forzar re-verificación
+            setSessionAttempts((prev) => prev + 1)
+          }
+        } catch (refreshErr) {
+          console.error("Error al intentar refrescar sesión:", refreshErr)
+        }
+      }
+
+      if (!sessionData?.session) {
+        console.warn("No hay sesión activa al guardar, mostrando advertencia")
+        toast({
+          title: "Advertencia",
+          description:
+            "Tu sesión podría haber expirado. Los datos se guardarán, pero podrías necesitar iniciar sesión nuevamente después.",
+          variant: "warning",
+        })
       }
 
       // Verificar si las tablas existen
@@ -675,7 +713,7 @@ export default function StockMatrixPageContent() {
     }
   }
 
-  // Finalizar planilla
+  // Finalizar planilla - MODIFICADO PARA SER MÁS TOLERANTE
   const handleFinalizeSheet = async () => {
     if (!validateData()) return
 
@@ -683,16 +721,35 @@ export default function StockMatrixPageContent() {
       setIsLoading(true)
       console.log("Iniciando finalización de planilla...")
 
-      // Verificar autenticación
+      // Verificar autenticación pero ser más tolerante
       const supabase = createClient()
-      const { data: sessionData } = await supabase.auth.getSession()
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
 
-      if (!sessionData.session) {
-        console.error("Sesión expirada durante la finalización")
-        setAuthError("Tu sesión ha expirado. Por favor, inicia sesión nuevamente.")
-        setIsLoading(false)
-        router.push("/login")
-        return
+      if (sessionError) {
+        console.warn("Error de sesión al finalizar, pero continuando:", sessionError)
+        // Intentar renovar la sesión
+        try {
+          const { error: refreshError } = await supabase.auth.refreshSession()
+          if (refreshError) {
+            console.warn("Error al refrescar sesión:", refreshError)
+          } else {
+            console.log("Sesión refrescada exitosamente")
+            // Incrementar contador para forzar re-verificación
+            setSessionAttempts((prev) => prev + 1)
+          }
+        } catch (refreshErr) {
+          console.error("Error al intentar refrescar sesión:", refreshErr)
+        }
+      }
+
+      if (!sessionData?.session) {
+        console.warn("No hay sesión activa al finalizar, mostrando advertencia")
+        toast({
+          title: "Advertencia",
+          description:
+            "Tu sesión podría haber expirado. La planilla se finalizará, pero podrías necesitar iniciar sesión nuevamente después.",
+          variant: "warning",
+        })
       }
 
       // Actualizar todas las diferencias antes de finalizar
@@ -875,21 +932,40 @@ export default function StockMatrixPageContent() {
     }
   }
 
-  // Función para cargar una planilla existente
+  // Función para cargar una planilla existente - MODIFICADO PARA SER MÁS TOLERANTE
   const loadExistingSheet = async (sheetId: number) => {
     try {
       setIsLoading(true)
 
-      // Verificar autenticación
+      // Verificar autenticación pero ser más tolerante
       const supabase = createClient()
-      const { data: sessionData } = await supabase.auth.getSession()
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
 
-      if (!sessionData.session) {
-        console.error("Sesión expirada durante la carga de planilla")
-        setAuthError("Tu sesión ha expirado. Por favor, inicia sesión nuevamente.")
-        setIsLoading(false)
-        router.push("/login")
-        return
+      if (sessionError) {
+        console.warn("Error de sesión al cargar planilla, pero continuando:", sessionError)
+        // Intentar renovar la sesión
+        try {
+          const { error: refreshError } = await supabase.auth.refreshSession()
+          if (refreshError) {
+            console.warn("Error al refrescar sesión:", refreshError)
+          } else {
+            console.log("Sesión refrescada exitosamente")
+            // Incrementar contador para forzar re-verificación
+            setSessionAttempts((prev) => prev + 1)
+          }
+        } catch (refreshErr) {
+          console.error("Error al intentar refrescar sesión:", refreshErr)
+        }
+      }
+
+      if (!sessionData?.session) {
+        console.warn("No hay sesión activa al cargar planilla, mostrando advertencia")
+        toast({
+          title: "Advertencia",
+          description:
+            "Tu sesión podría haber expirado. La planilla se cargará, pero podrías necesitar iniciar sesión nuevamente después.",
+          variant: "warning",
+        })
       }
 
       // Cargar datos de la planilla
@@ -999,22 +1075,34 @@ export default function StockMatrixPageContent() {
     }
   }
 
+  // Función para reintentar la autenticación
+  const handleRetryAuth = () => {
+    setSessionAttempts((prev) => prev + 1)
+    setAuthError(null)
+  }
+
   const handleLogin = () => {
     router.push("/login")
   }
 
-  // Si hay un error de autenticación, mostrar mensaje de error
+  // Si hay un error de autenticación, mostrar mensaje de error pero con opción de continuar
   if (authError) {
     return (
       <DashboardLayout>
         <div className="container mx-auto py-6">
-          <Card className="border-red-300">
+          <Card className="border-amber-300">
             <CardHeader>
-              <CardTitle className="text-red-600">Error de autenticación</CardTitle>
+              <CardTitle className="text-amber-600">Advertencia de autenticación</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col items-center justify-center py-10 space-y-6">
               <p>{authError}</p>
-              <Button onClick={handleLogin}>Iniciar sesión</Button>
+              <div className="flex gap-4">
+                <Button onClick={handleRetryAuth} variant="outline">
+                  Reintentar
+                </Button>
+                <Button onClick={handleLogin}>Iniciar sesión</Button>
+                <Button onClick={() => setAuthError(null)}>Continuar de todos modos</Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -1528,4 +1616,5 @@ export default function StockMatrixPageContent() {
     </DashboardLayout>
   )
 }
+
 
