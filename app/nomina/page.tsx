@@ -21,7 +21,6 @@ import {
   Calculator,
   Loader2,
   PlusCircle,
-  Settings,
 } from "lucide-react"
 import {
   Dialog,
@@ -578,11 +577,7 @@ export default function NominaPage() {
             </Button>
           )}
           {row.original.isPaid && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => router.push(`/nomina/liquidations/${row.original.id}`)}
-            >
+            <Button variant="outline" size="sm" onClick={() => router.push(`/nomina/liquidations/${row.original.id}`)}>
               <Eye className="mr-1 h-4 w-4" />
               Ver
             </Button>
@@ -621,7 +616,6 @@ export default function NominaPage() {
   }
 
   // Agregar estos estados para el diálogo de detalles de liquidación:
-
   const [selectedLiquidation, setSelectedLiquidation] = useState<Liquidation | null>(null)
   const [isLiquidationDetailsDialogOpen, setIsLiquidationDetailsDialogOpen] = useState(false)
 
@@ -768,7 +762,7 @@ export default function NominaPage() {
             </Button>
             <Button variant="outline" asChild onClick={preserveSession}>
               <Link href="/nomina/liquidations/migration">
-                <Settings className="mr-2 h-4 w-4" />
+                <PlusCircle className="mr-2 h-4 w-4" />
                 Herramientas
               </Link>
             </Button>
@@ -1362,5 +1356,6 @@ export default function NominaPage() {
           </DialogContent>
         </Dialog>
       </div>
-    </DashboardLayout>\
-
+    </DashboardLayout>
+  )
+}
