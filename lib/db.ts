@@ -895,23 +895,33 @@ class DatabaseService {
     try {
       let generated = 0
       let updated = 0
-      const skipped = 0
+      let skipped = 0
+
+      console.log("Iniciando generación de liquidaciones para", inactiveEmployees.length, "empleados inactivos")
 
       // Obtener liquidaciones existentes
       const { data: existingLiquidations, error: fetchError } = await this.supabase
         .from("liquidations")
         .select("id, employee_id")
 
-      if (fetchError) throw fetchError
+      if (fetchError) {
+        console.error("Error al obtener liquidaciones existentes:", fetchError)
+        throw fetchError
+      }
+
+      console.log("Liquidaciones existentes encontradas:", existingLiquidations?.length || 0)
 
       // Crear un mapa de IDs de empleados que ya tienen liquidación para facilitar la búsqueda
       const employeesWithLiquidation = new Map(existingLiquidations?.map((liq) => [liq.employee_id, liq.id]) || [])
 
       // Procesar cada empleado inactivo
       for (const employee of inactiveEmployees) {
+        console.log(`Procesando empleado ${employee.id}: ${employee.firstName} ${employee.lastName}`)
+
         // Verificar que tenga fecha de egreso
         if (!employee.terminationDate) {
           console.log(`Empleado ${employee.id} no tiene fecha de egreso, omitiendo...`)
+          skipped++
           continue
         }
 
@@ -921,12 +931,16 @@ class DatabaseService {
         const diffTime = Math.abs(terminationDate.getTime() - hireDate.getTime())
         const workedDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
 
+        console.log(`Empleado ${employee.id} trabajó ${workedDays} días`)
+
         // Calcular meses trabajados
         const workedMonths = Math.floor(workedDays / 30)
 
         // Calcular días a pagar en el último mes
         // Si trabajó más de 30 días, solo se pagan los días adicionales al último mes completo
         const daysToPayInLastMonth = workedDays % 30
+
+        console.log(`Días a pagar en el último mes: ${daysToPayInLastMonth}`)
 
         // Obtener último salario
         const { data: latestPayroll, error: payrollError } = await this.supabase
@@ -939,23 +953,27 @@ class DatabaseService {
 
         if (payrollError) {
           console.error(`Error al obtener salario para empleado ${employee.id}:`, payrollError)
+          skipped++
           continue
         }
 
         // Usar salario base de la última nómina o un valor predeterminado
         const baseSalary = latestPayroll && latestPayroll.length > 0 ? latestPayroll[0].base_salary : 0
+        console.log(`Salario base: ${baseSalary}`)
 
         // Valor diario del salario
         const dailyRate = baseSalary / 30
 
         // Calcular monto a pagar por días trabajados en el último mes
         const lastMonthSalary = dailyRate * daysToPayInLastMonth
+        console.log(`Monto a pagar por último mes: ${lastMonthSalary}`)
 
-        // Calcular vacaciones proporcionales (siempre, pero solo se pagan si trabajó más de 20 días)
+        // Calcular vacaciones proporcionales (siempre calculadas, pero solo se pagan si trabajó más de 20 días)
         // 1 día por mes trabajado
-        const proportionalVacation = workedDays >= 20 ? (workedMonths % 12) * (baseSalary / 30) : 0
+        const proportionalVacation = (workedMonths % 12) * (baseSalary / 30)
+        console.log(`Vacaciones proporcionales: ${proportionalVacation}`)
 
-        // Calcular aguinaldo proporcional (siempre, pero solo se paga si trabajó más de 20 días)
+        // Calcular aguinaldo proporcional (siempre calculado, pero solo se paga si trabajó más de 20 días)
         // 1/12 del salario por mes trabajado en el año actual
         const currentYear = terminationDate.getFullYear()
         const startOfYear = new Date(currentYear, 0, 1)
@@ -964,15 +982,27 @@ class DatabaseService {
             ? workedMonths
             : Math.floor((terminationDate.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24 * 30))
 
-        const proportionalBonus = workedDays >= 20 ? (baseSalary / 12) * (monthsInCurrentYear % 12) : 0
+        const proportionalBonus = (baseSalary / 12) * (monthsInCurrentYear % 12)
+        console.log(`Aguinaldo proporcional: ${proportionalBonus}`)
+
+        // Determinar si se incluyen vacaciones y aguinaldo por defecto (si trabajó más de 20 días)
+        const includeByDefault = workedDays >= 20
+        console.log(`Incluir por defecto (>= 20 días): ${includeByDefault}`)
 
         // Calcular indemnización (1 mes de salario por año trabajado, si corresponde)
         // Solo si trabajó más de 3 meses y no renunció voluntariamente
         const yearsWorked = Math.floor(workedMonths / 12)
         const compensationAmount = yearsWorked > 0 ? baseSalary * yearsWorked : 0
+        console.log(`Indemnización: ${compensationAmount}`)
 
-        // Calcular monto total
-        const totalAmount = lastMonthSalary + proportionalVacation + proportionalBonus + compensationAmount
+        // Calcular monto total (incluyendo o no vacaciones y aguinaldo según corresponda)
+        const totalAmount =
+          lastMonthSalary +
+          (includeByDefault ? proportionalVacation : 0) +
+          (includeByDefault ? proportionalBonus : 0) +
+          compensationAmount
+
+        console.log(`Monto total: ${totalAmount}`)
 
         // Datos de la liquidación
         const liquidationData = {
@@ -988,16 +1018,54 @@ class DatabaseService {
           compensation_amount: compensationAmount,
           total_amount: totalAmount,
           is_paid: false,
-          include_vacation: workedDays >= 20, // Flag para decidir si incluir vacaciones
-          include_bonus: workedDays >= 20, // Flag para decidir si incluir aguinaldo
+          include_vacation: includeByDefault,
+          include_bonus: includeByDefault,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }
 
         // Verificar si ya existe una liquidación para este empleado
         if (employeesWithLiquidation.has(employee.id)) {
-          // Actualizar liquidación existente
           const liquidationId = employeesWithLiquidation.get(employee.id)
+          console.log(`Actualizando liquidación existente con ID ${liquidationId} para empleado ${employee.id}`)
+
+          // Obtener la liquidación existente para preservar algunos campos
+          const { data: existingLiquidation, error: getLiquidationError } = await this.supabase
+            .from("liquidations")
+            .select("*")
+            .eq("id", liquidationId)
+            .single()
+
+          if (getLiquidationError) {
+            console.error(`Error al obtener liquidación existente para empleado ${employee.id}:`, getLiquidationError)
+            skipped++
+            continue
+          }
+
+          // Preservar los valores de include_vacation e include_bonus si ya existen
+          if (existingLiquidation) {
+            liquidationData.include_vacation =
+              existingLiquidation.include_vacation !== undefined
+                ? existingLiquidation.include_vacation
+                : includeByDefault
+
+            liquidationData.include_bonus =
+              existingLiquidation.include_bonus !== undefined ? existingLiquidation.include_bonus : includeByDefault
+
+            // Recalcular el monto total basado en las inclusiones existentes
+            liquidationData.total_amount =
+              lastMonthSalary +
+              (liquidationData.include_vacation ? proportionalVacation : 0) +
+              (liquidationData.include_bonus ? proportionalBonus : 0) +
+              compensationAmount
+
+            console.log(
+              `Valores preservados: include_vacation=${liquidationData.include_vacation}, include_bonus=${liquidationData.include_bonus}`,
+            )
+            console.log(`Monto total recalculado: ${liquidationData.total_amount}`)
+          }
+
+          // Actualizar liquidación existente
           const { error: updateError } = await this.supabase
             .from("liquidations")
             .update(liquidationData)
@@ -1005,23 +1073,29 @@ class DatabaseService {
 
           if (updateError) {
             console.error(`Error al actualizar liquidación para empleado ${employee.id}:`, updateError)
+            skipped++
             continue
           }
 
           updated++
+          console.log(`Liquidación actualizada exitosamente para empleado ${employee.id}`)
         } else {
+          console.log(`Creando nueva liquidación para empleado ${employee.id}`)
           // Crear nueva liquidación
           const { error: insertError } = await this.supabase.from("liquidations").insert(liquidationData)
 
           if (insertError) {
             console.error(`Error al crear liquidación para empleado ${employee.id}:`, insertError)
+            skipped++
             continue
           }
 
           generated++
+          console.log(`Liquidación creada exitosamente para empleado ${employee.id}`)
         }
       }
 
+      console.log(`Proceso completado: ${generated} generadas, ${updated} actualizadas, ${skipped} omitidas`)
       return { generated, updated, skipped }
     } catch (error) {
       console.error("Error al generar liquidaciones:", error)
@@ -1029,204 +1103,81 @@ class DatabaseService {
     }
   }
 
-  // Método mejorado para generar nóminas que no depende del estado de pago de nóminas anteriores
-  async generatePayrolls(month: number, year: number) {
+  // Agregar esta nueva función después de generateLiquidations en la clase DatabaseService
+
+  /**
+   * Actualiza los días a pagar del último mes en las liquidaciones existentes
+   * @returns Resultado de la operación
+   */
+  async updateLiquidationDaysToPayInLastMonth() {
     try {
-      console.log(`Generando nóminas para ${month}/${year}`)
+      console.log("Iniciando actualización de días a pagar en liquidaciones...")
 
-      // 1. Obtener todos los empleados activos
-      const employees = await this.getEmployees()
-      const activeEmployees = employees.filter((emp) => emp.status === "active")
+      // Obtener todas las liquidaciones
+      const { data: liquidations, error: fetchError } = await this.supabase
+        .from("liquidations")
+        .select("id, employee_id, termination_date")
 
-      console.log(`Empleados activos encontrados: ${activeEmployees.length}`)
+      if (fetchError) throw fetchError
 
-      // Array para almacenar las nóminas generadas
-      const generatedPayrolls = []
-
-      // 2. Para cada empleado, generar una nómina
-      for (const employee of activeEmployees) {
-        // Verificar si ya existe una nómina para este empleado en este período
-        const { data: existingPayrolls, error: checkError } = await this.supabase
-          .from("payroll")
-          .select("*")
-          .eq("employee_id", employee.id)
-          .eq("month", month)
-          .eq("year", year)
-
-        if (checkError) {
-          console.error(
-            `Error al verificar nóminas existentes para ${employee.firstName} ${employee.lastName}:`,
-            checkError,
-          )
-          continue
-        }
-
-        if (existingPayrolls && existingPayrolls.length > 0) {
-          console.log(`Ya existe una nómina para ${employee.firstName} ${employee.lastName} en ${month}/${year}`)
-          continue // Saltar este empleado
-        }
-
-        // Calcular valores base
-        const baseSalary = employee.baseSalary || 0
-        const bankSalary = employee.bankSalary || 0
-
-        // CORRECCIÓN: El sueldo en mano es una parte del sueldo base, no una resta
-        // Si bankSalary > baseSalary, asumimos que el sueldo total es la suma de ambos
-        const totalSalaryBeforeAdjustments = bankSalary > baseSalary ? bankSalary + baseSalary : baseSalary
-        const handSalary = bankSalary > baseSalary ? baseSalary : baseSalary - bankSalary
-
-        console.log(`Calculando nómina para ${employee.firstName} ${employee.lastName}:`)
-        console.log(`- Sueldo base: ${baseSalary}`)
-        console.log(`- Sueldo banco: ${bankSalary}`)
-        console.log(`- Sueldo en mano original: ${handSalary}`)
-
-        // Calcular deducciones basadas en asistencias
-        let deductions = 0
-        let additions = 0
-
-        // Obtener asistencias del mes para calcular deducciones/adiciones
-        const startDate = new Date(year, month - 1, 1).toISOString().split("T")[0]
-        const endDate = new Date(year, month, 0).toISOString().split("T")[0]
-
-        const { data: attendances, error: attendanceError } = await this.supabase
-          .from("attendance")
-          .select("*")
-          .eq("employee_id", employee.id)
-          .gte("date", startDate)
-          .lte("date", endDate)
-
-        if (attendanceError) {
-          console.error(
-            `Error al obtener asistencias para ${employee.firstName} ${employee.lastName}:`,
-            attendanceError,
-          )
-        } else if (attendances && attendances.length > 0) {
-          console.log(`Encontradas ${attendances.length} asistencias para el período`)
-
-          // Calcular el valor del minuto trabajado (basado en 30 días de 8 horas)
-          const minuteValue = totalSalaryBeforeAdjustments / (30 * 8 * 60)
-          console.log(`Valor del minuto trabajado: ${minuteValue}`)
-
-          // Procesar asistencias para calcular deducciones/adiciones
-          for (const attendance of attendances) {
-            // Ausencias injustificadas: deducción
-            if (attendance.is_absent && !attendance.is_justified) {
-              const dailyRate = totalSalaryBeforeAdjustments / 30 // Valor diario aproximado
-              deductions += dailyRate
-              console.log(`- Deducción por ausencia injustificada: ${dailyRate}`)
-            }
-
-            // Minutos tarde: deducción proporcional
-            if (attendance.late_minutes > 0) {
-              const lateDeduction = attendance.late_minutes * minuteValue
-              deductions += lateDeduction
-              console.log(`- Deducción por ${attendance.late_minutes} minutos tarde: ${lateDeduction}`)
-            }
-
-            // Salida anticipada: deducción proporcional
-            if (attendance.early_departure_minutes > 0) {
-              const earlyDeduction = attendance.early_departure_minutes * minuteValue
-              deductions += earlyDeduction
-              console.log(
-                `- Deducción por ${attendance.early_departure_minutes} minutos de salida anticipada: ${earlyDeduction}`,
-              )
-            }
-
-            // Horas extra: adición
-            if (attendance.extra_minutes > 0) {
-              const extraAddition = attendance.extra_minutes * minuteValue * 1.5 // 50% más por hora extra
-              additions += extraAddition
-              console.log(`- Adición por ${attendance.extra_minutes} minutos extra: ${extraAddition}`)
-            }
-          }
-        } else {
-          console.log(`No se encontraron asistencias para el período`)
-        }
-
-        // Redondear valores a 2 decimales
-        deductions = Math.round(deductions * 100) / 100
-        additions = Math.round(additions * 100) / 100
-
-        console.log(`Total deducciones: ${deductions}`)
-        console.log(`Total adiciones: ${additions}`)
-
-        // Calcular valores finales
-        const finalHandSalary = handSalary - deductions + additions
-        const totalSalary = bankSalary + finalHandSalary
-
-        console.log(`Sueldo final en mano: ${finalHandSalary}`)
-        console.log(`Total a pagar: ${totalSalary}`)
-
-        // Crear la nómina con los campos que existen en la tabla
-        const payrollData: any = {
-          employee_id: employee.id,
-          month,
-          year,
-          base_salary: baseSalary,
-          bank_salary: bankSalary,
-          hand_salary: handSalary,
-          deductions,
-          additions,
-          final_hand_salary: finalHandSalary,
-          total_salary: totalSalary,
-          is_paid_bank: false, // Usar el nombre correcto
-          is_paid_hand: false, // Usar el nombre correcto
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }
-
-        // Insertar la nómina
-        const { data: payroll, error: payrollError } = await this.supabase
-          .from("payroll")
-          .insert([payrollData])
-          .select()
-          .single()
-
-        if (payrollError) {
-          console.error(`Error al crear nómina para ${employee.firstName} ${employee.lastName}:`, payrollError)
-          continue
-        }
-
-        console.log(`Nómina creada para ${employee.firstName} ${employee.lastName}`)
-
-        // Crear detalles de la nómina
-        if (deductions > 0) {
-          // Deducción por ausencias/tardanzas
-          const deductionData = {
-            payroll_id: payroll.id,
-            type: "deduction",
-            concept: "Ausencias y tardanzas",
-            amount: deductions,
-            date: new Date().toISOString().split("T")[0],
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          }
-
-          await this.supabase.from("payroll_details").insert([deductionData])
-        }
-
-        if (additions > 0) {
-          // Adición por horas extra
-          const additionData = {
-            payroll_id: payroll.id,
-            type: "addition",
-            concept: "Horas extra",
-            amount: additions,
-            date: new Date().toISOString().split("T")[0],
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          }
-
-          await this.supabase.from("payroll_details").insert([additionData])
-        }
-
-        generatedPayrolls.push(payroll)
+      if (!liquidations || liquidations.length === 0) {
+        console.log("No hay liquidaciones para actualizar")
+        return { updated: 0, failed: 0, skipped: 0 }
       }
 
-      console.log(`Total de nóminas generadas: ${generatedPayrolls.length}`)
-      return generatedPayrolls
+      let updated = 0
+      let failed = 0
+      const skipped = 0
+
+      // Procesar cada liquidación
+      for (const liquidation of liquidations) {
+        try {
+          // Obtener información del empleado
+          const { data: employee, error: employeeError } = await this.supabase
+            .from("employees")
+            .select("hire_date")
+            .eq("id", liquidation.employee_id)
+            .single()
+
+          if (employeeError) {
+            console.error(`Error al obtener empleado para liquidación ${liquidation.id}:`, employeeError)
+            failed++
+            continue
+          }
+
+          // Calcular los días a pagar del último mes
+          const terminationDate = new Date(liquidation.termination_date)
+          const lastMonthStart = new Date(terminationDate.getFullYear(), terminationDate.getMonth(), 1)
+
+          // Calcular días trabajados en el último mes
+          const daysInLastMonth = Math.min(
+            terminationDate.getDate(),
+            new Date(terminationDate.getFullYear(), terminationDate.getMonth() + 1, 0).getDate(),
+          )
+
+          // Actualizar la liquidación
+          const { error: updateError } = await this.supabase
+            .from("liquidations")
+            .update({ days_to_pay_in_last_month: daysInLastMonth })
+            .eq("id", liquidation.id)
+
+          if (updateError) {
+            console.error(`Error al actualizar liquidación ${liquidation.id}:`, updateError)
+            failed++
+          } else {
+            console.log(`Liquidación ${liquidation.id} actualizada con ${daysInLastMonth} días`)
+            updated++
+          }
+        } catch (error) {
+          console.error(`Error al procesar liquidación ${liquidation.id}:`, error)
+          failed++
+        }
+      }
+
+      console.log(`Actualización completada: ${updated} actualizadas, ${failed} fallidas, ${skipped} omitidas`)
+      return { updated, failed, skipped }
     } catch (error) {
-      console.error("Error al generar nóminas:", error)
+      console.error("Error al actualizar días a pagar en liquidaciones:", error)
       throw error
     }
   }
@@ -1983,27 +1934,4 @@ export const db = {
 
 // Exportar también el servicio original para mantener compatibilidad
 export { dbService }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

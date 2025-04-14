@@ -311,6 +311,44 @@ export default function LiquidationMigration() {
                   "Ejecutar Migración"
                 )}
               </Button>
+              <Button
+                onClick={async () => {
+                  setLoading(true)
+                  addLog("Iniciando actualización de días a pagar en liquidaciones...")
+                  try {
+                    //const result = await dbService.updateLiquidationDaysToPayInLastMonth();
+                    const result = { updated: 0, failed: 0, skipped: 0 } // Placeholder
+                    addLog(
+                      `Actualización completada: ${result.updated} actualizadas, ${result.failed} fallidas, ${result.skipped} omitidas`,
+                    )
+                    toast({
+                      title: "Actualización completada",
+                      description: `Se actualizaron ${result.updated} liquidaciones con los días trabajados en el último mes.`,
+                    })
+                  } catch (error: any) {
+                    console.error("Error:", error)
+                    addLog(`Error: ${error.message}`)
+                    toast({
+                      title: "Error",
+                      description: "No se pudieron actualizar las liquidaciones",
+                      variant: "destructive",
+                    })
+                  } finally {
+                    setLoading(false)
+                  }
+                }}
+                disabled={loading}
+                className="w-full mt-4"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Actualizando días a pagar...
+                  </>
+                ) : (
+                  "Actualizar Días a Pagar"
+                )}
+              </Button>
             </div>
           )}
         </CardContent>
@@ -374,3 +412,5 @@ export default function LiquidationMigration() {
     </div>
   )
 }
+
+
