@@ -9,7 +9,7 @@ import { DataTable } from "@/components/data-table"
 import { dbService } from "@/lib/db-service"
 import { formatCurrency, formatDate, generatePayslip } from "@/lib/export-utils"
 import { useToast } from "@/components/ui/use-toast"
-import { Download, RefreshCw, CheckCircle, FileText, Calendar, Eye, ArrowLeft } from "lucide-react"
+import { Download, RefreshCw, CheckCircle, FileText, Calendar, Eye, ArrowLeft } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -26,12 +26,12 @@ import { StatusBadge } from "@/components/status-badge"
 import type { ColumnDef } from "@tanstack/react-table"
 import type { Employee, Payroll, Liquidation, Attendance } from "@/types"
 import { useRouter } from "next/navigation"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { supabase } from "@/lib/supabase/client" // Importamos la instancia compartida
 import Link from "next/link"
 
 export default function NominaPage() {
   const router = useRouter()
-  const supabase = createClientComponentClient()
+  // Ya no creamos una nueva instancia, usamos la compartida
   const [activeTab, setActiveTab] = useState("pendientes")
   const [payrolls, setPayrolls] = useState<Payroll[]>([])
   const [filteredPayrolls, setFilteredPayrolls] = useState<Payroll[]>([])
@@ -75,6 +75,15 @@ export default function NominaPage() {
         const {
           data: { session },
         } = await supabase.auth.getSession()
+        
+        // Agregar logs para diagnóstico
+        console.log("Estado de sesión:", session ? "Válida" : "Inválida")
+        
+        if (session) {
+          console.log("Usuario autenticado:", session.user.email)
+          console.log("Rol del usuario:", session.user.user_metadata?.role)
+        }
+        
         setSessionStatus(session ? "valid" : "invalid")
       } catch (error) {
         console.error("Error al verificar sesión:", error)
@@ -83,7 +92,7 @@ export default function NominaPage() {
     }
 
     checkSession()
-  }, [supabase.auth])
+  }, [])
 
   useEffect(() => {
     if (sessionStatus === "valid") {
