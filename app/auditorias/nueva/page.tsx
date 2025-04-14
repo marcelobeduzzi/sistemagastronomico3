@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { format } from "date-fns"
 import { DashboardLayout } from "@/app/dashboard-layout"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -15,7 +15,9 @@ import { Separator } from "@/components/ui/separator"
 import { Slider } from "@/components/ui/slider"
 import { db } from "@/lib/db"
 import { useToast } from "@/components/ui/use-toast"
-import { ArrowLeft, Save, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2 } from "lucide-react"
+// Importar la nueva función para preparar fechas para la base de datos
+import { prepareForDatabase } from "@/lib/date-utils"
 
 // Lista de locales
 const locales = [
@@ -101,7 +103,7 @@ export default function NuevaAuditoriaPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("general")
   const [auditConfig, setAuditConfig] = useState(null)
-  
+
   // Estado para los datos de la auditoría
   const [auditData, setAuditData] = useState({
     localId: "",
@@ -112,16 +114,16 @@ export default function NuevaAuditoriaPage() {
     shift: "morning",
     generalObservations: "",
     type: "detallada", // Tipo de auditoría: detallada
-    categories: categoriasPredefinidas.map(category => ({
+    categories: categoriasPredefinidas.map((category) => ({
       ...category,
       score: 0,
       maxScore: category.items.reduce((acc, item) => acc + item.maxScore, 0),
-      items: category.items.map(item => ({
+      items: category.items.map((item) => ({
         ...item,
         score: 0,
-        observations: ""
-      }))
-    }))
+        observations: "",
+      })),
+    })),
   })
 
   // Cargar configuración de auditoría
@@ -131,20 +133,20 @@ export default function NuevaAuditoriaPage() {
         const config = await db.auditConfig.findFirst()
         if (config) {
           setAuditConfig(config)
-          
+
           // Si hay categorías configuradas, usarlas
           if (config.categories && config.categories.length > 0) {
-            setAuditData(prev => ({
+            setAuditData((prev) => ({
               ...prev,
-              categories: config.categories.map(category => ({
+              categories: config.categories.map((category) => ({
                 ...category,
                 score: 0,
-                items: category.items.map(item => ({
+                items: category.items.map((item) => ({
                   ...item,
                   score: 0,
-                  observations: ""
-                }))
-              }))
+                  observations: "",
+                })),
+              })),
             }))
           }
         }
@@ -157,12 +159,16 @@ export default function NuevaAuditoriaPage() {
   }, [])
 
   // Calcular puntaje total
-  const totalScore = auditData.categories.reduce((acc, category) => 
-    acc + category.items.reduce((sum, item) => sum + item.score, 0), 0)
-  
-  const maxScore = auditData.categories.reduce((acc, category) => 
-    acc + category.items.reduce((sum, item) => sum + item.maxScore, 0), 0)
-  
+  const totalScore = auditData.categories.reduce(
+    (acc, category) => acc + category.items.reduce((sum, item) => sum + item.score, 0),
+    0,
+  )
+
+  const maxScore = auditData.categories.reduce(
+    (acc, category) => acc + category.items.reduce((sum, item) => sum + item.maxScore, 0),
+    0,
+  )
+
   const percentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0
 
   // Función para obtener el color de la barra según el porcentaje
@@ -177,29 +183,29 @@ export default function NuevaAuditoriaPage() {
   // Manejar cambios en los campos generales
   const handleInputChange = (e) => {
     const { name, value } = e.target
-    setAuditData(prev => ({
+    setAuditData((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }))
   }
 
   // Manejar cambios en el select
   const handleSelectChange = (name, value) => {
-    setAuditData(prev => ({
+    setAuditData((prev) => ({
       ...prev,
       [name]: value,
-      ...(name === 'localId' && { 
-        localName: locales.find(local => local.id === value)?.name || "" 
-      })
+      ...(name === "localId" && {
+        localName: locales.find((local) => local.id === value)?.name || "",
+      }),
     }))
   }
 
   // Manejar cambios en el puntaje de un ítem
   const handleItemScoreChange = (categoryId, itemId, score) => {
-    setAuditData(prev => {
-      const newCategories = prev.categories.map(category => {
+    setAuditData((prev) => {
+      const newCategories = prev.categories.map((category) => {
         if (category.id === categoryId) {
-          const newItems = category.items.map(item => {
+          const newItems = category.items.map((item) => {
             if (item.id === itemId) {
               return { ...item, score }
             }
@@ -212,7 +218,7 @@ export default function NuevaAuditoriaPage() {
           return {
             ...category,
             items: newItems,
-            score: categoryScore
+            score: categoryScore,
           }
         }
         return category
@@ -224,10 +230,10 @@ export default function NuevaAuditoriaPage() {
 
   // Manejar cambios en las observaciones de un ítem
   const handleItemObservationsChange = (categoryId, itemId, observations) => {
-    setAuditData(prev => {
-      const newCategories = prev.categories.map(category => {
+    setAuditData((prev) => {
+      const newCategories = prev.categories.map((category) => {
         if (category.id === categoryId) {
-          const newItems = category.items.map(item => {
+          const newItems = category.items.map((item) => {
             if (item.id === itemId) {
               return { ...item, observations }
             }
@@ -251,12 +257,12 @@ export default function NuevaAuditoriaPage() {
       name: "Nueva Categoría",
       score: 0,
       maxScore: 0,
-      items: []
+      items: [],
     }
 
-    setAuditData(prev => ({
+    setAuditData((prev) => ({
       ...prev,
-      categories: [...prev.categories, newCategory]
+      categories: [...prev.categories, newCategory],
     }))
 
     // Cambiar a la nueva pestaña
@@ -265,19 +271,17 @@ export default function NuevaAuditoriaPage() {
 
   // Editar nombre de categoría
   const handleCategoryNameChange = (categoryId, name) => {
-    setAuditData(prev => ({
+    setAuditData((prev) => ({
       ...prev,
-      categories: prev.categories.map(category => 
-        category.id === categoryId ? { ...category, name } : category
-      )
+      categories: prev.categories.map((category) => (category.id === categoryId ? { ...category, name } : category)),
     }))
   }
 
   // Eliminar categoría
   const handleDeleteCategory = (categoryId) => {
-    setAuditData(prev => ({
+    setAuditData((prev) => ({
       ...prev,
-      categories: prev.categories.filter(category => category.id !== categoryId)
+      categories: prev.categories.filter((category) => category.id !== categoryId),
     }))
 
     // Cambiar a la pestaña general
@@ -292,17 +296,17 @@ export default function NuevaAuditoriaPage() {
       name: "Nuevo Ítem",
       score: 0,
       maxScore: 5,
-      observations: ""
+      observations: "",
     }
 
-    setAuditData(prev => {
-      const newCategories = prev.categories.map(category => {
+    setAuditData((prev) => {
+      const newCategories = prev.categories.map((category) => {
         if (category.id === categoryId) {
           const newItems = [...category.items, newItem]
           return {
             ...category,
             items: newItems,
-            maxScore: newItems.reduce((acc, item) => acc + item.maxScore, 0)
+            maxScore: newItems.reduce((acc, item) => acc + item.maxScore, 0),
           }
         }
         return category
@@ -314,10 +318,10 @@ export default function NuevaAuditoriaPage() {
 
   // Editar nombre de ítem
   const handleItemNameChange = (categoryId, itemId, name) => {
-    setAuditData(prev => {
-      const newCategories = prev.categories.map(category => {
+    setAuditData((prev) => {
+      const newCategories = prev.categories.map((category) => {
         if (category.id === categoryId) {
-          const newItems = category.items.map(item => {
+          const newItems = category.items.map((item) => {
             if (item.id === itemId) {
               return { ...item, name }
             }
@@ -335,10 +339,10 @@ export default function NuevaAuditoriaPage() {
 
   // Editar puntaje máximo de ítem
   const handleItemMaxScoreChange = (categoryId, itemId, maxScore) => {
-    setAuditData(prev => {
-      const newCategories = prev.categories.map(category => {
+    setAuditData((prev) => {
+      const newCategories = prev.categories.map((category) => {
         if (category.id === categoryId) {
-          const newItems = category.items.map(item => {
+          const newItems = category.items.map((item) => {
             if (item.id === itemId) {
               return { ...item, maxScore }
             }
@@ -351,7 +355,7 @@ export default function NuevaAuditoriaPage() {
           return {
             ...category,
             items: newItems,
-            maxScore: categoryMaxScore
+            maxScore: categoryMaxScore,
           }
         }
         return category
@@ -363,11 +367,11 @@ export default function NuevaAuditoriaPage() {
 
   // Eliminar ítem
   const handleDeleteItem = (categoryId, itemId) => {
-    setAuditData(prev => {
-      const newCategories = prev.categories.map(category => {
+    setAuditData((prev) => {
+      const newCategories = prev.categories.map((category) => {
         if (category.id === categoryId) {
-          const newItems = category.items.filter(item => item.id !== itemId)
-          
+          const newItems = category.items.filter((item) => item.id !== itemId)
+
           // Recalcular el puntaje y puntaje máximo de la categoría
           const categoryScore = newItems.reduce((acc, item) => acc + item.score, 0)
           const categoryMaxScore = newItems.reduce((acc, item) => acc + item.maxScore, 0)
@@ -376,7 +380,7 @@ export default function NuevaAuditoriaPage() {
             ...category,
             items: newItems,
             score: categoryScore,
-            maxScore: categoryMaxScore
+            maxScore: categoryMaxScore,
           }
         }
         return category
@@ -394,7 +398,7 @@ export default function NuevaAuditoriaPage() {
       toast({
         title: "Error",
         description: "Debes seleccionar un local",
-        variant: "destructive"
+        variant: "destructive",
       })
       return
     }
@@ -403,7 +407,7 @@ export default function NuevaAuditoriaPage() {
       toast({
         title: "Error",
         description: "Debes ingresar el nombre del auditor",
-        variant: "destructive"
+        variant: "destructive",
       })
       return
     }
@@ -418,28 +422,30 @@ export default function NuevaAuditoriaPage() {
         auditor: auditData.auditor,
         auditorName: auditData.auditor,
         managerName: auditData.managerName,
-        date: new Date(auditData.date).toISOString(),
+        // Usar la nueva función para preparar la fecha para la base de datos
+        // En lugar de: date: new Date(auditData.date).toISOString(),
+        date: prepareForDatabase(auditData.date),
         shift: auditData.shift,
         generalObservations: auditData.generalObservations,
         categories: auditData.categories,
         totalScore,
         maxScore,
         percentage,
-        type: "detallada" // Especificar que es una auditoría detallada
+        type: "detallada", // Especificar que es una auditoría detallada
       }
 
       console.log("Guardando auditoría:", dataToSave)
 
       // Guardar en la base de datos
       const result = await db.audits.create({
-        data: dataToSave
+        data: dataToSave,
       })
 
       console.log("Auditoría guardada:", result)
 
       toast({
         title: "Auditoría guardada",
-        description: "La auditoría se ha guardado correctamente"
+        description: "La auditoría se ha guardado correctamente",
       })
 
       // Redireccionar a la página de auditorías
@@ -449,7 +455,7 @@ export default function NuevaAuditoriaPage() {
       toast({
         title: "Error",
         description: "Ocurrió un error al guardar la auditoría. Por favor, intente nuevamente.",
-        variant: "destructive"
+        variant: "destructive",
       })
     } finally {
       setIsLoading(false)
@@ -502,10 +508,7 @@ export default function NuevaAuditoriaPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="localId">Local</Label>
-                    <Select
-                      value={auditData.localId}
-                      onValueChange={(value) => handleSelectChange("localId", value)}
-                    >
+                    <Select value={auditData.localId} onValueChange={(value) => handleSelectChange("localId", value)}>
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccionar local" />
                       </SelectTrigger>
@@ -521,13 +524,7 @@ export default function NuevaAuditoriaPage() {
 
                   <div className="space-y-2">
                     <Label htmlFor="date">Fecha</Label>
-                    <Input 
-                      id="date" 
-                      name="date" 
-                      type="date" 
-                      value={auditData.date} 
-                      onChange={handleInputChange} 
-                    />
+                    <Input id="date" name="date" type="date" value={auditData.date} onChange={handleInputChange} />
                   </div>
 
                   <div className="space-y-2">
@@ -543,10 +540,7 @@ export default function NuevaAuditoriaPage() {
 
                   <div className="space-y-2">
                     <Label htmlFor="shift">Turno</Label>
-                    <Select
-                      value={auditData.shift}
-                      onValueChange={(value) => handleSelectChange("shift", value)}
-                    >
+                    <Select value={auditData.shift} onValueChange={(value) => handleSelectChange("shift", value)}>
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccionar turno" />
                       </SelectTrigger>
@@ -594,13 +588,16 @@ export default function NuevaAuditoriaPage() {
                         <div className="flex justify-between items-center">
                           <span className="text-sm font-medium">{category.name}</span>
                           <span className="text-sm">
-                            {category.score} / {category.maxScore} ({category.maxScore > 0 ? Math.round((category.score / category.maxScore) * 100) : 0}%)
+                            {category.score} / {category.maxScore} (
+                            {category.maxScore > 0 ? Math.round((category.score / category.maxScore) * 100) : 0}%)
                           </span>
                         </div>
                         <div className="w-full bg-white border rounded-full h-2.5">
-                          <div 
-                            className={`h-2.5 rounded-full ${getProgressColor(category.maxScore > 0 ? (category.score / category.maxScore) * 100 : 0)}`} 
-                            style={{ width: `${category.maxScore > 0 ? (category.score / category.maxScore) * 100 : 0}%` }}
+                          <div
+                            className={`h-2.5 rounded-full ${getProgressColor(category.maxScore > 0 ? (category.score / category.maxScore) * 100 : 0)}`}
+                            style={{
+                              width: `${category.maxScore > 0 ? (category.score / category.maxScore) * 100 : 0}%`,
+                            }}
                           ></div>
                         </div>
                       </div>
@@ -616,8 +613,8 @@ export default function NuevaAuditoriaPage() {
                         </span>
                       </div>
                       <div className="w-full bg-white border rounded-full h-3">
-                        <div 
-                          className={`h-3 rounded-full ${getProgressColor(percentage)}`} 
+                        <div
+                          className={`h-3 rounded-full ${getProgressColor(percentage)}`}
                           style={{ width: `${percentage}%` }}
                         ></div>
                       </div>
@@ -639,16 +636,13 @@ export default function NuevaAuditoriaPage() {
                         onChange={(e) => handleCategoryNameChange(category.id, e.target.value)}
                         className="text-xl font-semibold h-auto py-1 px-2"
                       />
-                      <Button 
-                        variant="destructive" 
-                        size="sm"
-                        onClick={() => handleDeleteCategory(category.id)}
-                      >
+                      <Button variant="destructive" size="sm" onClick={() => handleDeleteCategory(category.id)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                     <CardDescription>
-                      Puntaje: {category.score} / {category.maxScore} ({category.maxScore > 0 ? Math.round((category.score / category.maxScore) * 100) : 0}%)
+                      Puntaje: {category.score} / {category.maxScore} (
+                      {category.maxScore > 0 ? Math.round((category.score / category.maxScore) * 100) : 0}%)
                     </CardDescription>
                   </div>
                   <Button variant="outline" size="sm" onClick={() => handleAddItem(category.id)}>
@@ -683,7 +677,9 @@ export default function NuevaAuditoriaPage() {
                               </Label>
                               <Select
                                 value={item.maxScore.toString()}
-                                onValueChange={(value) => handleItemMaxScoreChange(category.id, item.id, parseInt(value))}
+                                onValueChange={(value) =>
+                                  handleItemMaxScoreChange(category.id, item.id, Number.parseInt(value))
+                                }
                               >
                                 <SelectTrigger className="w-20">
                                   <SelectValue />
@@ -697,8 +693,8 @@ export default function NuevaAuditoriaPage() {
                                 </SelectContent>
                               </Select>
                             </div>
-                            <Button 
-                              variant="destructive" 
+                            <Button
+                              variant="destructive"
                               size="sm"
                               onClick={() => handleDeleteItem(category.id, item.id)}
                             >
@@ -709,7 +705,9 @@ export default function NuevaAuditoriaPage() {
 
                         <div className="space-y-2">
                           <div className="flex justify-between items-center">
-                            <Label htmlFor={`score-${item.id}`}>Puntaje: {item.score} / {item.maxScore}</Label>
+                            <Label htmlFor={`score-${item.id}`}>
+                              Puntaje: {item.score} / {item.maxScore}
+                            </Label>
                             <span className="text-sm font-medium">
                               {Math.round((item.score / item.maxScore) * 100)}%
                             </span>
@@ -746,6 +744,7 @@ export default function NuevaAuditoriaPage() {
     </DashboardLayout>
   )
 }
+
 
 
 

@@ -1,47 +1,23 @@
 import type { Employee, Payroll, Audit, Balance, Order } from "@/types"
 import { jsPDF } from "jspdf"
 import "jspdf-autotable"
+// Importar las nuevas funciones de date-utils
+import { formatDisplayDate } from "./date-utils"
 
-// Función para formatear fechas
-// Función para formatear fecha - MODIFICADA para trabajar directamente con strings
+// Función para formatear fechas - Actualizada para usar las nuevas utilidades
 export const formatDate = (dateString: string | undefined): string => {
   if (!dateString) return "-"
 
-  // Si la fecha incluye tiempo (formato ISO), extraer solo la parte de la fecha
-  if (dateString.includes("T")) {
-    dateString = dateString.split("T")[0]
-  }
-
-  // Verificar si la fecha está en formato YYYY-MM-DD
-  const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/
-  if (isoDateRegex.test(dateString)) {
-    // Convertir de YYYY-MM-DD a DD/MM/YYYY
-    const parts = dateString.split("-")
-    if (parts.length === 3) {
-      return `${parts[2]}/${parts[1]}/${parts[0]}`
-    }
-  }
-
-  // Si no está en formato YYYY-MM-DD, intentar con el método anterior como fallback
   try {
-    const date = new Date(dateString)
-    // Verificar si la fecha es válida
-    if (isNaN(date.getTime())) {
-      return dateString // Devolver el string original si no es una fecha válida
-    }
-    return date.toLocaleDateString("es-AR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    })
+    // Usar la nueva función formatDisplayDate
+    return formatDisplayDate(dateString)
   } catch (error) {
     console.error("Error al formatear fecha:", error)
-    return dateString // Devolver el string original en caso de error
+    return dateString || "-" // Devolver el string original en caso de error
   }
 }
 
 // Función para exportar datos a CSV
-// Función para exportar a CSV
 export const exportToCSV = (data: any[], filename: string) => {
   if (data.length === 0) {
     console.error("No hay datos para exportar")
@@ -711,6 +687,7 @@ export const generateOrderReport = (order: Order) => {
     alert("Ocurrió un error al generar el reporte de pedido. Por favor, intente nuevamente.")
   }
 }
+
 
 
 

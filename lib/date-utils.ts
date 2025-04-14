@@ -1,0 +1,135 @@
+import { format, parseISO, isValid } from "date-fns"
+import { es } from "date-fns/locale"
+
+/**
+ * Formatea una fecha para mostrar en la UI
+ * @param dateString Fecha en formato string o Date
+ * @param formatStr Formato de fecha (opcional)
+ * @returns Fecha formateada como string
+ */
+export function formatDisplayDate(dateString: string | Date | undefined, formatStr = "dd/MM/yyyy"): string {
+  if (!dateString) return ""
+
+  try {
+    // Si es string, convertir a objeto Date
+    let date: Date
+
+    if (typeof dateString === "string") {
+      // Si la fecha incluye tiempo (T), puede haber problemas de zona horaria
+      if (dateString.includes("T")) {
+        // Crear fecha usando el constructor Date que respeta la zona horaria local
+        const [year, month, day] = dateString.split("T")[0].split("-").map(Number)
+        date = new Date(year, month - 1, day) // month es 0-indexed en JavaScript
+      } else {
+        // Si no incluye tiempo, simplemente parseamos la fecha
+        date = parseISO(dateString)
+      }
+    } else {
+      date = dateString
+    }
+
+    // Verificar si la fecha es válida
+    if (!isValid(date)) {
+      return dateString.toString()
+    }
+
+    // Formatear con date-fns usando locale español
+    return format(date, formatStr, { locale: es })
+  } catch (error) {
+    console.error("Error al formatear fecha:", error)
+    return typeof dateString === "string" ? dateString : dateString.toString()
+  }
+}
+
+/**
+ * Prepara una fecha para guardar en la base de datos
+ * @param date Fecha a preparar
+ * @returns Fecha en formato ISO sin tiempo (YYYY-MM-DD)
+ */
+export function prepareForDatabase(date: Date | string | undefined): string {
+  if (!date) return ""
+
+  try {
+    // Asegurarse de que es un objeto Date
+    let dateObj: Date
+
+    if (typeof date === "string") {
+      // Si la fecha ya está en formato YYYY-MM-DD, devolverla directamente
+      if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return date
+      }
+
+      // Convertir string a Date
+      dateObj = new Date(date)
+    } else {
+      dateObj = date
+    }
+
+    // Verificar si la fecha es válida
+    if (!isValid(dateObj)) {
+      console.warn("Fecha inválida:", date)
+      return ""
+    }
+
+    // Convertir a formato ISO sin la parte de tiempo para evitar problemas de zona horaria
+    // Esto almacenará la fecha como YYYY-MM-DD
+    const year = dateObj.getFullYear()
+    const month = String(dateObj.getMonth() + 1).padStart(2, "0") // +1 porque getMonth() es 0-indexed
+    const day = String(dateObj.getDate()).padStart(2, "0")
+
+    return `${year}-${month}-${day}`
+  } catch (error) {
+    console.error("Error al preparar fecha para la base de datos:", error)
+    return ""
+  }
+}
+
+/**
+ * Convierte una fecha de la base de datos a fecha local
+ * @param dateString Fecha en formato ISO de la base de datos
+ * @returns Fecha local
+ */
+export function dbDateToLocal(dateString: string | undefined): Date | null {
+  if (!dateString) return null
+
+  try {
+    // Si la fecha incluye tiempo (T), puede haber problemas de zona horaria
+    if (dateString.includes("T")) {
+      // Crear fecha usando el constructor Date que respeta la zona horaria local
+      const [year, month, day] = dateString.split("T")[0].split("-").map(Number)
+      return new Date(year, month - 1, day) // month es 0-indexed en JavaScript
+    }
+
+    // Si no incluye tiempo, simplemente parseamos la fecha
+    return parseISO(dateString)
+  } catch (error) {
+    console.error("Error al convertir fecha de DB a local:", error)
+    return null
+  }
+}
+
+/**
+ * Corrige el problema del día anterior
+ * @param dateString Fecha en formato ISO
+ * @returns Fecha corregida o null si hay error
+ */
+export function correctDateOffset(dateString: string | undefined): Date | null {
+  if (!dateString) return null
+
+  try {
+    // Si la fecha incluye tiempo (T), puede haber problemas de zona horaria
+    if (dateString.includes("T")) {
+      // Extraer solo la parte de fecha
+      const datePart = dateString.split("T")[0]
+      // Crear fecha usando el constructor Date que respeta la zona horaria local
+      const [year, month, day] = datePart.split("-").map(Number)
+      return new Date(year, month - 1, day) // month es 0-indexed en JavaScript
+    }
+
+    // Si no incluye tiempo, simplemente parseamos la fecha
+    return parseISO(dateString)
+  } catch (error) {
+    console.error("Error al corregir offset de fecha:", error)
+    return null
+  }
+}
