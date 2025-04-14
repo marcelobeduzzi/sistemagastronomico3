@@ -50,12 +50,16 @@ export type Liquidation = {
   terminationDate: string
   workedDays: number
   workedMonths: number
+  daysToPayInLastMonth?: number
   baseSalary: number
+  lastMonthSalary?: number
   proportionalVacation: number
   proportionalBonus: number
   compensationAmount: number
   totalAmount: number
   isPaid: boolean
+  includeVacation?: boolean
+  includeBonus?: boolean
   paymentDate?: string | null
   paymentMethod?: string | null
   paymentReference?: string | null
@@ -144,5 +148,6 @@ export type OrderItem = {
   quantity: number
   price: number
 }
+
 
 

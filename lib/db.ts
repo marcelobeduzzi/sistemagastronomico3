@@ -894,28 +894,24 @@ class DatabaseService {
   async generateLiquidations(inactiveEmployees: Employee[]) {
     try {
       let generated = 0
-      let skipped = 0
+      let updated = 0
+      const skipped = 0
 
       // Obtener liquidaciones existentes
       const { data: existingLiquidations, error: fetchError } = await this.supabase
         .from("liquidations")
-        .select("employee_id")
+        .select("id, employee_id")
 
       if (fetchError) throw fetchError
 
-      // Crear un conjunto de IDs de empleados que ya tienen liquidación
-      const employeesWithLiquidation = new Set(existingLiquidations?.map((liq) => liq.employee_id) || [])
+      // Crear un mapa de IDs de empleados que ya tienen liquidación para facilitar la búsqueda
+      const employeesWithLiquidation = new Map(existingLiquidations?.map((liq) => [liq.employee_id, liq.id]) || [])
 
       // Procesar cada empleado inactivo
       for (const employee of inactiveEmployees) {
-        // Verificar si el empleado ya tiene liquidación
-        if (employeesWithLiquidation.has(employee.id)) {
-          skipped++
-          continue
-        }
-
         // Verificar que tenga fecha de egreso
         if (!employee.terminationDate) {
+          console.log(`Empleado ${employee.id} no tiene fecha de egreso, omitiendo...`)
           continue
         }
 
@@ -928,6 +924,10 @@ class DatabaseService {
         // Calcular meses trabajados
         const workedMonths = Math.floor(workedDays / 30)
 
+        // Calcular días a pagar en el último mes
+        // Si trabajó más de 30 días, solo se pagan los días adicionales al último mes completo
+        const daysToPayInLastMonth = workedDays % 30
+
         // Obtener último salario
         const { data: latestPayroll, error: payrollError } = await this.supabase
           .from("payroll")
@@ -937,15 +937,26 @@ class DatabaseService {
           .order("month", { ascending: false })
           .limit(1)
 
-        if (payrollError) throw payrollError
+        if (payrollError) {
+          console.error(`Error al obtener salario para empleado ${employee.id}:`, payrollError)
+          continue
+        }
 
         // Usar salario base de la última nómina o un valor predeterminado
         const baseSalary = latestPayroll && latestPayroll.length > 0 ? latestPayroll[0].base_salary : 0
 
-        // Calcular vacaciones proporcionales (1 día por mes trabajado)
-        const proportionalVacation = (workedMonths % 12) * (baseSalary / 30)
+        // Valor diario del salario
+        const dailyRate = baseSalary / 30
 
-        // Calcular aguinaldo proporcional (1/12 del salario por mes trabajado en el año actual)
+        // Calcular monto a pagar por días trabajados en el último mes
+        const lastMonthSalary = dailyRate * daysToPayInLastMonth
+
+        // Calcular vacaciones proporcionales (siempre, pero solo se pagan si trabajó más de 20 días)
+        // 1 día por mes trabajado
+        const proportionalVacation = workedDays >= 20 ? (workedMonths % 12) * (baseSalary / 30) : 0
+
+        // Calcular aguinaldo proporcional (siempre, pero solo se paga si trabajó más de 20 días)
+        // 1/12 del salario por mes trabajado en el año actual
         const currentYear = terminationDate.getFullYear()
         const startOfYear = new Date(currentYear, 0, 1)
         const monthsInCurrentYear =
@@ -953,7 +964,7 @@ class DatabaseService {
             ? workedMonths
             : Math.floor((terminationDate.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24 * 30))
 
-        const proportionalBonus = (baseSalary / 12) * (monthsInCurrentYear % 12)
+        const proportionalBonus = workedDays >= 20 ? (baseSalary / 12) * (monthsInCurrentYear % 12) : 0
 
         // Calcular indemnización (1 mes de salario por año trabajado, si corresponde)
         // Solo si trabajó más de 3 meses y no renunció voluntariamente
@@ -961,33 +972,57 @@ class DatabaseService {
         const compensationAmount = yearsWorked > 0 ? baseSalary * yearsWorked : 0
 
         // Calcular monto total
-        const totalAmount = proportionalVacation + proportionalBonus + compensationAmount
+        const totalAmount = lastMonthSalary + proportionalVacation + proportionalBonus + compensationAmount
 
-        // Crear liquidación
-        const { data: newLiquidation, error: insertError } = await this.supabase
-          .from("liquidations")
-          .insert({
-            employee_id: employee.id,
-            termination_date: employee.terminationDate,
-            worked_days: workedDays,
-            worked_months: workedMonths,
-            base_salary: baseSalary,
-            proportional_vacation: proportionalVacation,
-            proportional_bonus: proportionalBonus,
-            compensation_amount: compensationAmount,
-            total_amount: totalAmount,
-            is_paid: false,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .select()
+        // Datos de la liquidación
+        const liquidationData = {
+          employee_id: employee.id,
+          termination_date: employee.terminationDate,
+          worked_days: workedDays,
+          worked_months: workedMonths,
+          days_to_pay: daysToPayInLastMonth,
+          base_salary: baseSalary,
+          last_month_salary: lastMonthSalary,
+          proportional_vacation: proportionalVacation,
+          proportional_bonus: proportionalBonus,
+          compensation_amount: compensationAmount,
+          total_amount: totalAmount,
+          is_paid: false,
+          include_vacation: workedDays >= 20, // Flag para decidir si incluir vacaciones
+          include_bonus: workedDays >= 20, // Flag para decidir si incluir aguinaldo
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }
 
-        if (insertError) throw insertError
+        // Verificar si ya existe una liquidación para este empleado
+        if (employeesWithLiquidation.has(employee.id)) {
+          // Actualizar liquidación existente
+          const liquidationId = employeesWithLiquidation.get(employee.id)
+          const { error: updateError } = await this.supabase
+            .from("liquidations")
+            .update(liquidationData)
+            .eq("id", liquidationId)
 
-        generated++
+          if (updateError) {
+            console.error(`Error al actualizar liquidación para empleado ${employee.id}:`, updateError)
+            continue
+          }
+
+          updated++
+        } else {
+          // Crear nueva liquidación
+          const { error: insertError } = await this.supabase.from("liquidations").insert(liquidationData)
+
+          if (insertError) {
+            console.error(`Error al crear liquidación para empleado ${employee.id}:`, insertError)
+            continue
+          }
+
+          generated++
+        }
       }
 
-      return { generated, skipped }
+      return { generated, updated, skipped }
     } catch (error) {
       console.error("Error al generar liquidaciones:", error)
       throw new Error("No se pudieron generar las liquidaciones")
@@ -1948,6 +1983,7 @@ export const db = {
 
 // Exportar también el servicio original para mantener compatibilidad
 export { dbService }
+
 
 
 

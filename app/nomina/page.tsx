@@ -474,24 +474,81 @@ export default function NominaPage() {
       cell: ({ row }) => row.original.workedDays,
     },
     {
-      accessorKey: "workedMonths",
-      header: "Meses Trabajados",
-      cell: ({ row }) => row.original.workedMonths,
-    },
-    {
-      accessorKey: "baseSalary",
-      header: "Salario Base",
-      cell: ({ row }) => formatCurrency(row.original.baseSalary),
+      accessorKey: "lastMonthSalary",
+      header: "Sueldo Último Mes",
+      cell: ({ row }) => formatCurrency(row.original.lastMonthSalary || 0),
     },
     {
       accessorKey: "proportionalVacation",
-      header: "Vacaciones Proporcionales",
-      cell: ({ row }) => formatCurrency(row.original.proportionalVacation),
+      header: "Vacaciones Prop.",
+      cell: ({ row }) => (
+        <div className="flex items-center">
+          {formatCurrency(row.original.proportionalVacation)}
+          {!row.original.isPaid && (
+            <Checkbox
+              className="ml-2"
+              checked={row.original.includeVacation}
+              onCheckedChange={(checked) => {
+                const updatedLiquidation = {
+                  ...row.original,
+                  includeVacation: checked === true,
+                  totalAmount: calculateTotalAmount(row.original, {
+                    includeVacation: checked === true,
+                    includeBonus: row.original.includeBonus,
+                  }),
+                }
+                dbService
+                  .updateLiquidation(updatedLiquidation)
+                  .then(() => loadData())
+                  .catch((error) => {
+                    console.error("Error al actualizar liquidación:", error)
+                    toast({
+                      title: "Error",
+                      description: "No se pudo actualizar la liquidación",
+                      variant: "destructive",
+                    })
+                  })
+              }}
+            />
+          )}
+        </div>
+      ),
     },
     {
       accessorKey: "proportionalBonus",
-      header: "Aguinaldo Proporcional",
-      cell: ({ row }) => formatCurrency(row.original.proportionalBonus),
+      header: "Aguinaldo Prop.",
+      cell: ({ row }) => (
+        <div className="flex items-center">
+          {formatCurrency(row.original.proportionalBonus)}
+          {!row.original.isPaid && (
+            <Checkbox
+              className="ml-2"
+              checked={row.original.includeBonus}
+              onCheckedChange={(checked) => {
+                const updatedLiquidation = {
+                  ...row.original,
+                  includeBonus: checked === true,
+                  totalAmount: calculateTotalAmount(row.original, {
+                    includeVacation: row.original.includeVacation,
+                    includeBonus: checked === true,
+                  }),
+                }
+                dbService
+                  .updateLiquidation(updatedLiquidation)
+                  .then(() => loadData())
+                  .catch((error) => {
+                    console.error("Error al actualizar liquidación:", error)
+                    toast({
+                      title: "Error",
+                      description: "No se pudo actualizar la liquidación",
+                      variant: "destructive",
+                    })
+                  })
+              }}
+            />
+          )}
+        </div>
+      ),
     },
     {
       accessorKey: "compensationAmount",
@@ -531,6 +588,8 @@ export default function NominaPage() {
             size="sm"
             onClick={() => {
               // Implementar vista de detalles de liquidación
+              setSelectedLiquidation(row.original)
+              setIsLiquidationDetailsDialogOpen(true)
             }}
           >
             <FileText className="mr-1 h-4 w-4" />
@@ -540,6 +599,34 @@ export default function NominaPage() {
       ),
     },
   ]
+
+  // Función para calcular el monto total de la liquidación
+  const calculateTotalAmount = (
+    liquidation: Liquidation,
+    options: { includeVacation?: boolean; includeBonus?: boolean },
+  ): number => {
+    let total = liquidation.lastMonthSalary || 0
+
+    // Agregar vacaciones proporcionales si se incluyen
+    if (options.includeVacation) {
+      total += liquidation.proportionalVacation
+    }
+
+    // Agregar aguinaldo proporcional si se incluye
+    if (options.includeBonus) {
+      total += liquidation.proportionalBonus
+    }
+
+    // Siempre agregar indemnización
+    total += liquidation.compensationAmount
+
+    return total
+  }
+
+  // Agregar estos estados para el diálogo de detalles de liquidación:
+
+  const [selectedLiquidation, setSelectedLiquidation] = useState<Liquidation | null>(null)
+  const [isLiquidationDetailsDialogOpen, setIsLiquidationDetailsDialogOpen] = useState(false)
 
   // Columnas para la tabla de historial de nóminas
   const historyPayrollColumns: ColumnDef<Payroll>[] = [
@@ -1281,10 +1368,192 @@ export default function NominaPage() {
             )}
           </DialogContent>
         </Dialog>
+
+        {/* Diálogo de detalles de liquidación */}
+        <Dialog open={isLiquidationDetailsDialogOpen} onOpenChange={setIsLiquidationDetailsDialogOpen}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Detalles de Liquidación</DialogTitle>
+              <DialogDescription>
+                {(() => {
+                  if (!selectedLiquidation) return "Detalles de la liquidación"
+
+                  const employee = [...employees, ...inactiveEmployees].find(
+                    (e) => e.id === selectedLiquidation.employeeId,
+                  )
+                  const employeeName = employee ? `${employee.firstName} ${employee.lastName}` : "Empleado"
+
+                  return `${employeeName} - Fecha de egreso: ${formatDate(selectedLiquidation.terminationDate)}`
+                })()}
+              </DialogDescription>
+            </DialogHeader>
+
+            {selectedLiquidation && (
+              <div className="grid gap-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <h3 className="font-medium mb-2">Información del Empleado</h3>
+                    {(() => {
+                      const employee = [...employees, ...inactiveEmployees].find(
+                        (e) => e.id === selectedLiquidation.employeeId,
+                      )
+                      if (!employee) return <p>Información no disponible</p>
+
+                      return (
+                        <div className="space-y-1 text-sm">
+                          <p>
+                            <span className="font-medium">Nombre:</span> {employee.firstName} {employee.lastName}
+                          </p>
+                          <p>
+                            <span className="font-medium">DNI:</span> {employee.documentId}
+                          </p>
+                          <p>
+                            <span className="font-medium">Cargo:</span> {employee.position}
+                          </p>
+                          <p>
+                            <span className="font-medium">Local:</span> {employee.local}
+                          </p>
+                          <p>
+                            <span className="font-medium">Fecha de ingreso:</span> {formatDate(employee.hireDate)}
+                          </p>
+                          <p>
+                            <span className="font-medium">Fecha de egreso:</span>{" "}
+                            {formatDate(employee.terminationDate || "")}
+                          </p>
+                        </div>
+                      )
+                    })()}
+                  </div>
+
+                  <div>
+                    <h3 className="font-medium mb-2">Información de Pago</h3>
+                    <div className="space-y-1 text-sm">
+                      <p>
+                        <span className="font-medium">Estado:</span>{" "}
+                        {selectedLiquidation.isPaid ? "Pagado" : "Pendiente"}
+                      </p>
+                      {selectedLiquidation.paymentDate && (
+                        <p>
+                          <span className="font-medium">Fecha de pago:</span>{" "}
+                          {formatDate(selectedLiquidation.paymentDate)}
+                        </p>
+                      )}
+                      {selectedLiquidation.paymentMethod && (
+                        <p>
+                          <span className="font-medium">Método de pago:</span>{" "}
+                          {{
+                            efectivo: "Efectivo",
+                            transferencia: "Transferencia",
+                            cheque: "Cheque",
+                            otro: "Otro",
+                          }[selectedLiquidation.paymentMethod] || selectedLiquidation.paymentMethod}
+                        </p>
+                      )}
+                      {selectedLiquidation.paymentReference && (
+                        <p>
+                          <span className="font-medium">Referencia:</span> {selectedLiquidation.paymentReference}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Detalles de la liquidación */}
+                <Card className="bg-blue-50 border-blue-200">
+                  <CardHeader className="bg-blue-100">
+                    <CardTitle>
+                      Detalles de la Liquidación para {(() => {
+                        const employee = [...employees, ...inactiveEmployees].find(
+                          (e) => e.id === selectedLiquidation.employeeId,
+                        )
+                        return employee ? `${employee.firstName} ${employee.lastName}` : "Empleado"
+                      })()}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <div className="grid gap-6 md:grid-cols-2">
+                      <div>
+                        <h3 className="font-medium mb-4 text-blue-800">Información Laboral</h3>
+                        <div className="space-y-3">
+                          <p>
+                            <span className="font-medium">Días Trabajados:</span>
+                            <br />
+                            {selectedLiquidation.workedDays} días
+                          </p>
+                          <p>
+                            <span className="font-medium">Meses Trabajados:</span>
+                            <br />
+                            {selectedLiquidation.workedMonths} meses
+                          </p>
+                          <p>
+                            <span className="font-medium">Días a Pagar (último mes):</span>
+                            <br />
+                            {selectedLiquidation.daysToPayInLastMonth || 0} días
+                          </p>
+                          <p>
+                            <span className="font-medium">Salario Base:</span>
+                            <br />
+                            {formatCurrency(selectedLiquidation.baseSalary)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div>
+                        <h3 className="font-medium mb-4 text-blue-800">Conceptos a Liquidar</h3>
+                        <div className="space-y-3">
+                          <p>
+                            <span className="font-medium">Sueldo Último Mes:</span>
+                            <br />
+                            {formatCurrency(selectedLiquidation.lastMonthSalary || 0)}
+                          </p>
+                          <p>
+                            <span className="font-medium">Vacaciones Proporcionales:</span>
+                            <br />
+                            <span className={selectedLiquidation.includeVacation ? "text-green-600" : "text-gray-500"}>
+                              {formatCurrency(selectedLiquidation.proportionalVacation)}
+                              {!selectedLiquidation.includeVacation && " (no incluido)"}
+                            </span>
+                          </p>
+                          <p>
+                            <span className="font-medium">Aguinaldo Proporcional:</span>
+                            <br />
+                            <span className={selectedLiquidation.includeBonus ? "text-green-600" : "text-gray-500"}>
+                              {formatCurrency(selectedLiquidation.proportionalBonus)}
+                              {!selectedLiquidation.includeBonus && " (no incluido)"}
+                            </span>
+                          </p>
+                          <p>
+                            <span className="font-medium">Indemnización:</span>
+                            <br />
+                            {formatCurrency(selectedLiquidation.compensationAmount)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 p-4 bg-white rounded-md border border-blue-200">
+                      <div className="flex justify-between items-center">
+                        <h3 className="font-medium text-blue-800">Total a Pagar:</h3>
+                        <span className="text-xl font-bold">{formatCurrency(selectedLiquidation.totalAmount)}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <div className="flex justify-end space-x-2">
+                  <Button variant="outline" onClick={() => setIsLiquidationDetailsDialogOpen(false)}>
+                    Cerrar
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   )
 }
+
 
 
 
