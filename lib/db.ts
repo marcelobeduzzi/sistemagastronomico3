@@ -108,19 +108,29 @@ class DatabaseService {
     }
   }
 
-  async updateEmployee(id: string, employee: Partial<Employee>) {
-    // Convertir automáticamente de camelCase a snake_case
-    const updateData = objectToSnakeCase({
-      ...employee,
-      updated_at: new Date().toISOString(),
-    })
+  async updateEmployee(employee: Employee) {
+    try {
+      // Convertir automáticamente de camelCase a snake_case
+      const updateData = objectToSnakeCase({
+        ...employee,
+        updated_at: new Date().toISOString(),
+      })
 
-    const { data, error } = await this.supabase.from("employees").update(updateData).eq("id", id).select().single()
+      const { data, error } = await this.supabase
+        .from("employees")
+        .update(updateData)
+        .eq("id", employee.id)
+        .select()
+        .single()
 
-    if (error) throw error
+      if (error) throw error
 
-    // Convertir automáticamente de snake_case a camelCase
-    return objectToCamelCase(data)
+      // Convertir automáticamente de snake_case a camelCase
+      return objectToCamelCase(data)
+    } catch (error) {
+      console.error("Error updating employee:", error)
+      throw error
+    }
   }
 
   /**
@@ -771,6 +781,28 @@ class DatabaseService {
     }
   }
 
+  // Método para crear una liquidación
+  async createLiquidation(liquidation: Omit<Liquidation, "id">) {
+    try {
+      // Convertir de camelCase a snake_case
+      const liquidationData = objectToSnakeCase({
+        ...liquidation,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+
+      const { data, error } = await this.supabase.from("liquidations").insert([liquidationData]).select().single()
+
+      if (error) throw error
+
+      // Convertir de snake_case a camelCase
+      return objectToCamelCase(data)
+    } catch (error) {
+      console.error("Error al crear liquidación:", error)
+      throw error
+    }
+  }
+
   // Método para actualizar una nómina
   async updatePayroll(id: string, payroll: Partial<Payroll>) {
     try {
@@ -785,14 +817,14 @@ class DatabaseService {
         // Pago de banco
         updateData.is_paid_bank = true
         updateData.bank_payment_date = now
-      } 
-      
+      }
+
       if (payroll.paymentType === "hand" || payroll.handSalaryPaid) {
         // Pago en mano
         updateData.is_paid_hand = true
         updateData.hand_payment_date = now
       }
-      
+
       if (payroll.paymentType === "all") {
         // Pago total (banco y mano)
         updateData.is_paid_bank = true
@@ -833,7 +865,7 @@ class DatabaseService {
   }
 
   // Método para actualizar una liquidación
-  async updateLiquidation(id: string, liquidation: Partial<Liquidation>) {
+  async updateLiquidation(liquidation: Liquidation) {
     try {
       // Convertir de camelCase a snake_case
       const liquidationData = objectToSnakeCase({
@@ -844,7 +876,7 @@ class DatabaseService {
       const { data, error } = await this.supabase
         .from("liquidations")
         .update(liquidationData)
-        .eq("id", id)
+        .eq("id", liquidation.id)
         .select()
         .single()
 
@@ -855,6 +887,110 @@ class DatabaseService {
     } catch (error) {
       console.error("Error al actualizar liquidación:", error)
       throw error
+    }
+  }
+
+  // Método para generar liquidaciones para empleados inactivos
+  async generateLiquidations(inactiveEmployees: Employee[]) {
+    try {
+      let generated = 0
+      let skipped = 0
+
+      // Obtener liquidaciones existentes
+      const { data: existingLiquidations, error: fetchError } = await this.supabase
+        .from("liquidations")
+        .select("employee_id")
+
+      if (fetchError) throw fetchError
+
+      // Crear un conjunto de IDs de empleados que ya tienen liquidación
+      const employeesWithLiquidation = new Set(existingLiquidations?.map((liq) => liq.employee_id) || [])
+
+      // Procesar cada empleado inactivo
+      for (const employee of inactiveEmployees) {
+        // Verificar si el empleado ya tiene liquidación
+        if (employeesWithLiquidation.has(employee.id)) {
+          skipped++
+          continue
+        }
+
+        // Verificar que tenga fecha de egreso
+        if (!employee.terminationDate) {
+          continue
+        }
+
+        // Calcular días trabajados
+        const hireDate = new Date(employee.hireDate)
+        const terminationDate = new Date(employee.terminationDate)
+        const diffTime = Math.abs(terminationDate.getTime() - hireDate.getTime())
+        const workedDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+        // Calcular meses trabajados
+        const workedMonths = Math.floor(workedDays / 30)
+
+        // Obtener último salario
+        const { data: latestPayroll, error: payrollError } = await this.supabase
+          .from("payroll")
+          .select("base_salary")
+          .eq("employee_id", employee.id)
+          .order("year", { ascending: false })
+          .order("month", { ascending: false })
+          .limit(1)
+
+        if (payrollError) throw payrollError
+
+        // Usar salario base de la última nómina o un valor predeterminado
+        const baseSalary = latestPayroll && latestPayroll.length > 0 ? latestPayroll[0].base_salary : 0
+
+        // Calcular vacaciones proporcionales (1 día por mes trabajado)
+        const proportionalVacation = (workedMonths % 12) * (baseSalary / 30)
+
+        // Calcular aguinaldo proporcional (1/12 del salario por mes trabajado en el año actual)
+        const currentYear = terminationDate.getFullYear()
+        const startOfYear = new Date(currentYear, 0, 1)
+        const monthsInCurrentYear =
+          hireDate > startOfYear
+            ? workedMonths
+            : Math.floor((terminationDate.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24 * 30))
+
+        const proportionalBonus = (baseSalary / 12) * (monthsInCurrentYear % 12)
+
+        // Calcular indemnización (1 mes de salario por año trabajado, si corresponde)
+        // Solo si trabajó más de 3 meses y no renunció voluntariamente
+        const yearsWorked = Math.floor(workedMonths / 12)
+        const compensationAmount = yearsWorked > 0 ? baseSalary * yearsWorked : 0
+
+        // Calcular monto total
+        const totalAmount = proportionalVacation + proportionalBonus + compensationAmount
+
+        // Crear liquidación
+        const { data: newLiquidation, error: insertError } = await this.supabase
+          .from("liquidations")
+          .insert({
+            employee_id: employee.id,
+            termination_date: employee.terminationDate,
+            worked_days: workedDays,
+            worked_months: workedMonths,
+            base_salary: baseSalary,
+            proportional_vacation: proportionalVacation,
+            proportional_bonus: proportionalBonus,
+            compensation_amount: compensationAmount,
+            total_amount: totalAmount,
+            is_paid: false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .select()
+
+        if (insertError) throw insertError
+
+        generated++
+      }
+
+      return { generated, skipped }
+    } catch (error) {
+      console.error("Error al generar liquidaciones:", error)
+      throw new Error("No se pudieron generar las liquidaciones")
     }
   }
 
@@ -1812,6 +1948,7 @@ export const db = {
 
 // Exportar también el servicio original para mantener compatibilidad
 export { dbService }
+
 
 
 

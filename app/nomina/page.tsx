@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { DashboardLayout } from "@/app/dashboard-layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,7 +10,7 @@ import { DataTable } from "@/components/data-table"
 import { dbService } from "@/lib/db-service"
 import { formatCurrency, formatDate, generatePayslip } from "@/lib/export-utils"
 import { useToast } from "@/components/ui/use-toast"
-import { Download, RefreshCw, CheckCircle, FileText, Calendar, Eye, ArrowLeft } from 'lucide-react'
+import { Download, RefreshCw, CheckCircle, FileText, Calendar, Eye, ArrowLeft, Calculator, Loader2 } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -25,7 +26,6 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { StatusBadge } from "@/components/status-badge"
 import type { ColumnDef } from "@tanstack/react-table"
 import type { Employee, Payroll, Liquidation, Attendance } from "@/types"
-import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase/client" // Importamos la instancia compartida
 import Link from "next/link"
 
@@ -38,10 +38,12 @@ export default function NominaPage() {
   const [liquidations, setLiquidations] = useState<Liquidation[]>([])
   const [historyPayrolls, setHistoryPayrolls] = useState<Payroll[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
+  const [inactiveEmployees, setInactiveEmployees] = useState<Employee[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [isGeneratingPayrolls, setIsGeneratingPayrolls] = useState(false)
+  const [isGeneratingLiquidations, setIsGeneratingLiquidations] = useState(false)
   const [selectedPayroll, setSelectedPayroll] = useState<Payroll | null>(null)
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
@@ -75,15 +77,15 @@ export default function NominaPage() {
         const {
           data: { session },
         } = await supabase.auth.getSession()
-        
+
         // Agregar logs para diagnóstico
         console.log("Estado de sesión:", session ? "Válida" : "Inválida")
-        
+
         if (session) {
           console.log("Usuario autenticado:", session.user.email)
           console.log("Rol del usuario:", session.user.user_metadata?.role)
         }
-        
+
         setSessionStatus(session ? "valid" : "invalid")
       } catch (error) {
         console.error("Error al verificar sesión:", error)
@@ -111,7 +113,11 @@ export default function NominaPage() {
     try {
       // Cargar empleados
       const employeesData = await dbService.getEmployees()
-      setEmployees(employeesData)
+      const activeEmployees = employeesData.filter((emp) => emp.status === "active")
+      const inactiveEmps = employeesData.filter((emp) => emp.status === "inactive" && emp.terminationDate)
+
+      setEmployees(activeEmployees)
+      setInactiveEmployees(inactiveEmps)
 
       // Cargar nóminas según la pestaña activa
       if (activeTab === "pendientes" || activeTab === "liquidaciones") {
@@ -174,6 +180,45 @@ export default function NominaPage() {
       })
     } finally {
       setIsGeneratingPayrolls(false)
+    }
+  }
+
+  // Manejar generación de liquidaciones
+  const handleGenerateLiquidations = async () => {
+    if (inactiveEmployees.length === 0) {
+      toast({
+        title: "Información",
+        description: "No hay empleados inactivos con fecha de egreso para generar liquidaciones.",
+      })
+      return
+    }
+
+    try {
+      setIsGeneratingLiquidations(true)
+
+      // Generar liquidaciones para empleados inactivos
+      const result = await dbService.generateLiquidations(inactiveEmployees)
+
+      // Actualizar la lista de liquidaciones
+      const updatedLiquidations = await dbService.getLiquidations(false)
+      setLiquidations(updatedLiquidations)
+
+      toast({
+        title: "Éxito",
+        description: `Se generaron ${result.generated} liquidaciones. ${result.skipped} ya existían.`,
+      })
+
+      // Cambiar a la pestaña de liquidaciones
+      setActiveTab("liquidaciones")
+    } catch (error) {
+      console.error("Error al generar liquidaciones:", error)
+      toast({
+        title: "Error",
+        description: "No se pudieron generar las liquidaciones. Por favor, intente nuevamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsGeneratingLiquidations(false)
     }
   }
 
@@ -250,7 +295,11 @@ export default function NominaPage() {
   const handlePayLiquidation = async (liquidation: Liquidation) => {
     try {
       // Marcar liquidación como pagada
-      await dbService.updateLiquidation(liquidation.id, { isPaid: true, paymentDate: new Date().toISOString() })
+      await dbService.updateLiquidation({
+        ...liquidation,
+        isPaid: true,
+        paymentDate: new Date().toISOString(),
+      })
 
       toast({
         title: "Liquidación pagada",
@@ -410,7 +459,7 @@ export default function NominaPage() {
       accessorKey: "employeeId",
       header: "Empleado",
       cell: ({ row }) => {
-        const employee = employees.find((e) => e.id === row.original.employeeId)
+        const employee = [...employees, ...inactiveEmployees].find((e) => e.id === row.original.employeeId)
         return employee ? `${employee.firstName} ${employee.lastName}` : "Desconocido"
       },
     },
@@ -498,7 +547,7 @@ export default function NominaPage() {
       accessorKey: "employeeId",
       header: "Empleado",
       cell: ({ row }) => {
-        const employee = employees.find((e) => e.id === row.original.employeeId)
+        const employee = [...employees, ...inactiveEmployees].find((e) => e.id === row.original.employeeId)
         return employee ? `${employee.firstName} ${employee.lastName}` : "Desconocido"
       },
     },
@@ -682,6 +731,21 @@ export default function NominaPage() {
             <RefreshCw className={`mr-2 h-4 w-4 ${isGeneratingPayrolls ? "animate-spin" : ""}`} />
             {isGeneratingPayrolls ? "Generando..." : "Generar Nóminas"}
           </Button>
+
+          {activeTab === "liquidaciones" && (
+            <Button
+              variant="outline"
+              onClick={handleGenerateLiquidations}
+              disabled={isGeneratingLiquidations || inactiveEmployees.length === 0}
+            >
+              {isGeneratingLiquidations ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Calculator className="mr-2 h-4 w-4" />
+              )}
+              Generar Liquidaciones
+            </Button>
+          )}
 
           {activeTab === "pendientes" && (
             <Button variant={showAllPending ? "default" : "outline"} onClick={handleToggleShowAllPending}>
@@ -1221,6 +1285,7 @@ export default function NominaPage() {
     </DashboardLayout>
   )
 }
+
 
 
 
