@@ -10,7 +10,18 @@ import { DataTable } from "@/components/data-table"
 import { dbService } from "@/lib/db-service"
 import { formatCurrency, formatDate, generatePayslip } from "@/lib/export-utils"
 import { useToast } from "@/components/ui/use-toast"
-import { Download, RefreshCw, CheckCircle, FileText, Calendar, Eye, ArrowLeft, Calculator, Loader2 } from "lucide-react"
+import {
+  Download,
+  RefreshCw,
+  CheckCircle,
+  FileText,
+  Calendar,
+  Eye,
+  ArrowLeft,
+  Calculator,
+  Loader2,
+  Plus,
+} from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -205,7 +216,7 @@ export default function NominaPage() {
 
       toast({
         title: "Éxito",
-        description: `Se generaron ${result.generated} liquidaciones. ${result.skipped} ya existían.`,
+        description: `Se generaron ${result.generated} liquidaciones nuevas, se actualizaron ${result.updated} existentes y se omitieron ${result.skipped}.`,
       })
 
       // Cambiar a la pestaña de liquidaciones
@@ -587,9 +598,7 @@ export default function NominaPage() {
             variant="outline"
             size="sm"
             onClick={() => {
-              // Implementar vista de detalles de liquidación
-              setSelectedLiquidation(row.original)
-              setIsLiquidationDetailsDialogOpen(true)
+              router.push(`/nomina/liquidations/${row.original.id}`)
             }}
           >
             <FileText className="mr-1 h-4 w-4" />
@@ -878,6 +887,12 @@ export default function NominaPage() {
                 <CardDescription>Liquidaciones pendientes por fin de relación laboral</CardDescription>
               </CardHeader>
               <CardContent>
+                <div className="flex justify-end mb-4">
+                  <Button onClick={() => router.push("/nomina/liquidations/create")}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Nueva Liquidación
+                  </Button>
+                </div>
                 <DataTable
                   columns={liquidationsColumns}
                   data={liquidations}
@@ -1553,14 +1568,3 @@ export default function NominaPage() {
     </DashboardLayout>
   )
 }
-
-
-
-
-
-
-
-
-
-
-
