@@ -5,142 +5,147 @@ import { DashboardLayout } from "@/app/dashboard-layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { AuditList } from "@/components/auditorias/audit-list"
-import { DataTable } from "@/components/data-table"
 import { db } from "@/lib/db"
-import { exportToCSV, formatDate } from "@/lib/export-utils"
+import { exportToCSV } from "@/lib/export-utils"
+import { formatDisplayDate } from "@/lib/date-utils" // Importamos la función correcta
 import type { Audit, AuditItem } from "@/types"
 import type { ColumnDef } from "@tanstack/react-table"
-import { Download, Plus, Calendar, FileText, List, Eye, Settings } from 'lucide-react'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { Download, Plus, Calendar, FileText, List, Eye, Settings } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { DatePicker } from "@/components/date-picker"
-import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/components/ui/use-toast"
 import Link from "next/link"
-import jsPDF from 'jspdf'
-import 'jspdf-autotable'
+import jsPDF from "jspdf"
+import "jspdf-autotable"
+
+// Función para formatear fechas usando nuestra utilidad
+const formatDate = (dateString) => {
+  return formatDisplayDate(dateString)
+}
 
 // Función para generar el reporte de auditoría en PDF
 const generateAuditReport = (audit) => {
   try {
     if (!audit) {
-      console.error("No se proporcionó una auditoría para generar el reporte");
-      return;
+      console.error("No se proporcionó una auditoría para generar el reporte")
+      return
     }
 
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    
+    const doc = new jsPDF()
+    const pageWidth = doc.internal.pageSize.getWidth()
+
     // Título
-    doc.setFontSize(18);
-    doc.text("Reporte de Auditoría", pageWidth / 2, 15, { align: "center" });
-    
+    doc.setFontSize(18)
+    doc.text("Reporte de Auditoría", pageWidth / 2, 15, { align: "center" })
+
     // Información general
-    doc.setFontSize(12);
-    doc.text(`Local: ${audit.localName || audit.local || "No especificado"}`, 14, 30);
-    doc.text(`Fecha: ${formatDate(audit.date)}`, 14, 37);
-    
-    const turnoText = audit.shift === "morning" 
-      ? "Mañana" 
-      : audit.shift === "afternoon" 
-        ? "Tarde" 
-        : audit.shift === "night" 
-          ? "Noche" 
-          : "No especificado";
-    
-    doc.text(`Turno: ${turnoText}`, 14, 44);
-    doc.text(`Auditor: ${audit.auditorName || audit.auditor || "No especificado"}`, 14, 51);
-    doc.text(`Tipo: ${audit.type === "rapida" ? "Auditoría Rápida" : "Auditoría Detallada"}`, 14, 58);
-    
+    doc.setFontSize(12)
+    doc.text(`Local: ${audit.localName || audit.local || "No especificado"}`, 14, 30)
+    doc.text(`Fecha: ${formatDate(audit.date)}`, 14, 37)
+
+    const turnoText =
+      audit.shift === "morning"
+        ? "Mañana"
+        : audit.shift === "afternoon"
+          ? "Tarde"
+          : audit.shift === "night"
+            ? "Noche"
+            : "No especificado"
+
+    doc.text(`Turno: ${turnoText}`, 14, 44)
+    doc.text(`Auditor: ${audit.auditorName || audit.auditor || "No especificado"}`, 14, 51)
+    doc.text(`Tipo: ${audit.type === "rapida" ? "Auditoría Rápida" : "Auditoría Detallada"}`, 14, 58)
+
     // Puntaje total
-    doc.setFontSize(14);
-    doc.text("Puntaje Total", pageWidth / 2, 70, { align: "center" });
-    doc.setFontSize(12);
-    doc.text(`${audit.totalScore} / ${audit.maxScore} (${Math.round((audit.totalScore / audit.maxScore) * 100)}%)`, pageWidth / 2, 77, { align: "center" });
-    
+    doc.setFontSize(14)
+    doc.text("Puntaje Total", pageWidth / 2, 70, { align: "center" })
+    doc.setFontSize(12)
+    doc.text(
+      `${audit.totalScore} / ${audit.maxScore} (${Math.round((audit.totalScore / audit.maxScore) * 100)}%)`,
+      pageWidth / 2,
+      77,
+      { align: "center" },
+    )
+
     // Línea separadora
-    doc.line(14, 85, pageWidth - 14, 85);
-    
+    doc.line(14, 85, pageWidth - 14, 85)
+
     // Categorías y puntajes
     if (audit.categories && audit.categories.length > 0) {
-      doc.setFontSize(14);
-      doc.text("Detalle por Categorías", pageWidth / 2, 95, { align: "center" });
-      
-      let yPos = 105;
-      
+      doc.setFontSize(14)
+      doc.text("Detalle por Categorías", pageWidth / 2, 95, { align: "center" })
+
+      let yPos = 105
+
       for (const category of audit.categories) {
         // Verificar si hay espacio suficiente en la página actual
         if (yPos > 270) {
-          doc.addPage();
-          yPos = 20;
+          doc.addPage()
+          yPos = 20
         }
-        
-        doc.setFontSize(12);
-        doc.text(`${category.name}: ${category.score} / ${category.maxScore} (${Math.round((category.score / category.maxScore) * 100)}%)`, 14, yPos);
-        yPos += 10;
-        
+
+        doc.setFontSize(12)
+        doc.text(
+          `${category.name}: ${category.score} / ${category.maxScore} (${Math.round((category.score / category.maxScore) * 100)}%)`,
+          14,
+          yPos,
+        )
+        yPos += 10
+
         // Tabla de items
         if (category.items && category.items.length > 0) {
-          const tableData = category.items.map(item => [
+          const tableData = category.items.map((item) => [
             item.name,
             `${item.score} / ${item.maxScore}`,
-            item.observations || ""
-          ]);
-          
+            item.observations || "",
+          ])
+
           doc.autoTable({
             startY: yPos,
             head: [["Ítem", "Puntaje", "Observaciones"]],
             body: tableData,
             margin: { left: 14, right: 14 },
             headStyles: { fillColor: [100, 100, 100] },
-            styles: { fontSize: 10 }
-          });
-          
-          yPos = doc.lastAutoTable.finalY + 15;
+            styles: { fontSize: 10 },
+          })
+
+          yPos = doc.lastAutoTable.finalY + 15
         } else {
-          yPos += 5;
+          yPos += 5
         }
       }
     }
-    
+
     // Observaciones generales
     if (audit.generalObservations) {
       // Verificar si hay espacio suficiente en la página actual
       if (yPos > 240) {
-        doc.addPage();
-        yPos = 20;
+        doc.addPage()
+        yPos = 20
       }
-      
-      doc.setFontSize(14);
-      doc.text("Observaciones Generales", 14, yPos);
-      yPos += 10;
-      
-      doc.setFontSize(10);
-      const splitText = doc.splitTextToSize(audit.generalObservations, pageWidth - 28);
-      doc.text(splitText, 14, yPos);
+
+      doc.setFontSize(14)
+      doc.text("Observaciones Generales", 14, yPos)
+      yPos += 10
+
+      doc.setFontSize(10)
+      const splitText = doc.splitTextToSize(audit.generalObservations, pageWidth - 28)
+      doc.text(splitText, 14, yPos)
     }
-    
+
     // Guardar el PDF
-    const fileName = `auditoria_${audit.localName || audit.local || "local"}_${formatDate(audit.date).replace(/\//g, "-")}.pdf`;
-    doc.save(fileName);
-    
-    return fileName;
+    const fileName = `auditoria_${audit.localName || audit.local || "local"}_${formatDate(audit.date).replace(/\//g, "-")}.pdf`
+    doc.save(fileName)
+
+    return fileName
   } catch (error) {
-    console.error("Error al generar reporte de auditoría:", error);
-    throw error;
+    console.error("Error al generar reporte de auditoría:", error)
+    throw error
   }
-};
+}
 
 export default function AuditoriasPage() {
   const [audits, setAudits] = useState<Audit[]>([])
@@ -317,11 +322,11 @@ export default function AuditoriasPage() {
       accessorKey: "shift",
       header: "Turno",
       cell: ({ row }) => {
-        const shift = row.original.shift?.toLowerCase() || "";
-        if (shift === "morning") return "Mañana";
-        if (shift === "afternoon") return "Tarde";
-        if (shift === "night") return "Noche";
-        return row.original.shift || "No especificado";
+        const shift = row.original.shift?.toLowerCase() || ""
+        if (shift === "morning") return "Mañana"
+        if (shift === "afternoon") return "Tarde"
+        if (shift === "night") return "Noche"
+        return row.original.shift || "No especificado"
       },
     },
     {
@@ -344,8 +349,8 @@ export default function AuditoriasPage() {
           <div className="flex items-center space-x-2">
             <Badge className={getBadgeColor(row.original.totalScore, maxScore)}>{percentage}%</Badge>
             <div className="w-24 bg-white border rounded-full h-2.5">
-              <div 
-                className={`h-2.5 rounded-full ${getProgressColor(row.original.totalScore, maxScore)}`} 
+              <div
+                className={`h-2.5 rounded-full ${getProgressColor(row.original.totalScore, maxScore)}`}
                 style={{ width: `${percentage}%` }}
               ></div>
             </div>
@@ -473,7 +478,8 @@ export default function AuditoriasPage() {
                     <h3 className="text-sm font-medium">Responsables</h3>
                     <div className="mt-2 space-y-1 text-sm">
                       <p>
-                        <span className="font-medium">Auditor:</span> {selectedAudit.auditorName || selectedAudit.auditor}
+                        <span className="font-medium">Auditor:</span>{" "}
+                        {selectedAudit.auditorName || selectedAudit.auditor}
                       </p>
                       {selectedAudit.managerName && (
                         <p>
@@ -491,7 +497,9 @@ export default function AuditoriasPage() {
                       <Badge className={getBadgeColor(selectedAudit.totalScore, selectedAudit.maxScore || 150)}>
                         {Math.round((selectedAudit.totalScore / (selectedAudit.maxScore || 150)) * 100)}%
                       </Badge>
-                      <span className="text-sm">{selectedAudit.totalScore}/{selectedAudit.maxScore || 150} puntos</span>
+                      <span className="text-sm">
+                        {selectedAudit.totalScore}/{selectedAudit.maxScore || 150} puntos
+                      </span>
                     </div>
                   </div>
                   <div className="mt-2 bg-white border rounded-full h-2.5">
@@ -663,6 +671,7 @@ export default function AuditoriasPage() {
     </DashboardLayout>
   )
 }
+
 
 
 

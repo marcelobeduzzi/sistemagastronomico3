@@ -126,32 +126,38 @@ export default function NuevaAuditoriaPage() {
     })),
   })
 
-  // Cargar configuración de auditoría
+  // Cargar configuración de auditoría - Modificado para manejar el error
   useEffect(() => {
     const fetchAuditConfig = async () => {
       try {
-        const config = await db.auditConfig.findFirst()
-        if (config) {
-          setAuditConfig(config)
+        // Verificar si existe el método findFirst en auditConfig
+        if (typeof db.auditConfig?.findFirst === "function") {
+          const config = await db.auditConfig.findFirst()
+          if (config) {
+            setAuditConfig(config)
 
-          // Si hay categorías configuradas, usarlas
-          if (config.categories && config.categories.length > 0) {
-            setAuditData((prev) => ({
-              ...prev,
-              categories: config.categories.map((category) => ({
-                ...category,
-                score: 0,
-                items: category.items.map((item) => ({
-                  ...item,
+            // Si hay categorías configuradas, usarlas
+            if (config.categories && config.categories.length > 0) {
+              setAuditData((prev) => ({
+                ...prev,
+                categories: config.categories.map((category) => ({
+                  ...category,
                   score: 0,
-                  observations: "",
+                  items: category.items.map((item) => ({
+                    ...item,
+                    score: 0,
+                    observations: "",
+                  })),
                 })),
-              })),
-            }))
+              }))
+            }
           }
+        } else {
+          console.log("Usando categorías predefinidas (auditConfig no disponible)")
         }
       } catch (error) {
         console.error("Error al cargar configuración de auditoría:", error)
+        // Continuar con las categorías predefinidas
       }
     }
 
@@ -423,7 +429,6 @@ export default function NuevaAuditoriaPage() {
         auditorName: auditData.auditor,
         managerName: auditData.managerName,
         // Usar la nueva función para preparar la fecha para la base de datos
-        // En lugar de: date: new Date(auditData.date).toISOString(),
         date: prepareForDatabase(auditData.date),
         shift: auditData.shift,
         generalObservations: auditData.generalObservations,
@@ -744,6 +749,7 @@ export default function NuevaAuditoriaPage() {
     </DashboardLayout>
   )
 }
+
 
 
 

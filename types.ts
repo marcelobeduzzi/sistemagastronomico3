@@ -1,6 +1,16 @@
-// Agregar estos tipos al archivo types.ts existente
+export type Employee = {
+  id: string
+  firstName: string
+  lastName: string
+  documentId: string
+  position: string
+  local: string
+  hireDate: string
+  terminationDate?: string
+  status: string
+}
 
-export interface Payroll {
+export type Payroll = {
   id: string
   employeeId: string
   month: number
@@ -23,7 +33,7 @@ export interface Payroll {
   updatedAt: string
 }
 
-export interface PayrollDetail {
+export type PayrollDetail = {
   id: string
   payrollId: string
   concept: string
@@ -34,7 +44,7 @@ export interface PayrollDetail {
   updatedAt: string
 }
 
-export interface Liquidation {
+export type Liquidation = {
   id: string
   employeeId: string
   terminationDate: string
@@ -53,4 +63,86 @@ export interface Liquidation {
   createdAt: string
   updatedAt: string
 }
+
+export type Audit = {
+  id: string
+  localId: string
+  localName: string
+  auditor: string
+  auditorName?: string
+  date: string
+  shift: string
+  notes?: string
+  observations?: string
+  generalObservations?: string
+  items?: AuditItem[]
+  totalScore: number
+  maxScore: number
+  percentage: number
+  type: "rapida" | "detallada"
+  categories?: AuditCategory[]
+  managerName?: string
+}
+
+export type AuditItem = {
+  id: string
+  name: string
+  value: number
+  completed: boolean
+  category: string
+  score?: number
+  maxScore?: number
+  observations?: string
+}
+
+export type AuditCategory = {
+  id: string
+  name: string
+  score: number
+  maxScore: number
+  items: AuditItem[]
+}
+
+export type Balance = {
+  id: string
+  local: string
+  month: number
+  year: number
+  counterSales: number
+  deliverySales: number
+  totalIncome: number
+  payrollExpenses: number
+  rentExpenses: number
+  maintenanceExpenses: number
+  suppliesExpenses: number
+  repairsExpenses: number
+  otherExpenses: number
+  totalExpenses: number
+  netProfit: number
+}
+
+export type Order = {
+  id: string
+  date: string
+  local: string
+  localName?: string
+  clientName?: string
+  clientPhone?: string
+  clientAddress?: string
+  items: OrderItem[]
+  total: number
+  notes?: string
+  observations?: string
+  status: string
+  createdAt?: string
+}
+
+export type OrderItem = {
+  id: string
+  orderId: string
+  productName: string
+  quantity: number
+  price: number
+}
+
 
