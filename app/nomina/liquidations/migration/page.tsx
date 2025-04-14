@@ -256,6 +256,32 @@ export default function LiquidationMigration() {
     }
   }
 
+  // Función para calcular el monto total de la liquidación
+  const calculateTotalAmount = (liquidation: any, daysToPayInLastMonth: number): number => {
+    // Calcular el pago por días del último mes
+    const baseSalary = liquidation.base_salary || 0
+    const dailySalary = baseSalary / 30
+    const lastMonthPayment = dailySalary * daysToPayInLastMonth
+
+    // Calcular el nuevo total
+    let totalAmount = lastMonthPayment
+
+    // Agregar vacaciones proporcionales si se incluyen
+    if (liquidation.include_vacation) {
+      totalAmount += liquidation.proportional_vacation || 0
+    }
+
+    // Agregar aguinaldo proporcional si se incluye
+    if (liquidation.include_bonus) {
+      totalAmount += liquidation.proportional_bonus || 0
+    }
+
+    // Siempre agregar indemnización
+    totalAmount += liquidation.compensation_amount || 0
+
+    return totalAmount
+  }
+
   return (
     <div className="container mx-auto py-6">
       <h1 className="text-2xl font-bold mb-6">Migración de Liquidaciones</h1>
@@ -316,18 +342,106 @@ export default function LiquidationMigration() {
                   setLoading(true)
                   addLog("Iniciando actualización de días a pagar en liquidaciones...")
                   try {
-                    //const result = await dbService.updateLiquidationDaysToPayInLastMonth();
-                    const result = { updated: 0, failed: 0, skipped: 0 } // Placeholder
-                    addLog(
-                      `Actualización completada: ${result.updated} actualizadas, ${result.failed} fallidas, ${result.skipped} omitidas`,
-                    )
+                    // Obtener todas las liquidaciones directamente
+                    const { data: liquidations, error: fetchError } = await supabase.from("liquidations").select("*")
+
+                    if (fetchError) {
+                      addLog(`Error al obtener liquidaciones: ${fetchError.message}`)
+                      throw fetchError
+                    }
+
+                    addLog(`Se encontraron ${liquidations?.length || 0} liquidaciones en total`)
+
+                    if (!liquidations || liquidations.length === 0) {
+                      addLog("No hay liquidaciones para actualizar")
+                      toast({
+                        title: "Información",
+                        description: "No se encontraron liquidaciones para actualizar",
+                      })
+                      setLoading(false)
+                      return
+                    }
+
+                    let updated = 0
+                    let failed = 0
+                    const skipped = 0
+
+                    // Procesar cada liquidación
+                    for (const liquidation of liquidations) {
+                      try {
+                        addLog(`Procesando liquidación ID: ${liquidation.id} para empleado: ${liquidation.employee_id}`)
+
+                        // Obtener información del empleado
+                        const { data: employee, error: employeeError } = await supabase
+                          .from("employees")
+                          .select("hire_date, termination_date")
+                          .eq("id", liquidation.employee_id)
+                          .single()
+
+                        if (employeeError) {
+                          addLog(
+                            `Error al obtener empleado para liquidación ${liquidation.id}: ${employeeError.message}`,
+                          )
+                          failed++
+                          continue
+                        }
+
+                        if (!employee) {
+                          addLog(
+                            `No se encontró el empleado ${liquidation.employee_id} para la liquidación ${liquidation.id}`,
+                          )
+                          failed++
+                          continue
+                        }
+
+                        addLog(
+                          `Empleado encontrado: fecha contratación ${employee.hire_date}, fecha terminación ${employee.termination_date || liquidation.termination_date}`,
+                        )
+
+                        // Usar la fecha de terminación del empleado o de la liquidación
+                        const terminationDate = new Date(employee.termination_date || liquidation.termination_date)
+
+                        // Calcular días trabajados en el último mes
+                        const lastDayOfMonth = new Date(
+                          terminationDate.getFullYear(),
+                          terminationDate.getMonth() + 1,
+                          0,
+                        ).getDate()
+                        const daysInLastMonth = Math.min(terminationDate.getDate(), lastDayOfMonth)
+
+                        addLog(`Días calculados para el último mes: ${daysInLastMonth}`)
+
+                        // Actualizar la liquidación
+                        const { error: updateError } = await supabase
+                          .from("liquidations")
+                          .update({
+                            days_to_pay_in_last_month: daysInLastMonth,
+                            // Recalcular el monto total
+                            total_amount: calculateTotalAmount(liquidation, daysInLastMonth),
+                          })
+                          .eq("id", liquidation.id)
+
+                        if (updateError) {
+                          addLog(`Error al actualizar liquidación ${liquidation.id}: ${updateError.message}`)
+                          failed++
+                        } else {
+                          addLog(`Liquidación ${liquidation.id} actualizada con ${daysInLastMonth} días`)
+                          updated++
+                        }
+                      } catch (error: any) {
+                        addLog(`Error al procesar liquidación ${liquidation.id}: ${error.message}`)
+                        failed++
+                      }
+                    }
+
+                    addLog(`Actualización completada: ${updated} actualizadas, ${failed} fallidas, ${skipped} omitidas`)
                     toast({
                       title: "Actualización completada",
-                      description: `Se actualizaron ${result.updated} liquidaciones con los días trabajados en el último mes.`,
+                      description: `Se actualizaron ${updated} liquidaciones con los días trabajados en el último mes.`,
                     })
                   } catch (error: any) {
                     console.error("Error:", error)
-                    addLog(`Error: ${error.message}`)
+                    addLog(`Error general: ${error.message}`)
                     toast({
                       title: "Error",
                       description: "No se pudieron actualizar las liquidaciones",
@@ -412,5 +526,6 @@ export default function LiquidationMigration() {
     </div>
   )
 }
+
 
 
