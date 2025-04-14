@@ -546,7 +546,7 @@ export default function NominaPage() {
     },
     {
       accessorKey: "compensationAmount",
-      header: "Indemnización",
+      header: "Pago Último Mes",
       cell: ({ row }) => formatCurrency(row.original.compensationAmount),
     },
     {
@@ -1359,3 +1359,4 @@ export default function NominaPage() {
     </DashboardLayout>
   )
 }
+

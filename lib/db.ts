@@ -1116,7 +1116,9 @@ class DatabaseService {
       // Obtener todas las liquidaciones
       const { data: liquidations, error: fetchError } = await this.supabase
         .from("liquidations")
-        .select("id, employee_id, termination_date")
+        .select(
+          "id, employee_id, termination_date, include_vacation, include_bonus, proportional_vacation, proportional_bonus",
+        )
 
       if (fetchError) throw fetchError
 
@@ -1125,6 +1127,8 @@ class DatabaseService {
         return { updated: 0, failed: 0, skipped: 0 }
       }
 
+      console.log(`Se encontraron ${liquidations.length} liquidaciones para procesar`)
+
       let updated = 0
       let failed = 0
       const skipped = 0
@@ -1132,10 +1136,12 @@ class DatabaseService {
       // Procesar cada liquidación
       for (const liquidation of liquidations) {
         try {
+          console.log(`Procesando liquidación ID: ${liquidation.id} para empleado: ${liquidation.employee_id}`)
+
           // Obtener información del empleado
           const { data: employee, error: employeeError } = await this.supabase
             .from("employees")
-            .select("hire_date")
+            .select("hire_date, salary")
             .eq("id", liquidation.employee_id)
             .single()
 
@@ -1145,27 +1151,65 @@ class DatabaseService {
             continue
           }
 
+          if (!employee) {
+            console.log(`No se encontró el empleado ${liquidation.employee_id} para la liquidación ${liquidation.id}`)
+            failed++
+            continue
+          }
+
+          console.log(`Empleado encontrado - Fecha contratación: ${employee.hire_date}, Salario: ${employee.salary}`)
+
           // Calcular los días a pagar del último mes
           const terminationDate = new Date(liquidation.termination_date)
-          const lastMonthStart = new Date(terminationDate.getFullYear(), terminationDate.getMonth(), 1)
 
-          // Calcular días trabajados en el último mes
-          const daysInLastMonth = Math.min(
-            terminationDate.getDate(),
-            new Date(terminationDate.getFullYear(), terminationDate.getMonth() + 1, 0).getDate(),
-          )
+          // Obtener el último día del mes
+          const lastDayOfMonth = new Date(terminationDate.getFullYear(), terminationDate.getMonth() + 1, 0).getDate()
+
+          // Calcular días trabajados en el último mes (hasta la fecha de terminación)
+          const daysInLastMonth = Math.min(terminationDate.getDate(), lastDayOfMonth)
+
+          console.log(`Días trabajados en el último mes: ${daysInLastMonth}`)
+
+          // Calcular el valor diario del salario
+          const dailySalary = (employee.salary || 0) / 30
+          console.log(`Salario diario: ${dailySalary}`)
+
+          // Calcular el monto de compensación (pago por días trabajados en el último mes)
+          const compensationAmount = dailySalary * daysInLastMonth
+          console.log(`Monto de compensación calculado: ${compensationAmount}`)
+
+          // Calcular el nuevo monto total
+          let totalAmount = compensationAmount
+
+          // Agregar vacaciones proporcionales si se incluyen
+          if (liquidation.include_vacation) {
+            totalAmount += liquidation.proportional_vacation || 0
+            console.log(`Incluyendo vacaciones proporcionales: ${liquidation.proportional_vacation}`)
+          }
+
+          // Agregar aguinaldo proporcional si se incluye
+          if (liquidation.include_bonus) {
+            totalAmount += liquidation.proportional_bonus || 0
+            console.log(`Incluyendo aguinaldo proporcional: ${liquidation.proportional_bonus}`)
+          }
+
+          console.log(`Nuevo monto total calculado: ${totalAmount}`)
 
           // Actualizar la liquidación
           const { error: updateError } = await this.supabase
             .from("liquidations")
-            .update({ days_to_pay_in_last_month: daysInLastMonth })
+            .update({
+              days_to_pay_in_last_month: daysInLastMonth,
+              compensation_amount: compensationAmount,
+              total_amount: totalAmount,
+            })
             .eq("id", liquidation.id)
 
           if (updateError) {
             console.error(`Error al actualizar liquidación ${liquidation.id}:`, updateError)
             failed++
           } else {
-            console.log(`Liquidación ${liquidation.id} actualizada con ${daysInLastMonth} días`)
+            console.log(`Liquidación ${liquidation.id} actualizada correctamente`)
             updated++
           }
         } catch (error) {
@@ -1934,4 +1978,5 @@ export const db = {
 
 // Exportar también el servicio original para mantener compatibilidad
 export { dbService }
+
 

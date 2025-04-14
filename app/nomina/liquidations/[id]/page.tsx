@@ -156,7 +156,7 @@ export default function LiquidationDetails({ params }) {
         description: "La liquidación ha sido eliminada exitosamente",
       })
 
-      router.push("/nomina/liquidations")
+      router.push("/dashboard/liquidations")
     } catch (error) {
       console.error("Error deleting liquidation:", error)
       toast({
@@ -179,7 +179,7 @@ export default function LiquidationDetails({ params }) {
     return (
       <div className="container mx-auto py-6">
         <h1 className="text-2xl font-bold mb-6">Liquidación no encontrada</h1>
-        <Button onClick={() => router.push("/nomina/liquidations")}>Volver a Liquidaciones</Button>
+        <Button onClick={() => router.push("/dashboard/liquidations")}>Volver a Liquidaciones</Button>
       </div>
     )
   }
@@ -193,7 +193,7 @@ export default function LiquidationDetails({ params }) {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Detalles de Liquidación</h1>
         <div className="flex space-x-2">
-          <Button variant="outline" onClick={() => router.push("/nomina/liquidations")}>
+          <Button variant="outline" onClick={() => router.push("/dashboard/liquidations")}>
             Volver
           </Button>
           {!liquidation.is_paid && (
@@ -270,12 +270,6 @@ export default function LiquidationDetails({ params }) {
                 {liquidation.days_to_pay_in_last_month > 0 && (
                   <div className="flex justify-between">
                     <span>Pago por {liquidation.days_to_pay_in_last_month} días del último mes:</span>
-                    <span>${lastMonthPayment.toFixed(2)}</span>
-                  </div>
-                )}
-                {liquidation.compensation_amount > 0 && (
-                  <div className="flex justify-between">
-                    <span>Compensación:</span>
                     <span>${liquidation.compensation_amount.toFixed(2)}</span>
                   </div>
                 )}
@@ -419,3 +413,5 @@ export default function LiquidationDetails({ params }) {
     </div>
   )
 }
+
+
