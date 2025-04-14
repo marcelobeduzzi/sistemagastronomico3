@@ -15,11 +15,19 @@ export function formatDisplayDate(dateString: string | Date | undefined, formatS
     let date: Date
 
     if (typeof dateString === "string") {
+      // Si la fecha es solo YYYY-MM-DD (sin tiempo)
+      if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        // Dividir la fecha en año, mes y día
+        const [year, month, day] = dateString.split("-").map(Number)
+        // Crear una fecha usando la zona horaria local (sin ajustes UTC)
+        date = new Date(year, month - 1, day, 12, 0, 0)
+      }
       // Si la fecha incluye tiempo (T), puede haber problemas de zona horaria
-      if (dateString.includes("T")) {
-        // Crear fecha usando el constructor Date que respeta la zona horaria local
+      else if (dateString.includes("T")) {
+        // Extraer solo la parte de fecha
         const [year, month, day] = dateString.split("T")[0].split("-").map(Number)
-        date = new Date(year, month - 1, day) // month es 0-indexed en JavaScript
+        // Crear fecha usando el constructor Date con hora del mediodía para evitar problemas de zona horaria
+        date = new Date(year, month - 1, day, 12, 0, 0)
       } else {
         // Si no incluye tiempo, simplemente parseamos la fecha
         date = parseISO(dateString)
@@ -133,3 +141,4 @@ export function correctDateOffset(dateString: string | undefined): Date | null {
     return null
   }
 }
+
