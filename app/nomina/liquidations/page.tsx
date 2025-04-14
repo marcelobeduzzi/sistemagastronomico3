@@ -1,163 +1,435 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { DataTable } from "@/components/data-table"
-import { toast } from "@/components/ui/use-toast"
-import { formatCurrency, formatDate } from "@/lib/export-utils"
-import { Plus, FileText, CheckCircle, Loader2 } from "lucide-react"
-import { StatusBadge } from "@/components/status-badge"
-import type { ColumnDef } from "@tanstack/react-table"
-import type { Liquidation } from "@/types"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { Loader2, CheckCircle, AlertCircle, FileText } from "lucide-react"
+import { generateLiquidations, markLiquidationsAsPaid } from "@/lib/liquidation-service"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
+import { format } from "date-fns"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { formatCurrency } from "@/lib/utils"
 
 export default function LiquidationsPage() {
-  const router = useRouter()
-  const supabase = createClientComponentClient()
-  const [liquidations, setLiquidations] = useState<Liquidation[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [pendingLiquidations, setPendingLiquidations] = useState<any[]>([])
+  const [paidLiquidations, setPaidLiquidations] = useState<any[]>([])
+  const [loadingLiquidations, setLoadingLiquidations] = useState(false)
+  const [result, setResult] = useState<any>(null)
+  const [selectedLiquidations, setSelectedLiquidations] = useState<string[]>([])
+  const [paymentDetails, setPaymentDetails] = useState({
+    payment_date: format(new Date(), "yyyy-MM-dd"),
+    payment_method: "transfer",
+    payment_reference: "",
+    notes: "",
+  })
+  const [paymentLoading, setPaymentLoading] = useState(false)
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
 
   useEffect(() => {
-    fetchLiquidations()
+    loadLiquidations()
   }, [])
 
-  const fetchLiquidations = async () => {
+  const loadLiquidations = async () => {
+    setLoadingLiquidations(true)
     try {
-      setLoading(true)
-      const { data, error } = await supabase
+      const supabase = createClientComponentClient()
+
+      // Cargar liquidaciones pendientes
+      const { data: pending, error: pendingError } = await supabase
         .from("liquidations")
-        .select("*")
+        .select(`
+          id, 
+          employee_id, 
+          termination_date, 
+          base_salary,
+          proportional_vacation,
+          proportional_bonus,
+          compensation_amount,
+          total_amount,
+          employees (
+            first_name,
+            last_name
+          )
+        `)
+        .eq("is_paid", false)
         .order("termination_date", { ascending: false })
 
-      if (error) throw error
-      setLiquidations(data || [])
+      if (pendingError) throw pendingError
+      setPendingLiquidations(pending || [])
+
+      // Cargar liquidaciones pagadas
+      const { data: paid, error: paidError } = await supabase
+        .from("liquidations")
+        .select(`
+          id, 
+          employee_id, 
+          termination_date, 
+          payment_date,
+          payment_method,
+          total_amount,
+          employees (
+            first_name,
+            last_name
+          )
+        `)
+        .eq("is_paid", true)
+        .order("payment_date", { ascending: false })
+
+      if (paidError) throw paidError
+      setPaidLiquidations(paid || [])
     } catch (error) {
-      console.error("Error fetching liquidations:", error)
-      toast({
-        title: "Error",
-        description: "No se pudieron cargar las liquidaciones",
-        variant: "destructive",
-      })
+      console.error("Error al cargar liquidaciones:", error)
+    } finally {
+      setLoadingLiquidations(false)
+    }
+  }
+
+  const handleGenerateLiquidations = async () => {
+    setLoading(true)
+    try {
+      const result = await generateLiquidations()
+      setResult(result)
+
+      if (result.success) {
+        // Recargar liquidaciones si se generaron nuevas
+        if (result.generated > 0 || result.updated > 0) {
+          await loadLiquidations()
+        }
+      }
+    } catch (error) {
+      console.error("Error:", error)
+      setResult({ success: false, error: String(error) })
     } finally {
       setLoading(false)
     }
   }
 
-  const handlePayLiquidation = async (liquidation: Liquidation) => {
-    try {
-      const { error } = await supabase
-        .from("liquidations")
-        .update({
-          is_paid: true,
-          payment_date: new Date().toISOString(),
-        })
-        .eq("id", liquidation.id)
+  const handleSelectLiquidation = (liquidationId: string) => {
+    setSelectedLiquidations((prev) =>
+      prev.includes(liquidationId) ? prev.filter((id) => id !== liquidationId) : [...prev, liquidationId],
+    )
+  }
 
-      if (error) throw error
-
-      toast({
-        title: "Liquidación pagada",
-        description: "La liquidación ha sido marcada como pagada",
-      })
-
-      fetchLiquidations()
-    } catch (error) {
-      console.error("Error paying liquidation:", error)
-      toast({
-        title: "Error",
-        description: "No se pudo procesar el pago",
-        variant: "destructive",
-      })
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedLiquidations(pendingLiquidations.map((liq) => liq.id))
+    } else {
+      setSelectedLiquidations([])
     }
   }
 
-  const columns: ColumnDef<Liquidation>[] = [
-    {
-      accessorKey: "employee_id",
-      header: "Empleado",
-      cell: ({ row }) => {
-        // En un caso real, aquí buscarías el nombre del empleado
-        return "Empleado " + row.original.employee_id
-      },
-    },
-    {
-      accessorKey: "termination_date",
-      header: "Fecha de Egreso",
-      cell: ({ row }) => formatDate(row.original.termination_date),
-    },
-    {
-      accessorKey: "worked_days",
-      header: "Días Trabajados",
-      cell: ({ row }) => `${row.original.worked_months} meses, ${row.original.worked_days} días`,
-    },
-    {
-      accessorKey: "total_amount",
-      header: "Total a Pagar",
-      cell: ({ row }) => formatCurrency(row.original.total_amount),
-    },
-    {
-      accessorKey: "status",
-      header: "Estado",
-      cell: ({ row }) => {
-        if (row.original.is_paid) {
-          return <StatusBadge status="Pagado" className="bg-green-100 text-green-800" />
-        } else {
-          return <StatusBadge status="Pendiente" className="bg-red-100 text-red-800" />
-        }
-      },
-    },
-    {
-      id: "actions",
-      header: "Acciones",
-      cell: ({ row }) => (
-        <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm" onClick={() => router.push(`/nomina/liquidations/${row.original.id}`)}>
-            <FileText className="mr-1 h-4 w-4" />
-            Detalles
-          </Button>
-          {!row.original.is_paid && (
-            <Button variant="outline" size="sm" onClick={() => handlePayLiquidation(row.original)}>
-              <CheckCircle className="mr-1 h-4 w-4" />
-              Marcar Pagado
-            </Button>
-          )}
-        </div>
-      ),
-    },
-  ]
+  const handlePaymentSubmit = async () => {
+    if (selectedLiquidations.length === 0) return
+
+    setPaymentLoading(true)
+    try {
+      const result = await markLiquidationsAsPaid(selectedLiquidations, paymentDetails)
+
+      if (result.success) {
+        // Recargar liquidaciones
+        await loadLiquidations()
+        // Limpiar selección
+        setSelectedLiquidations([])
+        // Cerrar diálogo
+        setPaymentDialogOpen(false)
+      } else {
+        alert(`Error: ${result.error}`)
+      }
+    } catch (error) {
+      console.error("Error al procesar pago:", error)
+      alert(`Error: ${error}`)
+    } finally {
+      setPaymentLoading(false)
+    }
+  }
 
   return (
     <div className="container mx-auto py-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Liquidaciones</h1>
-        <Button onClick={() => router.push("/nomina/liquidations/create")}>
-          <Plus className="mr-2 h-4 w-4" />
-          Nueva Liquidación
+        <Button onClick={handleGenerateLiquidations} disabled={loading}>
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Generando...
+            </>
+          ) : (
+            "Generar Liquidaciones"
+          )}
         </Button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Historial de Liquidaciones</CardTitle>
-          <CardDescription>Gestione las liquidaciones de los empleados</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex justify-center items-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin" />
-            </div>
-          ) : (
-            <DataTable
-              columns={columns}
-              data={liquidations}
-              searchColumn="employee_id"
-              searchPlaceholder="Buscar empleado..."
-            />
-          )}
-        </CardContent>
-      </Card>
+      {result && (
+        <Alert variant={result.success ? "default" : "destructive"} className="mb-6">
+          {result.success ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
+          <AlertTitle>{result.success ? "Éxito" : "Error"}</AlertTitle>
+          <AlertDescription>
+            {result.success
+              ? `Proceso completado: ${result.generated} generadas, ${result.updated} actualizadas, ${result.skipped} omitidas.`
+              : result.error}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <Tabs defaultValue="pending">
+        <TabsList className="mb-4">
+          <TabsTrigger value="pending">Pendientes</TabsTrigger>
+          <TabsTrigger value="paid">Pagadas</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="pending">
+          <Card>
+            <CardHeader>
+              <CardTitle>Liquidaciones Pendientes</CardTitle>
+              <CardDescription>Liquidaciones generadas pendientes de pago</CardDescription>
+              {selectedLiquidations.length > 0 && (
+                <div className="flex justify-end">
+                  <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button>Marcar como Pagadas ({selectedLiquidations.length})</Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Registrar Pago de Liquidaciones</DialogTitle>
+                        <DialogDescription>
+                          Complete los detalles del pago para las {selectedLiquidations.length} liquidaciones
+                          seleccionadas.
+                        </DialogDescription>
+                      </DialogHeader>
+
+                      <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="payment_date" className="text-right">
+                            Fecha de Pago
+                          </Label>
+                          <Input
+                            id="payment_date"
+                            type="date"
+                            value={paymentDetails.payment_date}
+                            onChange={(e) => setPaymentDetails({ ...paymentDetails, payment_date: e.target.value })}
+                            className="col-span-3"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="payment_method" className="text-right">
+                            Método de Pago
+                          </Label>
+                          <Select
+                            value={paymentDetails.payment_method}
+                            onValueChange={(value) => setPaymentDetails({ ...paymentDetails, payment_method: value })}
+                          >
+                            <SelectTrigger className="col-span-3">
+                              <SelectValue placeholder="Seleccione método de pago" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="cash">Efectivo</SelectItem>
+                              <SelectItem value="transfer">Transferencia</SelectItem>
+                              <SelectItem value="check">Cheque</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="payment_reference" className="text-right">
+                            Referencia
+                          </Label>
+                          <Input
+                            id="payment_reference"
+                            value={paymentDetails.payment_reference}
+                            onChange={(e) =>
+                              setPaymentDetails({ ...paymentDetails, payment_reference: e.target.value })
+                            }
+                            placeholder="Número de transferencia, cheque, etc."
+                            className="col-span-3"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="notes" className="text-right">
+                            Notas
+                          </Label>
+                          <Textarea
+                            id="notes"
+                            value={paymentDetails.notes}
+                            onChange={(e) => setPaymentDetails({ ...paymentDetails, notes: e.target.value })}
+                            placeholder="Observaciones adicionales"
+                            className="col-span-3"
+                          />
+                        </div>
+                      </div>
+
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>
+                          Cancelar
+                        </Button>
+                        <Button onClick={handlePaymentSubmit} disabled={paymentLoading}>
+                          {paymentLoading ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Procesando...
+                            </>
+                          ) : (
+                            "Confirmar Pago"
+                          )}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              )}
+            </CardHeader>
+            <CardContent>
+              {loadingLiquidations ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : pendingLiquidations.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">No hay liquidaciones pendientes</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[50px]">
+                          <Checkbox
+                            onCheckedChange={(checked: boolean) => handleSelectAll(checked)}
+                            checked={
+                              selectedLiquidations.length === pendingLiquidations.length &&
+                              pendingLiquidations.length > 0
+                            }
+                          />
+                        </TableHead>
+                        <TableHead>Empleado</TableHead>
+                        <TableHead>Fecha de Egreso</TableHead>
+                        <TableHead>Salario Base</TableHead>
+                        <TableHead>Vacaciones</TableHead>
+                        <TableHead>Aguinaldo</TableHead>
+                        <TableHead>Pago Último Mes</TableHead>
+                        <TableHead>Total</TableHead>
+                        <TableHead className="w-[100px]">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pendingLiquidations.map((liquidation) => (
+                        <TableRow key={liquidation.id}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedLiquidations.includes(liquidation.id)}
+                              onCheckedChange={() => handleSelectLiquidation(liquidation.id)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            {liquidation.employees?.first_name} {liquidation.employees?.last_name}
+                          </TableCell>
+                          <TableCell>
+                            {liquidation.termination_date
+                              ? format(new Date(liquidation.termination_date), "dd/MM/yyyy")
+                              : "-"}
+                          </TableCell>
+                          <TableCell>{formatCurrency(liquidation.base_salary)}</TableCell>
+                          <TableCell>{formatCurrency(liquidation.proportional_vacation)}</TableCell>
+                          <TableCell>{formatCurrency(liquidation.proportional_bonus)}</TableCell>
+                          <TableCell>{formatCurrency(liquidation.compensation_amount)}</TableCell>
+                          <TableCell className="font-medium">{formatCurrency(liquidation.total_amount)}</TableCell>
+                          <TableCell>
+                            <Button variant="ghost" size="icon" asChild>
+                              <a href={`/nomina/liquidations/${liquidation.id}`} target="_blank" rel="noreferrer">
+                                <FileText className="h-4 w-4" />
+                              </a>
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="paid">
+          <Card>
+            <CardHeader>
+              <CardTitle>Liquidaciones Pagadas</CardTitle>
+              <CardDescription>Historial de liquidaciones pagadas</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingLiquidations ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : paidLiquidations.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">No hay liquidaciones pagadas</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Empleado</TableHead>
+                        <TableHead>Fecha de Egreso</TableHead>
+                        <TableHead>Fecha de Pago</TableHead>
+                        <TableHead>Método de Pago</TableHead>
+                        <TableHead>Total</TableHead>
+                        <TableHead className="w-[100px]">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paidLiquidations.map((liquidation) => (
+                        <TableRow key={liquidation.id}>
+                          <TableCell>
+                            {liquidation.employees?.first_name} {liquidation.employees?.last_name}
+                          </TableCell>
+                          <TableCell>
+                            {liquidation.termination_date
+                              ? format(new Date(liquidation.termination_date), "dd/MM/yyyy")
+                              : "-"}
+                          </TableCell>
+                          <TableCell>
+                            {liquidation.payment_date ? format(new Date(liquidation.payment_date), "dd/MM/yyyy") : "-"}
+                          </TableCell>
+                          <TableCell>
+                            {liquidation.payment_method === "cash" && "Efectivo"}
+                            {liquidation.payment_method === "transfer" && "Transferencia"}
+                            {liquidation.payment_method === "check" && "Cheque"}
+                            {!liquidation.payment_method && "-"}
+                          </TableCell>
+                          <TableCell className="font-medium">{formatCurrency(liquidation.total_amount)}</TableCell>
+                          <TableCell>
+                            <Button variant="ghost" size="icon" asChild>
+                              <a href={`/nomina/liquidations/${liquidation.id}`} target="_blank" rel="noreferrer">
+                                <FileText className="h-4 w-4" />
+                              </a>
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
