@@ -20,7 +20,8 @@ import {
   ArrowLeft,
   Calculator,
   Loader2,
-  Plus,
+  PlusCircle,
+  Settings,
 } from "lucide-react"
 import {
   Dialog,
@@ -305,25 +306,13 @@ export default function NominaPage() {
 
   const handlePayLiquidation = async (liquidation: Liquidation) => {
     try {
-      // Marcar liquidación como pagada
-      await dbService.updateLiquidation({
-        ...liquidation,
-        isPaid: true,
-        paymentDate: new Date().toISOString(),
-      })
-
-      toast({
-        title: "Liquidación pagada",
-        description: "La liquidación ha sido marcada como pagada.",
-      })
-
-      // Recargar datos
-      loadData()
+      // Redirigir a la página de detalles de liquidación para registrar el pago
+      router.push(`/nomina/liquidations/${liquidation.id}`)
     } catch (error) {
-      console.error("Error al pagar liquidación:", error)
+      console.error("Error al navegar a la página de liquidación:", error)
       toast({
         title: "Error",
-        description: "No se pudo procesar el pago de la liquidación. Intente nuevamente.",
+        description: "No se pudo abrir la página de liquidación. Intente nuevamente.",
         variant: "destructive",
       })
     }
@@ -485,11 +474,6 @@ export default function NominaPage() {
       cell: ({ row }) => row.original.workedDays,
     },
     {
-      accessorKey: "lastMonthSalary",
-      header: "Sueldo Último Mes",
-      cell: ({ row }) => formatCurrency(row.original.lastMonthSalary || 0),
-    },
-    {
       accessorKey: "proportionalVacation",
       header: "Vacaciones Prop.",
       cell: ({ row }) => (
@@ -589,21 +573,20 @@ export default function NominaPage() {
         <div className="flex items-center space-x-2">
           {!row.original.isPaid && (
             <Button variant="outline" size="sm" onClick={() => handlePayLiquidation(row.original)}>
-              <CheckCircle className="mr-1 h-4 w-4" />
-              Confirmar Pago
+              <FileText className="mr-1 h-4 w-4" />
+              Ver Detalles
             </Button>
           )}
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              router.push(`/nomina/liquidations/${row.original.id}`)
-            }}
-          >
-            <FileText className="mr-1 h-4 w-4" />
-            Detalles
-          </Button>
+          {row.original.isPaid && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push(`/nomina/liquidations/${row.original.id}`)}
+            >
+              <Eye className="mr-1 h-4 w-4" />
+              Ver
+            </Button>
+          )}
         </div>
       ),
     },
@@ -614,7 +597,12 @@ export default function NominaPage() {
     liquidation: Liquidation,
     options: { includeVacation?: boolean; includeBonus?: boolean },
   ): number => {
-    let total = liquidation.lastMonthSalary || 0
+    let total = 0
+
+    // Calcular el pago por días del último mes
+    const dailySalary = liquidation.baseSalary / 30
+    const lastMonthPayment = dailySalary * (liquidation.daysToPayInLastMonth || 0)
+    total += lastMonthPayment
 
     // Agregar vacaciones proporcionales si se incluyen
     if (options.includeVacation) {
@@ -778,6 +766,12 @@ export default function NominaPage() {
                 Volver a Diagnóstico
               </Link>
             </Button>
+            <Button variant="outline" asChild onClick={preserveSession}>
+              <Link href="/nomina/liquidations/migration">
+                <Settings className="mr-2 h-4 w-4" />
+                Herramientas
+              </Link>
+            </Button>
           </div>
         </div>
 
@@ -829,18 +823,25 @@ export default function NominaPage() {
           </Button>
 
           {activeTab === "liquidaciones" && (
-            <Button
-              variant="outline"
-              onClick={handleGenerateLiquidations}
-              disabled={isGeneratingLiquidations || inactiveEmployees.length === 0}
-            >
-              {isGeneratingLiquidations ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Calculator className="mr-2 h-4 w-4" />
-              )}
-              Generar Liquidaciones
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                onClick={handleGenerateLiquidations}
+                disabled={isGeneratingLiquidations || inactiveEmployees.length === 0}
+              >
+                {isGeneratingLiquidations ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Calculator className="mr-2 h-4 w-4" />
+                )}
+                Generar Liquidaciones
+              </Button>
+
+              <Button variant="outline" onClick={() => router.push("/nomina/liquidations/create")}>
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Nueva Liquidación
+              </Button>
+            </>
           )}
 
           {activeTab === "pendientes" && (
@@ -887,12 +888,6 @@ export default function NominaPage() {
                 <CardDescription>Liquidaciones pendientes por fin de relación laboral</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex justify-end mb-4">
-                  <Button onClick={() => router.push("/nomina/liquidations/create")}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Nueva Liquidación
-                  </Button>
-                </div>
                 <DataTable
                   columns={liquidationsColumns}
                   data={liquidations}
@@ -1049,24 +1044,7 @@ export default function NominaPage() {
                   if (!selectedPayroll) return "Detalles de la nómina"
 
                   const employee = employees.find((e) => e.id === selectedPayroll.employeeId)
-                  const employeeName = employee ? `${employee.firstName} ${employee.lastName}` : "Empleado"
-
-                  const monthNames = [
-                    "Enero",
-                    "Febrero",
-                    "Marzo",
-                    "Abril",
-                    "Mayo",
-                    "Junio",
-                    "Julio",
-                    "Agosto",
-                    "Septiembre",
-                    "Octubre",
-                    "Noviembre",
-                    "Diciembre",
-                  ]
-
-                  return `${employeeName} - ${monthNames[selectedPayroll.month - 1]} ${selectedPayroll.year}`
+                  return employee ? `${employee.firstName} ${employee.lastName}` : "Empleado"
                 })()}
               </DialogDescription>
             </DialogHeader>
@@ -1383,188 +1361,6 @@ export default function NominaPage() {
             )}
           </DialogContent>
         </Dialog>
-
-        {/* Diálogo de detalles de liquidación */}
-        <Dialog open={isLiquidationDetailsDialogOpen} onOpenChange={setIsLiquidationDetailsDialogOpen}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Detalles de Liquidación</DialogTitle>
-              <DialogDescription>
-                {(() => {
-                  if (!selectedLiquidation) return "Detalles de la liquidación"
-
-                  const employee = [...employees, ...inactiveEmployees].find(
-                    (e) => e.id === selectedLiquidation.employeeId,
-                  )
-                  const employeeName = employee ? `${employee.firstName} ${employee.lastName}` : "Empleado"
-
-                  return `${employeeName} - Fecha de egreso: ${formatDate(selectedLiquidation.terminationDate)}`
-                })()}
-              </DialogDescription>
-            </DialogHeader>
-
-            {selectedLiquidation && (
-              <div className="grid gap-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <h3 className="font-medium mb-2">Información del Empleado</h3>
-                    {(() => {
-                      const employee = [...employees, ...inactiveEmployees].find(
-                        (e) => e.id === selectedLiquidation.employeeId,
-                      )
-                      if (!employee) return <p>Información no disponible</p>
-
-                      return (
-                        <div className="space-y-1 text-sm">
-                          <p>
-                            <span className="font-medium">Nombre:</span> {employee.firstName} {employee.lastName}
-                          </p>
-                          <p>
-                            <span className="font-medium">DNI:</span> {employee.documentId}
-                          </p>
-                          <p>
-                            <span className="font-medium">Cargo:</span> {employee.position}
-                          </p>
-                          <p>
-                            <span className="font-medium">Local:</span> {employee.local}
-                          </p>
-                          <p>
-                            <span className="font-medium">Fecha de ingreso:</span> {formatDate(employee.hireDate)}
-                          </p>
-                          <p>
-                            <span className="font-medium">Fecha de egreso:</span>{" "}
-                            {formatDate(employee.terminationDate || "")}
-                          </p>
-                        </div>
-                      )
-                    })()}
-                  </div>
-
-                  <div>
-                    <h3 className="font-medium mb-2">Información de Pago</h3>
-                    <div className="space-y-1 text-sm">
-                      <p>
-                        <span className="font-medium">Estado:</span>{" "}
-                        {selectedLiquidation.isPaid ? "Pagado" : "Pendiente"}
-                      </p>
-                      {selectedLiquidation.paymentDate && (
-                        <p>
-                          <span className="font-medium">Fecha de pago:</span>{" "}
-                          {formatDate(selectedLiquidation.paymentDate)}
-                        </p>
-                      )}
-                      {selectedLiquidation.paymentMethod && (
-                        <p>
-                          <span className="font-medium">Método de pago:</span>{" "}
-                          {{
-                            efectivo: "Efectivo",
-                            transferencia: "Transferencia",
-                            cheque: "Cheque",
-                            otro: "Otro",
-                          }[selectedLiquidation.paymentMethod] || selectedLiquidation.paymentMethod}
-                        </p>
-                      )}
-                      {selectedLiquidation.paymentReference && (
-                        <p>
-                          <span className="font-medium">Referencia:</span> {selectedLiquidation.paymentReference}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Detalles de la liquidación */}
-                <Card className="bg-blue-50 border-blue-200">
-                  <CardHeader className="bg-blue-100">
-                    <CardTitle>
-                      Detalles de la Liquidación para {(() => {
-                        const employee = [...employees, ...inactiveEmployees].find(
-                          (e) => e.id === selectedLiquidation.employeeId,
-                        )
-                        return employee ? `${employee.firstName} ${employee.lastName}` : "Empleado"
-                      })()}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-6">
-                    <div className="grid gap-6 md:grid-cols-2">
-                      <div>
-                        <h3 className="font-medium mb-4 text-blue-800">Información Laboral</h3>
-                        <div className="space-y-3">
-                          <p>
-                            <span className="font-medium">Días Trabajados:</span>
-                            <br />
-                            {selectedLiquidation.workedDays} días
-                          </p>
-                          <p>
-                            <span className="font-medium">Meses Trabajados:</span>
-                            <br />
-                            {selectedLiquidation.workedMonths} meses
-                          </p>
-                          <p>
-                            <span className="font-medium">Días a Pagar (último mes):</span>
-                            <br />
-                            {selectedLiquidation.daysToPayInLastMonth || 0} días
-                          </p>
-                          <p>
-                            <span className="font-medium">Salario Base:</span>
-                            <br />
-                            {formatCurrency(selectedLiquidation.baseSalary)}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="font-medium mb-4 text-blue-800">Conceptos a Liquidar</h3>
-                        <div className="space-y-3">
-                          <p>
-                            <span className="font-medium">Sueldo Último Mes:</span>
-                            <br />
-                            {formatCurrency(selectedLiquidation.lastMonthSalary || 0)}
-                          </p>
-                          <p>
-                            <span className="font-medium">Vacaciones Proporcionales:</span>
-                            <br />
-                            <span className={selectedLiquidation.includeVacation ? "text-green-600" : "text-gray-500"}>
-                              {formatCurrency(selectedLiquidation.proportionalVacation)}
-                              {!selectedLiquidation.includeVacation && " (no incluido)"}
-                            </span>
-                          </p>
-                          <p>
-                            <span className="font-medium">Aguinaldo Proporcional:</span>
-                            <br />
-                            <span className={selectedLiquidation.includeBonus ? "text-green-600" : "text-gray-500"}>
-                              {formatCurrency(selectedLiquidation.proportionalBonus)}
-                              {!selectedLiquidation.includeBonus && " (no incluido)"}
-                            </span>
-                          </p>
-                          <p>
-                            <span className="font-medium">Indemnización:</span>
-                            <br />
-                            {formatCurrency(selectedLiquidation.compensationAmount)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-6 p-4 bg-white rounded-md border border-blue-200">
-                      <div className="flex justify-between items-center">
-                        <h3 className="font-medium text-blue-800">Total a Pagar:</h3>
-                        <span className="text-xl font-bold">{formatCurrency(selectedLiquidation.totalAmount)}</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <div className="flex justify-end space-x-2">
-                  <Button variant="outline" onClick={() => setIsLiquidationDetailsDialogOpen(false)}>
-                    Cerrar
-                  </Button>
-                </div>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
       </div>
-    </DashboardLayout>
-  )
-}
+    </DashboardLayout>\
+
