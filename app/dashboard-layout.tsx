@@ -137,8 +137,8 @@ const NavLink = memo(
 
 NavLink.displayName = "NavLink"
 
-// Update the DashboardLayout component to handle loading states
-function DashboardLayout({ children, isLoading }: { children: React.ReactNode; isLoading?: boolean }) {
+// IMPORTANTE: Cambiamos a exportación con nombre (named export) para mantener compatibilidad
+export function DashboardLayout({ children, isLoading }: { children: React.ReactNode; isLoading?: boolean }) {
   const pathname = usePathname()
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null)
   const { user, logout } = useAuth()
@@ -497,5 +497,5 @@ function DashboardLayout({ children, isLoading }: { children: React.ReactNode; i
   )
 }
 
+// También exportamos como default para mantener compatibilidad con ambos tipos de importación
 export default DashboardLayout
-
