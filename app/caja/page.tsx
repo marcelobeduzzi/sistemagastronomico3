@@ -7,13 +7,10 @@ import { es } from "date-fns/locale"
 import { DashboardLayout } from "@/app/dashboard-layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { PlusCircle, Search, Eye, AlertTriangle, DollarSign, ArrowUpDown } from "lucide-react"
+import { Eye, AlertTriangle, DollarSign, PlusCircle } from "lucide-react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import Link from "next/link"
 
 // Lista de locales para filtrar
 const locales = [
@@ -340,13 +337,19 @@ export default function CajaPage() {
                           {operacion.responsible}
                         </div>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => router.push(`/caja/${esApertura ? "apertura" : "cierre"}/${operacion.id}`)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
+                      {esApertura ? (
+                        <Button variant="outline" asChild>
+                          <Link href={`/caja/apertura/${operacion.id}`}>Ver Detalles</Link>
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => router.push(`/caja/${esApertura ? "apertura" : "cierre"}/${operacion.id}`)}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   )
                 })}
@@ -362,209 +365,20 @@ export default function CajaPage() {
   }
 
   return (
-    <DashboardLayout isLoading={isLoading}>
-      <div className="container mx-auto py-6">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-bold">Control de Caja</h1>
-          <div className="flex gap-2">
-            <Button onClick={() => router.push("/caja/apertura")}>
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Nueva Apertura
-            </Button>
-            <Button onClick={() => router.push("/caja/cierre")}>
-              <DollarSign className="mr-2 h-4 w-4" />
-              Nuevo Cierre
-            </Button>
+    <DashboardLayout>
+      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight">Caja</h2>
+            <p className="text-muted-foreground">Administración de aperturas y cierres de caja</p>
           </div>
         </div>
-
-        <div className="space-y-6">
-          {/* Filtros */}
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar por local o responsable..."
-                    className="pl-8"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                </div>
-                <Select value={filterLocal} onValueChange={setFilterLocal}>
-                  <SelectTrigger className="w-full md:w-[200px]">
-                    <SelectValue placeholder="Filtrar por local" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los locales</SelectItem>
-                    {locales.map((local) => (
-                      <SelectItem key={local.id} value={local.id}>
-                        {local.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="w-full md:w-[200px]">
-                  <Input
-                    type="date"
-                    value={filterFecha}
-                    onChange={(e) => setFilterFecha(e.target.value)}
-                    placeholder="Filtrar por fecha"
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Tabs */}
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="home">Inicio</TabsTrigger>
-              <TabsTrigger value="aperturas">Aperturas de Caja</TabsTrigger>
-              <TabsTrigger value="cierres">Cierres de Caja</TabsTrigger>
-            </TabsList>
-
-            {/* Tab de Inicio */}
-            <TabsContent value="home" className="space-y-4">
-              <HomePage />
-            </TabsContent>
-
-            {/* Tab de Aperturas */}
-            <TabsContent value="aperturas" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Aperturas de Caja</CardTitle>
-                  <CardDescription>Listado de aperturas de caja registradas</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="cursor-pointer" onClick={() => requestSort("date")}>
-                            Fecha
-                            {sortConfig.key === "date" && <ArrowUpDown className="ml-2 h-4 w-4 inline" />}
-                          </TableHead>
-                          <TableHead className="cursor-pointer" onClick={() => requestSort("local_name")}>
-                            Local
-                            {sortConfig.key === "local_name" && <ArrowUpDown className="ml-2 h-4 w-4 inline" />}
-                          </TableHead>
-                          <TableHead>Turno</TableHead>
-                          <TableHead>Responsable</TableHead>
-                          <TableHead className="text-right">Monto Inicial</TableHead>
-                          <TableHead>Estado</TableHead>
-                          <TableHead className="text-right">Acciones</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredAperturas.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={7} className="h-24 text-center">
-                              No se encontraron aperturas
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          filteredAperturas.map((apertura) => (
-                            <TableRow key={apertura.id}>
-                              <TableCell>{formatFecha(apertura.date)}</TableCell>
-                              <TableCell className="font-medium">{apertura.local_name}</TableCell>
-                              <TableCell>{apertura.shift === "mañana" ? "Mañana" : "Tarde"}</TableCell>
-                              <TableCell>{apertura.responsible}</TableCell>
-                              <TableCell className="text-right">${apertura.initial_amount?.toLocaleString()}</TableCell>
-                              <TableCell>{renderEstadoBadge(apertura.status)}</TableCell>
-                              <TableCell className="text-right">
-                                <div className="flex justify-end gap-2">
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    title="Ver detalles"
-                                    onClick={() => router.push(`/caja/apertura/${apertura.id}`)}
-                                  >
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Tab de Cierres */}
-            <TabsContent value="cierres" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Cierres de Caja</CardTitle>
-                  <CardDescription>Listado de cierres de caja registrados</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="cursor-pointer" onClick={() => requestSort("date")}>
-                            Fecha
-                            {sortConfig.key === "date" && <ArrowUpDown className="ml-2 h-4 w-4 inline" />}
-                          </TableHead>
-                          <TableHead className="cursor-pointer" onClick={() => requestSort("local_name")}>
-                            Local
-                            {sortConfig.key === "local_name" && <ArrowUpDown className="ml-2 h-4 w-4 inline" />}
-                          </TableHead>
-                          <TableHead>Turno</TableHead>
-                          <TableHead>Responsable</TableHead>
-                          <TableHead className="text-right">Ventas</TableHead>
-                          <TableHead>Estado</TableHead>
-                          <TableHead className="text-right">Acciones</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredCierres.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={7} className="h-24 text-center">
-                              No se encontraron cierres
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          filteredCierres.map((cierre) => (
-                            <TableRow key={cierre.id}>
-                              <TableCell>{formatFecha(cierre.date)}</TableCell>
-                              <TableCell className="font-medium">{cierre.local_name}</TableCell>
-                              <TableCell>{cierre.shift === "mañana" ? "Mañana" : "Tarde"}</TableCell>
-                              <TableCell>{cierre.responsible}</TableCell>
-                              <TableCell className="text-right">${cierre.total_sales?.toLocaleString()}</TableCell>
-                              <TableCell>{renderEstadoBadge(cierre.status)}</TableCell>
-                              <TableCell className="text-right">
-                                <div className="flex justify-end gap-2">
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    title="Ver detalles"
-                                    onClick={() => router.push(`/caja/cierre/${cierre.id}`)}
-                                  >
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-        </div>
+        <HomePage />
       </div>
     </DashboardLayout>
   )
 }
+
 
 
 

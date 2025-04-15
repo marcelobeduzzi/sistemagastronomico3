@@ -710,8 +710,8 @@ export default function CierreCajaPage() {
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
             <TabsList className="grid grid-cols-4 mb-4">
               <TabsTrigger value="ventas">Ventas</TabsTrigger>
-              <TabsTrigger value="efectivo">Efectivo</TabsTrigger>
               <TabsTrigger value="gastos">Gastos y Retiros</TabsTrigger>
+              <TabsTrigger value="efectivo">Efectivo</TabsTrigger>
               <TabsTrigger value="balance">Balance Final</TabsTrigger>
             </TabsList>
 
@@ -1381,6 +1381,8 @@ export default function CierreCajaPage() {
     </DashboardLayout>
   )
 }
+
+
 
 
 
