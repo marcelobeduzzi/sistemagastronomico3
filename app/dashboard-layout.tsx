@@ -52,26 +52,19 @@ const NavLink = memo(
     pathname,
     toggleSubmenu,
     openSubmenu,
-    userRole,
   }: {
     item: NavItem
     pathname: string
     toggleSubmenu: (title: string) => void
     openSubmenu: string | null
-    userRole: string | undefined
   }) => {
     const isActive = pathname === item.href
     const hasSubmenu = item.submenu && item.submenu.length > 0
     const isSubmenuOpen = openSubmenu === item.title
     const isSubmenuActive = item.submenu?.some((subItem) => pathname === subItem.href)
 
-    // Verificar si el usuario tiene acceso basado en su rol
-    const hasAccess = item.roles.includes(userRole || "")
-
-    // No renderizar el elemento si el usuario no tiene acceso
-    if (!hasAccess) {
-      return null
-    }
+    // SOLUCIÓN TEMPORAL: Mostrar todos los elementos sin verificar roles
+    const hasAccess = true
 
     if (hasSubmenu) {
       return (
@@ -92,25 +85,19 @@ const NavLink = memo(
 
           {isSubmenuOpen && (
             <div className="ml-4 mt-1 space-y-1">
-              {item.submenu?.map((subItem) => {
-                // Verificar acceso para elementos del submenú
-                const hasSubItemAccess = subItem.roles.includes(userRole || "")
-                if (!hasSubItemAccess) return null
-
-                return (
-                  <Link
-                    key={subItem.href}
-                    href={subItem.href}
-                    className={cn(
-                      "flex items-center rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground",
-                      pathname === subItem.href ? "bg-accent text-accent-foreground" : "",
-                    )}
-                  >
-                    <subItem.icon className="mr-2 h-4 w-4" />
-                    <span>{subItem.title}</span>
-                  </Link>
-                )
-              })}
+              {item.submenu?.map((subItem) => (
+                <Link
+                  key={subItem.href}
+                  href={subItem.href}
+                  className={cn(
+                    "flex items-center rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground",
+                    pathname === subItem.href ? "bg-accent text-accent-foreground" : "",
+                  )}
+                >
+                  <subItem.icon className="mr-2 h-4 w-4" />
+                  <span>{subItem.title}</span>
+                </Link>
+              ))}
             </div>
           )}
         </div>
@@ -135,7 +122,7 @@ const NavLink = memo(
 NavLink.displayName = "NavLink"
 
 // Update the DashboardLayout component to handle loading states
-export function DashboardLayout({ children, isLoading }: { children: React.ReactNode; isLoading?: boolean }) {
+function DashboardLayout({ children, isLoading }: { children: React.ReactNode; isLoading?: boolean }) {
   const pathname = usePathname()
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null)
   const { user, logout } = useAuth()
@@ -370,9 +357,6 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
     }
   }, [logout, router])
 
-  // Obtener el rol del usuario
-  const userRole = user?.user_metadata?.role
-
   // Memoizar el contenido de la barra lateral para evitar re-renderizados innecesarios
   const sidebarContent = useMemo(
     () => (
@@ -389,7 +373,6 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
               pathname={pathname}
               toggleSubmenu={toggleSubmenu}
               openSubmenu={openSubmenu}
-              userRole={userRole}
             />
           ))}
         </nav>
@@ -411,7 +394,7 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         </div>
       </>
     ),
-    [pathname, toggleSubmenu, openSubmenu, user, handleLogout, userRole],
+    [pathname, toggleSubmenu, openSubmenu, user, handleLogout, navItems],
   )
 
   // Update the return statement to handle loading and errors
@@ -446,7 +429,6 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
                     pathname={pathname}
                     toggleSubmenu={toggleSubmenu}
                     openSubmenu={openSubmenu}
-                    userRole={userRole}
                   />
                 ))}
               </nav>
@@ -497,17 +479,4 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
   )
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+export default DashboardLayout
