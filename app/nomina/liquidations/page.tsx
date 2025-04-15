@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Loader2, CheckCircle, AlertCircle, FileText } from "lucide-react"
-import { generateLiquidations, markLiquidationsAsPaid } from "@/lib/liquidation-service"
+import { generateLiquidations, markLiquidationsAsPaid } from "@/lib/liquidation-service-simple-fix"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -49,7 +49,11 @@ export default function LiquidationsPage() {
   const loadLiquidations = async () => {
     setLoadingLiquidations(true)
     try {
-      const supabase = createClientComponentClient()
+      // Crear el cliente con las claves explícitas solo para esta función
+      const supabase = createClientComponentClient({
+        supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+        supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      })
 
       // Cargar liquidaciones pendientes
       const { data: pending, error: pendingError } = await supabase
@@ -433,3 +437,4 @@ export default function LiquidationsPage() {
     </div>
   )
 }
+
