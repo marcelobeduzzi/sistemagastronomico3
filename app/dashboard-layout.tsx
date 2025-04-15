@@ -1,7 +1,7 @@
 "use client"
 
-import { Button } from "@/components/ui/button"
 import type React from "react"
+
 import { useState, useEffect, useCallback, memo, useMemo } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
@@ -31,17 +31,21 @@ import {
   History,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { useAuth } from "@/lib/auth-context"
 import { Header } from "@/components/header"
+
+// Import the loading spinner
 import { LoadingSpinner } from "@/components/loading-spinner"
+
+// Importa el componente SessionRefreshHandler
 import { SessionRefreshHandler } from "@/components/session-refresh-handler"
 
 interface NavItem {
   title: string
   href: string
   icon: any
-  roles: string[]
   submenu?: NavItem[]
 }
 
@@ -63,8 +67,8 @@ const NavLink = memo(
     const isSubmenuOpen = openSubmenu === item.title
     const isSubmenuActive = item.submenu?.some((subItem) => pathname === subItem.href)
 
-    // SOLUCIÓN TEMPORAL: Mostrar todos los elementos sin verificar roles
-    const hasAccess = true
+    // Por ahora, mostramos todos los enlaces para evitar problemas
+    const hasAccess = true // hasPermission(item.href);
 
     if (hasSubmenu) {
       return (
@@ -122,7 +126,7 @@ const NavLink = memo(
 NavLink.displayName = "NavLink"
 
 // Update the DashboardLayout component to handle loading states
-function DashboardLayout({ children, isLoading }: { children: React.ReactNode; isLoading?: boolean }) {
+export function DashboardLayout({ children, isLoading }: { children: React.ReactNode; isLoading?: boolean }) {
   const pathname = usePathname()
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null)
   const { user, logout } = useAuth()
@@ -144,31 +148,26 @@ function DashboardLayout({ children, isLoading }: { children: React.ReactNode; i
         title: "Dashboard",
         href: "/",
         icon: LayoutDashboard,
-        roles: ["admin", "encargado", "supervisor", "gerente"],
       },
       {
         title: "Empleados",
         href: "#",
         icon: Users,
-        roles: ["admin", "gerente"],
         submenu: [
           {
             title: "Lista de Empleados",
             href: "/empleados",
             icon: Users,
-            roles: ["admin", "gerente"],
           },
           {
             title: "Nuevo Empleado",
             href: "/empleados/nuevo",
             icon: Users,
-            roles: ["admin", "gerente"],
           },
           {
             title: "Nómina",
             href: "/nomina",
             icon: DollarSign,
-            roles: ["admin", "gerente"],
           },
         ],
       },
@@ -176,67 +175,56 @@ function DashboardLayout({ children, isLoading }: { children: React.ReactNode; i
         title: "Control de Asistencias",
         href: "/asistencias",
         icon: Calendar,
-        roles: ["admin", "encargado", "supervisor", "gerente"],
       },
       {
         title: "Control de Caja",
         href: "/caja",
         icon: CreditCard,
-        roles: ["admin", "encargado", "supervisor", "gerente"],
       },
       {
         title: "Planilla de Stock",
         href: "/stock-check",
         icon: Package,
-        roles: ["admin", "encargado", "supervisor", "gerente"],
       },
       {
         title: "Control de Stock",
         href: "/stock-control",
         icon: Package,
-        roles: ["admin", "encargado", "supervisor", "gerente"],
       },
       {
         title: "Control de Stock Prueba",
         href: "/stock",
         icon: Package,
-        roles: ["admin", "encargado", "supervisor", "gerente"],
       },
-      {
+	   {
         title: "Planilla Stock Matrix",
         href: "/stock-matrix",
         icon: Package,
-        roles: ["admin", "encargado", "supervisor", "gerente"],
       },
       {
         title: "Delivery",
         href: "#",
         icon: TrendingUp,
-        roles: ["admin", "encargado", "supervisor", "gerente"],
         submenu: [
           {
             title: "PedidosYa",
             href: "/delivery/pedidosya",
             icon: TrendingUp,
-            roles: ["admin", "encargado", "supervisor", "gerente"],
           },
           {
             title: "Rappi",
             href: "/delivery/rappi",
             icon: TrendingUp,
-            roles: ["admin", "encargado", "supervisor", "gerente"],
           },
           {
             title: "MercadoPago",
             href: "/delivery/mercadopago",
             icon: TrendingUp,
-            roles: ["admin", "encargado", "supervisor", "gerente"],
           },
           {
             title: "Delivery Propio",
             href: "/delivery/propio",
             icon: TrendingUp,
-            roles: ["admin", "encargado", "supervisor", "gerente"],
           },
         ],
       },
@@ -244,61 +232,51 @@ function DashboardLayout({ children, isLoading }: { children: React.ReactNode; i
         title: "Auditorías",
         href: "/auditorias",
         icon: ClipboardCheck,
-        roles: ["admin", "gerente"],
       },
       {
         title: "Pedidos Brozziano",
         href: "/pedidos-brozziano",
         icon: ShoppingCart,
-        roles: ["admin", "encargado", "supervisor", "gerente"],
       },
-      {
+	   {
         title: "Productividad Empleados",
         href: "/productividad",
         icon: PieChart,
-        roles: ["admin", "gerente"],
       },
       {
         title: "Facturación",
         href: "/facturacion",
         icon: ReceiptText,
-        roles: ["admin", "gerente"],
       },
       {
         title: "Proveedores y Pagos",
         href: "#",
         icon: Truck,
-        roles: ["admin", "gerente"],
         submenu: [
           {
             title: "Dashboard",
             href: "/proveedores-pagos",
             icon: LayoutDashboard,
-            roles: ["admin", "gerente"],
           },
           {
             title: "Gestión de Proveedores",
             href: "/proveedores-pagos/proveedores",
             icon: Truck,
-            roles: ["admin", "gerente"],
           },
           {
             title: "Pago a Proveedores",
             href: "/proveedores-pagos/pagos",
             icon: CreditCardIcon,
-            roles: ["admin", "gerente"],
           },
           {
             title: "Historial de Pagos",
             href: "/proveedores-pagos/historial",
             icon: History,
-            roles: ["admin", "gerente"],
           },
           {
             title: "Simulación de Costos",
             href: "/proveedores-pagos/simulacion-costos",
             icon: Calculator,
-            roles: ["admin", "gerente"],
           },
         ],
       },
@@ -306,37 +284,31 @@ function DashboardLayout({ children, isLoading }: { children: React.ReactNode; i
         title: "Sistema de Puntos",
         href: "/puntos",
         icon: Star,
-        roles: ["admin", "gerente"],
       },
       {
         title: "Chat Interno",
         href: "/chat",
         icon: MessageSquare,
-        roles: ["admin", "encargado", "supervisor", "gerente"],
       },
       {
         title: "Balances",
         href: "/balances",
         icon: PieChart,
-        roles: ["admin", "gerente"],
       },
       {
         title: "Reportes",
         href: "/reportes",
         icon: BarChart3,
-        roles: ["admin", "gerente"],
       },
       {
         title: "Panel de Administración",
         href: "/admin",
         icon: Shield,
-        roles: ["admin"],
       },
       {
         title: "Configuración",
         href: "/configuracion",
         icon: Settings,
-        roles: ["admin"],
       },
     ],
     [],
@@ -394,7 +366,7 @@ function DashboardLayout({ children, isLoading }: { children: React.ReactNode; i
         </div>
       </>
     ),
-    [pathname, toggleSubmenu, openSubmenu, user, handleLogout, navItems],
+    [pathname, toggleSubmenu, openSubmenu, user, handleLogout],
   )
 
   // Update the return statement to handle loading and errors
@@ -480,3 +452,17 @@ function DashboardLayout({ children, isLoading }: { children: React.ReactNode; i
 }
 
 export default DashboardLayout
+
+
+
+
+
+
+
+
+
+
+
+
+
+
