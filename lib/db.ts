@@ -1010,7 +1010,7 @@ class DatabaseService {
           termination_date: employee.terminationDate,
           worked_days: workedDays,
           worked_months: workedMonths,
-          days_to_pay: daysToPayInLastMonth,
+          days_to_pay_in_last_month: daysToPayInLastMonth,
           base_salary: baseSalary,
           last_month_salary: lastMonthSalary,
           proportional_vacation: proportionalVacation,
@@ -1978,5 +1978,6 @@ export const db = {
 
 // Exportar también el servicio original para mantener compatibilidad
 export { dbService }
+
 
 
