@@ -52,7 +52,7 @@ export type Liquidation = {
   workedMonths: number
   daysToPayInLastMonth?: number
   baseSalary: number
-  lastMonthSalary?: number
+  // Eliminamos lastMonthSalary que no existe en la base de datos
   proportionalVacation: number
   proportionalBonus: number
   compensationAmount: number
@@ -148,6 +148,7 @@ export type OrderItem = {
   quantity: number
   price: number
 }
+
 
 
 

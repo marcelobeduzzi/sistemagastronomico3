@@ -224,8 +224,8 @@ class DatabaseService {
 
       // Construir la consulta base
       let query = this.supabase.from("attendance").select(`
-  *,
-  employees (id, first_name, last_name)
+ *,
+ employees (id, first_name, last_name)
 `)
 
       // Filtrar por fecha exacta (sin manipulación)
@@ -279,9 +279,9 @@ class DatabaseService {
       const { data, error } = await this.supabase
         .from("attendance")
         .select(`
-      *,
-      employees (id, first_name, last_name)
-    `)
+     *,
+     employees (id, first_name, last_name)
+   `)
         .order("date", { ascending: false })
         .limit(limit)
 
@@ -316,9 +316,9 @@ class DatabaseService {
       const query = this.supabase
         .from("attendance")
         .select(`
-    *,
-    employees (id, first_name, last_name)
-  `)
+   *,
+   employees (id, first_name, last_name)
+ `)
         .eq("employee_id", employeeId)
         .gte("date", startDate)
         .lte("date", endDate)
@@ -356,8 +356,8 @@ class DatabaseService {
       const { data, error } = await this.supabase
         .from("attendance")
         .select(`
-  *,
-  employees (id, first_name, last_name)
+ *,
+ employees (id, first_name, last_name)
 `)
         .eq("id", id)
         .single()
@@ -965,8 +965,8 @@ class DatabaseService {
         const dailyRate = baseSalary / 30
 
         // Calcular monto a pagar por días trabajados en el último mes
-        const lastMonthSalary = dailyRate * daysToPayInLastMonth
-        console.log(`Monto a pagar por último mes: ${lastMonthSalary}`)
+        const lastMonthPayment = dailyRate * daysToPayInLastMonth
+        console.log(`Monto a pagar por último mes: ${lastMonthPayment}`)
 
         // Calcular vacaciones proporcionales (siempre calculadas, pero solo se pagan si trabajó más de 20 días)
         // 1 día por mes trabajado
@@ -997,7 +997,7 @@ class DatabaseService {
 
         // Calcular monto total (incluyendo o no vacaciones y aguinaldo según corresponda)
         const totalAmount =
-          lastMonthSalary +
+          lastMonthPayment +
           (includeByDefault ? proportionalVacation : 0) +
           (includeByDefault ? proportionalBonus : 0) +
           compensationAmount
@@ -1010,12 +1010,11 @@ class DatabaseService {
           termination_date: employee.terminationDate,
           worked_days: workedDays,
           worked_months: workedMonths,
-          days_to_pay_in_last_month: daysToPayInLastMonth,
+          days_to_pay_in_last_month: daysToPayInLastMonth, // Fixed field name
           base_salary: baseSalary,
-          last_month_salary: lastMonthSalary,
           proportional_vacation: proportionalVacation,
           proportional_bonus: proportionalBonus,
-          compensation_amount: compensationAmount,
+          compensation_amount: lastMonthPayment, // Usar lastMonthPayment en lugar de lastMonthSalary
           total_amount: totalAmount,
           is_paid: false,
           include_vacation: includeByDefault,
@@ -1054,7 +1053,7 @@ class DatabaseService {
 
             // Recalcular el monto total basado en las inclusiones existentes
             liquidationData.total_amount =
-              lastMonthSalary +
+              lastMonthPayment +
               (liquidationData.include_vacation ? proportionalVacation : 0) +
               (liquidationData.include_bonus ? proportionalBonus : 0) +
               compensationAmount
@@ -1978,6 +1977,7 @@ export const db = {
 
 // Exportar también el servicio original para mantener compatibilidad
 export { dbService }
+
 
 
 
