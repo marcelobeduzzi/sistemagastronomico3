@@ -1,7 +1,7 @@
 "use client"
 
+import { Button } from "@/components/ui/button"
 import type React from "react"
-
 import { useState, useEffect, useCallback, memo, useMemo } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
@@ -31,21 +31,17 @@ import {
   History,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { useAuth } from "@/lib/auth-context"
 import { Header } from "@/components/header"
-
-// Import the loading spinner
 import { LoadingSpinner } from "@/components/loading-spinner"
-
-// Importa el componente SessionRefreshHandler
 import { SessionRefreshHandler } from "@/components/session-refresh-handler"
 
 interface NavItem {
   title: string
   href: string
   icon: any
+  roles?: string[] // Lista de roles que pueden ver este elemento
   submenu?: NavItem[]
 }
 
@@ -56,19 +52,27 @@ const NavLink = memo(
     pathname,
     toggleSubmenu,
     openSubmenu,
+    userRole,
   }: {
     item: NavItem
     pathname: string
     toggleSubmenu: (title: string) => void
     openSubmenu: string | null
+    userRole: string | undefined
   }) => {
     const isActive = pathname === item.href
     const hasSubmenu = item.submenu && item.submenu.length > 0
     const isSubmenuOpen = openSubmenu === item.title
     const isSubmenuActive = item.submenu?.some((subItem) => pathname === subItem.href)
 
-    // Por ahora, mostramos todos los enlaces para evitar problemas
-    const hasAccess = true // hasPermission(item.href);
+    // Verificar si el usuario tiene acceso a este elemento
+    const hasAccess =
+      !item.roles || item.roles.length === 0 || item.roles.includes(userRole || "") || userRole === "admin"
+
+    // Si no tiene acceso, no renderizar nada
+    if (!hasAccess) {
+      return null
+    }
 
     if (hasSubmenu) {
       return (
@@ -89,19 +93,27 @@ const NavLink = memo(
 
           {isSubmenuOpen && (
             <div className="ml-4 mt-1 space-y-1">
-              {item.submenu?.map((subItem) => (
-                <Link
-                  key={subItem.href}
-                  href={subItem.href}
-                  className={cn(
-                    "flex items-center rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground",
-                    pathname === subItem.href ? "bg-accent text-accent-foreground" : "",
-                  )}
-                >
-                  <subItem.icon className="mr-2 h-4 w-4" />
-                  <span>{subItem.title}</span>
-                </Link>
-              ))}
+              {item.submenu
+                ?.filter(
+                  (subItem) =>
+                    !subItem.roles ||
+                    subItem.roles.length === 0 ||
+                    subItem.roles.includes(userRole || "") ||
+                    userRole === "admin",
+                )
+                .map((subItem) => (
+                  <Link
+                    key={subItem.href}
+                    href={subItem.href}
+                    className={cn(
+                      "flex items-center rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground",
+                      pathname === subItem.href ? "bg-accent text-accent-foreground" : "",
+                    )}
+                  >
+                    <subItem.icon className="mr-2 h-4 w-4" />
+                    <span>{subItem.title}</span>
+                  </Link>
+                ))}
             </div>
           )}
         </div>
@@ -126,7 +138,7 @@ const NavLink = memo(
 NavLink.displayName = "NavLink"
 
 // Update the DashboardLayout component to handle loading states
-export function DashboardLayout({ children, isLoading }: { children: React.ReactNode; isLoading?: boolean }) {
+function DashboardLayout({ children, isLoading }: { children: React.ReactNode; isLoading?: boolean }) {
   const pathname = usePathname()
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null)
   const { user, logout } = useAuth()
@@ -148,26 +160,31 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         title: "Dashboard",
         href: "/",
         icon: LayoutDashboard,
+        roles: ["admin", "gerente", "supervisor", "encargado"],
       },
       {
         title: "Empleados",
         href: "#",
         icon: Users,
+        roles: ["admin", "gerente"],
         submenu: [
           {
             title: "Lista de Empleados",
             href: "/empleados",
             icon: Users,
+            roles: ["admin", "gerente"],
           },
           {
             title: "Nuevo Empleado",
             href: "/empleados/nuevo",
             icon: Users,
+            roles: ["admin", "gerente"],
           },
           {
             title: "Nómina",
             href: "/nomina",
             icon: DollarSign,
+            roles: ["admin", "gerente"],
           },
         ],
       },
@@ -175,56 +192,67 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         title: "Control de Asistencias",
         href: "/asistencias",
         icon: Calendar,
+        roles: ["admin", "gerente", "supervisor", "encargado"],
       },
       {
         title: "Control de Caja",
         href: "/caja",
         icon: CreditCard,
+        roles: ["admin", "gerente", "supervisor", "encargado"],
       },
       {
         title: "Planilla de Stock",
         href: "/stock-check",
         icon: Package,
+        roles: ["admin", "gerente", "supervisor", "encargado"],
       },
       {
         title: "Control de Stock",
         href: "/stock-control",
         icon: Package,
+        roles: ["admin", "gerente", "supervisor", "encargado"],
       },
       {
         title: "Control de Stock Prueba",
         href: "/stock",
         icon: Package,
+        roles: ["admin", "gerente", "supervisor", "encargado"],
       },
-	   {
+      {
         title: "Planilla Stock Matrix",
         href: "/stock-matrix",
         icon: Package,
+        roles: ["admin", "gerente", "supervisor", "encargado"],
       },
       {
         title: "Delivery",
         href: "#",
         icon: TrendingUp,
+        roles: ["admin", "gerente", "supervisor", "encargado"],
         submenu: [
           {
             title: "PedidosYa",
             href: "/delivery/pedidosya",
             icon: TrendingUp,
+            roles: ["admin", "gerente", "supervisor", "encargado"],
           },
           {
             title: "Rappi",
             href: "/delivery/rappi",
             icon: TrendingUp,
+            roles: ["admin", "gerente", "supervisor", "encargado"],
           },
           {
             title: "MercadoPago",
             href: "/delivery/mercadopago",
             icon: TrendingUp,
+            roles: ["admin", "gerente", "supervisor", "encargado"],
           },
           {
             title: "Delivery Propio",
             href: "/delivery/propio",
             icon: TrendingUp,
+            roles: ["admin", "gerente", "supervisor", "encargado"],
           },
         ],
       },
@@ -232,51 +260,61 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         title: "Auditorías",
         href: "/auditorias",
         icon: ClipboardCheck,
+        roles: ["admin", "gerente"],
       },
       {
         title: "Pedidos Brozziano",
         href: "/pedidos-brozziano",
         icon: ShoppingCart,
+        roles: ["admin", "gerente", "supervisor", "encargado"],
       },
-	   {
+      {
         title: "Productividad Empleados",
         href: "/productividad",
         icon: PieChart,
+        roles: ["admin", "gerente"],
       },
       {
         title: "Facturación",
         href: "/facturacion",
         icon: ReceiptText,
+        roles: ["admin", "gerente"],
       },
       {
         title: "Proveedores y Pagos",
         href: "#",
         icon: Truck,
+        roles: ["admin", "gerente"],
         submenu: [
           {
             title: "Dashboard",
             href: "/proveedores-pagos",
             icon: LayoutDashboard,
+            roles: ["admin", "gerente"],
           },
           {
             title: "Gestión de Proveedores",
             href: "/proveedores-pagos/proveedores",
             icon: Truck,
+            roles: ["admin", "gerente"],
           },
           {
             title: "Pago a Proveedores",
             href: "/proveedores-pagos/pagos",
             icon: CreditCardIcon,
+            roles: ["admin", "gerente"],
           },
           {
             title: "Historial de Pagos",
             href: "/proveedores-pagos/historial",
             icon: History,
+            roles: ["admin", "gerente"],
           },
           {
             title: "Simulación de Costos",
             href: "/proveedores-pagos/simulacion-costos",
             icon: Calculator,
+            roles: ["admin", "gerente"],
           },
         ],
       },
@@ -284,31 +322,37 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         title: "Sistema de Puntos",
         href: "/puntos",
         icon: Star,
+        roles: ["admin", "gerente"],
       },
       {
         title: "Chat Interno",
         href: "/chat",
         icon: MessageSquare,
+        roles: ["admin", "gerente", "supervisor", "encargado"],
       },
       {
         title: "Balances",
         href: "/balances",
         icon: PieChart,
+        roles: ["admin", "gerente"],
       },
       {
         title: "Reportes",
         href: "/reportes",
         icon: BarChart3,
+        roles: ["admin", "gerente"],
       },
       {
         title: "Panel de Administración",
         href: "/admin",
         icon: Shield,
+        roles: ["admin"],
       },
       {
         title: "Configuración",
         href: "/configuracion",
         icon: Settings,
+        roles: ["admin"],
       },
     ],
     [],
@@ -345,6 +389,7 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
               pathname={pathname}
               toggleSubmenu={toggleSubmenu}
               openSubmenu={openSubmenu}
+              userRole={user?.role}
             />
           ))}
         </nav>
@@ -366,7 +411,7 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         </div>
       </>
     ),
-    [pathname, toggleSubmenu, openSubmenu, user, handleLogout],
+    [pathname, toggleSubmenu, openSubmenu, user, handleLogout, navItems],
   )
 
   // Update the return statement to handle loading and errors
@@ -401,6 +446,7 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
                     pathname={pathname}
                     toggleSubmenu={toggleSubmenu}
                     openSubmenu={openSubmenu}
+                    userRole={user?.role}
                   />
                 ))}
               </nav>
@@ -452,17 +498,4 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
 }
 
 export default DashboardLayout
-
-
-
-
-
-
-
-
-
-
-
-
-
 
