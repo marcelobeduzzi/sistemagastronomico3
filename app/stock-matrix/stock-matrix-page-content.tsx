@@ -68,6 +68,7 @@ type ProductStockData = {
   incoming_quantity: number | null
   incoming_locked: boolean
   closing_quantity: number | null
+
   closing_locked: boolean
 
   // Datos que carga el administrador
@@ -411,10 +412,14 @@ export default function StockMatrixPageContent() {
       const sold = product.units_sold || 0
       const discarded = product.discarded_quantity || 0
       const closing = product.closing_quantity || 0
+      const consumption = product.internal_consumption || 0
 
-      // Fórmula: (1 + 2 + 4 - 3 - 6)
+      // Fórmula anterior: (1 + 2 + 4 - 3 - 6)
       // Apertura + Ingreso + Decomisos - Vendidas - Cierre
-      return opening + incoming + discarded - sold - closing
+
+      // Nueva fórmula según el gerente:
+      // Cierre + Venta + Consumos + Decomisados - Ingresos - Apertura
+      return closing + sold + consumption + discarded - incoming - opening
     } catch (err) {
       console.error(`Error al calcular diferencia para producto ${productId}:`, err)
       return null
@@ -1444,5 +1449,6 @@ export default function StockMatrixPageContent() {
     </DashboardLayout>
   )
 }
+
 
 
