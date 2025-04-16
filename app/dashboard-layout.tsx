@@ -69,6 +69,11 @@ const NavLink = memo(
     const hasAccess =
       !item.roles || item.roles.length === 0 || item.roles.includes(userRole || "") || userRole === "admin"
 
+    // Añadir log para depuración
+    console.log(
+      `NavItem ${item.title}: userRole=${userRole}, roles=${JSON.stringify(item.roles)}, hasAccess=${hasAccess}`,
+    )
+
     // Si no tiene acceso, no renderizar nada
     if (!hasAccess) {
       return null
@@ -166,25 +171,25 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         title: "Empleados",
         href: "#",
         icon: Users,
-        roles: ["admin", "gerente"],
+        roles: ["admin", "gerente", "supervisor"],
         submenu: [
           {
             title: "Lista de Empleados",
             href: "/empleados",
             icon: Users,
-            roles: ["admin", "gerente"],
+            roles: ["admin", "gerente", "supervisor"],
           },
           {
             title: "Nuevo Empleado",
             href: "/empleados/nuevo",
             icon: Users,
-            roles: ["admin", "gerente"],
+            roles: ["admin", "gerente", "supervisor"],
           },
           {
             title: "Nómina",
             href: "/nomina",
             icon: DollarSign,
-            roles: ["admin", "gerente"],
+            roles: ["admin", "gerente", "supervisor"],
           },
         ],
       },
@@ -192,7 +197,7 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         title: "Control de Asistencias",
         href: "/asistencias",
         icon: Calendar,
-        roles: ["admin", "gerente", "supervisor", "encargado"],
+        roles: ["admin", "gerente", "encargado"],
       },
       {
         title: "Control de Caja",
@@ -228,31 +233,31 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         title: "Delivery",
         href: "#",
         icon: TrendingUp,
-        roles: ["admin", "gerente", "supervisor", "encargado"],
+        roles: ["admin"],
         submenu: [
           {
             title: "PedidosYa",
             href: "/delivery/pedidosya",
             icon: TrendingUp,
-            roles: ["admin", "gerente", "supervisor", "encargado"],
+            roles: ["admin"],
           },
           {
             title: "Rappi",
             href: "/delivery/rappi",
             icon: TrendingUp,
-            roles: ["admin", "gerente", "supervisor", "encargado"],
+            roles: ["admin"],
           },
           {
             title: "MercadoPago",
             href: "/delivery/mercadopago",
             icon: TrendingUp,
-            roles: ["admin", "gerente", "supervisor", "encargado"],
+            roles: ["admin"],
           },
           {
             title: "Delivery Propio",
             href: "/delivery/propio",
             icon: TrendingUp,
-            roles: ["admin", "gerente", "supervisor", "encargado"],
+            roles: ["admin"],
           },
         ],
       },
@@ -260,13 +265,13 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         title: "Auditorías",
         href: "/auditorias",
         icon: ClipboardCheck,
-        roles: ["admin", "gerente"],
+        roles: ["admin", "gerente", "supervisor"],
       },
       {
         title: "Pedidos Brozziano",
         href: "/pedidos-brozziano",
         icon: ShoppingCart,
-        roles: ["admin", "gerente", "supervisor", "encargado"],
+        roles: ["admin", "gerente"],
       },
       {
         title: "Productividad Empleados",
@@ -284,37 +289,37 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         title: "Proveedores y Pagos",
         href: "#",
         icon: Truck,
-        roles: ["admin", "gerente"],
+        roles: ["admin", "gerente", "supervisor"],
         submenu: [
           {
             title: "Dashboard",
             href: "/proveedores-pagos",
             icon: LayoutDashboard,
-            roles: ["admin", "gerente"],
+            roles: ["admin", "gerente", "supervisor"],
           },
           {
             title: "Gestión de Proveedores",
             href: "/proveedores-pagos/proveedores",
             icon: Truck,
-            roles: ["admin", "gerente"],
+            roles: ["admin", "gerente", "supervisor"],
           },
           {
             title: "Pago a Proveedores",
             href: "/proveedores-pagos/pagos",
             icon: CreditCardIcon,
-            roles: ["admin", "gerente"],
+            roles: ["admin", "gerente", "supervisor"],
           },
           {
             title: "Historial de Pagos",
             href: "/proveedores-pagos/historial",
             icon: History,
-            roles: ["admin", "gerente"],
+            roles: ["admin", "gerente", "supervisor"],
           },
           {
             title: "Simulación de Costos",
             href: "/proveedores-pagos/simulacion-costos",
             icon: Calculator,
-            roles: ["admin", "gerente"],
+            roles: ["admin", "gerente", "supervisor"],
           },
         ],
       },
@@ -322,13 +327,13 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         title: "Sistema de Puntos",
         href: "/puntos",
         icon: Star,
-        roles: ["admin", "gerente"],
+        roles: ["admin"],
       },
       {
         title: "Chat Interno",
         href: "/chat",
         icon: MessageSquare,
-        roles: ["admin", "gerente", "supervisor", "encargado"],
+        roles: ["admin"],
       },
       {
         title: "Balances",
@@ -346,7 +351,7 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         title: "Panel de Administración",
         href: "/admin",
         icon: Shield,
-        roles: ["admin"],
+        roles: ["admin", "gerente"],
       },
       {
         title: "Configuración",
@@ -389,7 +394,7 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
               pathname={pathname}
               toggleSubmenu={toggleSubmenu}
               openSubmenu={openSubmenu}
-              userRole={user?.role}
+              userRole={user?.user_metadata?.role}
             />
           ))}
         </nav>
@@ -446,7 +451,7 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
                     pathname={pathname}
                     toggleSubmenu={toggleSubmenu}
                     openSubmenu={openSubmenu}
-                    userRole={user?.role}
+                    userRole={user?.user_metadata?.role}
                   />
                 ))}
               </nav>
@@ -499,3 +504,4 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
 
 // También exportamos como default para mantener compatibilidad con ambos tipos de importación
 export default DashboardLayout
+
