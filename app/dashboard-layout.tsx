@@ -65,9 +65,9 @@ const NavLink = memo(
     const isSubmenuOpen = openSubmenu === item.title
     const isSubmenuActive = item.submenu?.some((subItem) => pathname === subItem.href)
 
-    // SOLUCIÓN TEMPORAL: Mostrar todos los elementos si no hay un rol definido
     // Verificar si el usuario tiene acceso a este elemento
-    const hasAccess = true // Temporalmente permitimos acceso a todo
+    const hasAccess =
+      !item.roles || item.roles.length === 0 || item.roles.includes(userRole || "") || userRole === "admin"
 
     // Añadir log para depuración
     console.log(
@@ -98,19 +98,27 @@ const NavLink = memo(
 
           {isSubmenuOpen && (
             <div className="ml-4 mt-1 space-y-1">
-              {item.submenu?.map((subItem) => (
-                <Link
-                  key={subItem.href}
-                  href={subItem.href}
-                  className={cn(
-                    "flex items-center rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground",
-                    pathname === subItem.href ? "bg-accent text-accent-foreground" : "",
-                  )}
-                >
-                  <subItem.icon className="mr-2 h-4 w-4" />
-                  <span>{subItem.title}</span>
-                </Link>
-              ))}
+              {item.submenu
+                ?.filter(
+                  (subItem) =>
+                    !subItem.roles ||
+                    subItem.roles.length === 0 ||
+                    subItem.roles.includes(userRole || "") ||
+                    userRole === "admin",
+                )
+                .map((subItem) => (
+                  <Link
+                    key={subItem.href}
+                    href={subItem.href}
+                    className={cn(
+                      "flex items-center rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground",
+                      pathname === subItem.href ? "bg-accent text-accent-foreground" : "",
+                    )}
+                  >
+                    <subItem.icon className="mr-2 h-4 w-4" />
+                    <span>{subItem.title}</span>
+                  </Link>
+                ))}
             </div>
           )}
         </div>
@@ -162,7 +170,7 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
   useEffect(() => {
     console.log("User object:", user)
     console.log("User metadata:", user?.user_metadata)
-    console.log("User role:", user?.user_metadata?.role)
+    console.log("User role:", user?.role) // Cambiado de user?.user_metadata?.role a user?.role
   }, [user])
 
   useEffect(() => {
@@ -406,7 +414,7 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
               pathname={pathname}
               toggleSubmenu={toggleSubmenu}
               openSubmenu={openSubmenu}
-              userRole={user?.user_metadata?.role}
+              userRole={user?.role} // Cambiado de user?.user_metadata?.role a user?.role
             />
           ))}
         </nav>
@@ -463,7 +471,7 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
                     pathname={pathname}
                     toggleSubmenu={toggleSubmenu}
                     openSubmenu={openSubmenu}
-                    userRole={user?.user_metadata?.role}
+                    userRole={user?.role} // Cambiado de user?.user_metadata?.role a user?.role
                   />
                 ))}
               </nav>
@@ -516,4 +524,5 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
 
 // También exportamos como default para mantener compatibilidad con ambos tipos de importación
 export default DashboardLayout
+
 
