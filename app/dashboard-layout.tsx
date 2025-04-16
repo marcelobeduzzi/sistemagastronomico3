@@ -154,6 +154,11 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
 
   // Check if user is authenticated
   useEffect(() => {
+    console.log("User object:", user)
+    console.log("User role:", user?.user_metadata?.role)
+  }, [user])
+
+  useEffect(() => {
     if (!user && !isLoading) {
       router.push("/login")
     }
@@ -504,4 +509,3 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
 
 // También exportamos como default para mantener compatibilidad con ambos tipos de importación
 export default DashboardLayout
-
