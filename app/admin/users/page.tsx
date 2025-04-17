@@ -27,10 +27,11 @@ import {
 } from "@/components/ui/pagination"
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/components/ui/use-toast"
-import { Eye, EyeOff, Edit, Key, Loader2, RefreshCcw, UserPlus } from "lucide-react"
+import { Eye, EyeOff, Edit, Key, Loader2, RefreshCcw, UserPlus, AlertTriangle } from 'lucide-react'
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import DashboardLayout from "@/app/dashboard-layout"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 // Tipo para usuario
 interface User {
@@ -78,6 +79,7 @@ export default function UsersPage() {
   const [refreshing, setRefreshing] = useState(false)
   const [updatingPin, setUpdatingPin] = useState(false)
   const [creatingUser, setCreatingUser] = useState(false)
+  const [warning, setWarning] = useState<string | null>(null)
 
   // Paginación
   const [currentPage, setCurrentPage] = useState(1)
@@ -94,16 +96,43 @@ export default function UsersPage() {
   // Función para cargar usuarios usando la API Route
   const loadUsers = async () => {
     setLoading(true)
+    setWarning(null)
     try {
-      // Llamar a nuestra API Route
+      // Intentar cargar usuarios desde nuestra API
       const response = await fetch("/api/admin/users")
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Error al cargar usuarios")
+        // Si falla, intentamos obtener al menos el usuario actual
+        const currentUserResponse = await fetch("/api/admin/current-user")
+        
+        if (!currentUserResponse.ok) {
+          throw new Error("No se pudo obtener información de usuarios")
+        }
+        
+        const currentUserData = await currentUserResponse.json()
+        
+        // Crear una lista con solo el usuario actual
+        const userData = [currentUserData.user]
+        setUsers(userData)
+        calculateTotalPages(activeTab, userData)
+        
+        setWarning("Solo se muestra el usuario actual debido a restricciones de permisos. Contacte al administrador del sistema.")
+        
+        toast({
+          title: "Acceso limitado",
+          description: "Solo se muestra el usuario actual debido a restricciones de permisos.",
+          variant: "warning",
+        })
+        
+        return
       }
 
       const data = await response.json()
+      
+      if (data.warning) {
+        setWarning(data.warning)
+      }
+      
       setUsers(data.users)
       calculateTotalPages(activeTab, data.users)
 
@@ -113,6 +142,24 @@ export default function UsersPage() {
       })
     } catch (error) {
       console.error("Error al cargar usuarios:", error)
+      
+      // Si todo falla, mostramos al menos el usuario actual
+      if (currentUser) {
+        const userData = [{
+          id: currentUser.id,
+          email: currentUser.email || "",
+          role: currentUser.role || "admin",
+          name: currentUser.name || currentUser.email?.split("@")[0] || "Usuario actual",
+          hasPin: false,
+          active: true,
+        }]
+        
+        setUsers(userData)
+        calculateTotalPages(activeTab, userData)
+        
+        setWarning("No se pudieron cargar los usuarios. Solo se muestra el usuario actual.")
+      }
+      
       toast({
         title: "Error al cargar usuarios",
         description: error.message || "No se pudieron cargar los usuarios.",
@@ -186,6 +233,7 @@ export default function UsersPage() {
             phone: editedUser.phone,
             position: editedUser.position,
             branch: editedUser.branch,
+            role: editedUser.role, // Mantener el rol actual
           },
         }),
       })
@@ -255,6 +303,7 @@ export default function UsersPage() {
           userId: selectedUser!.id,
           userData: {
             pin: newPin,
+            role: selectedUser!.role, // Mantener el rol actual
           },
         }),
       })
@@ -451,6 +500,14 @@ export default function UsersPage() {
             </Button>
           </div>
         </div>
+
+        {warning && (
+          <Alert variant="warning" className="mb-6">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Advertencia</AlertTitle>
+            <AlertDescription>{warning}</AlertDescription>
+          </Alert>
+        )}
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList>
@@ -873,3 +930,4 @@ export default function UsersPage() {
     </DashboardLayout>
   )
 }
+
