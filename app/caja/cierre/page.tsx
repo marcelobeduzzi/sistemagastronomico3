@@ -78,6 +78,8 @@ export default function CierreCajaPage() {
   const [totalEfectivoCalculado, setTotalEfectivoCalculado] = useState(0)
   const [diferencia, setDiferencia] = useState(0)
   const [porcentajeDiferencia, setPorcentajeDiferencia] = useState(0)
+  const [diferenciaPosnet, setDiferenciaPosnet] = useState(0) // Nueva variable para diferencia de Posnet
+  const [porcentajeDiferenciaPosnet, setPorcentajeDiferenciaPosnet] = useState(0) // Nueva variable para porcentaje de diferencia de Posnet
   const [gastos, setGastos] = useState<Gasto[]>([])
   const [retiros, setRetiros] = useState<Retiro[]>([])
   const [aperturasPendientes, setAperturasPendientes] = useState<Apertura[]>([])
@@ -110,6 +112,7 @@ export default function CierreCajaPage() {
     total_sales: 0,
     cash_sales: 0, // Efectivo (se mantiene)
     posnet_sales: 0, // Reemplaza credit_card_sales
+    posnet_impreso: 0, // Nuevo campo para Posnet Impreso
     rappi_sales: 0, // Reemplaza debit_card_sales
     mercado_delivery_sales: 0, // Reemplaza transfer_sales
     pedidos_ya_sales: 0, // Reemplaza mercado_pago_sales
@@ -278,6 +281,21 @@ export default function CierreCajaPage() {
     // Si la diferencia es significativa, requerir supervisor
     setNeedsSupervisor(porcentaje > 2)
   }, [formData.actual_balance, formData.expected_balance])
+
+  // Calcular diferencia de Posnet y porcentaje
+  useEffect(() => {
+    const diferenciaPosnet = formData.posnet_impreso - formData.posnet_sales
+    const porcentajePosnet =
+      formData.posnet_sales !== 0 ? Math.abs((diferenciaPosnet / formData.posnet_sales) * 100) : 0
+
+    setDiferenciaPosnet(diferenciaPosnet)
+    setPorcentajeDiferenciaPosnet(porcentajePosnet)
+
+    // Si la diferencia de Posnet es significativa, también requerir supervisor
+    if (porcentajePosnet > 2) {
+      setNeedsSupervisor(true)
+    }
+  }, [formData.posnet_impreso, formData.posnet_sales])
 
   // Manejar cambios en los campos del formulario
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -568,6 +586,7 @@ export default function CierreCajaPage() {
         total_sales: formData.total_sales,
         cash_sales: formData.cash_sales,
         credit_card_sales: formData.posnet_sales, // Mapear posnet_sales a credit_card_sales
+        posnet_impreso: formData.posnet_impreso, // Nuevo campo para Posnet Impreso
         debit_card_sales: formData.rappi_sales, // Mapear rappi_sales a debit_card_sales
         transfer_sales: formData.mercado_delivery_sales, // Mapear mercado_delivery_sales a transfer_sales
         mercado_pago_sales: formData.pedidos_ya_sales, // Mapear pedidos_ya_sales a mercado_pago_sales
@@ -593,9 +612,13 @@ export default function CierreCajaPage() {
         difference_percentage: porcentajeDiferencia,
         difference_justification: formData.difference_justification,
 
+        // Nuevos campos para Posnet
+        posnet_difference: diferenciaPosnet,
+        posnet_difference_percentage: porcentajeDiferenciaPosnet,
+
         // Estado
         status: needsSupervisor ? "pendiente" : "aprobado",
-        has_alert: Math.abs(porcentajeDiferencia) > 0.5,
+        has_alert: Math.abs(porcentajeDiferencia) > 0.5 || Math.abs(porcentajeDiferenciaPosnet) > 0.5,
 
         // Gastos y retiros como JSON
         expenses: JSON.stringify(gastos),
@@ -639,8 +662,9 @@ export default function CierreCajaPage() {
         }
 
         // 3. Generar alertas si es necesario
-        if (Math.abs(porcentajeDiferencia) > 0.5) {
-          const alertLevel = Math.abs(porcentajeDiferencia) > 2 ? "high" : "medium"
+        if (Math.abs(porcentajeDiferencia) > 0.5 || Math.abs(porcentajeDiferenciaPosnet) > 0.5) {
+          const alertLevel =
+            Math.abs(porcentajeDiferencia) > 2 || Math.abs(porcentajeDiferenciaPosnet) > 2 ? "high" : "medium"
 
           const alertaData = {
             cash_register_id: cierreInsertado.id,
@@ -652,6 +676,8 @@ export default function CierreCajaPage() {
               percentage: Math.abs(porcentajeDiferencia),
               expected: formData.expected_balance,
               actual: formData.actual_balance,
+              posnet_difference: diferenciaPosnet,
+              posnet_difference_percentage: porcentajeDiferenciaPosnet,
             }),
             status: "pending",
             local_id: formData.local_id,
@@ -853,6 +879,19 @@ export default function CierreCajaPage() {
                         type="number"
                         min="0"
                         value={formData.posnet_sales || ""}
+                        onChange={handleNumberChange}
+                      />
+                    </div>
+
+                    {/* Nuevo campo Posnet Impreso */}
+                    <div className="space-y-2">
+                      <Label htmlFor="posnet_impreso">Posnet Impreso</Label>
+                      <Input
+                        id="posnet_impreso"
+                        name="posnet_impreso"
+                        type="number"
+                        min="0"
+                        value={formData.posnet_impreso || ""}
                         onChange={handleNumberChange}
                       />
                     </div>
@@ -1248,40 +1287,89 @@ export default function CierreCajaPage() {
                       <Label>Total Retiros:</Label>
                       <Input type="text" value={`$${formData.total_withdrawals.toLocaleString()}`} readOnly />
                     </div>
-                    <div>
-                      <Label>Saldo Esperado:</Label>
-                      <Input type="text" value={`$${formData.expected_balance.toLocaleString()}`} readOnly />
+                  </div>
+
+                  {/* Sección de Efectivo */}
+                  <div className="mt-4 p-4 border rounded-md">
+                    <h3 className="text-lg font-medium mb-3">Balance de Efectivo</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label>Saldo Esperado (Efectivo):</Label>
+                        <Input type="text" value={`$${formData.expected_balance.toLocaleString()}`} readOnly />
+                      </div>
+                      <div>
+                        <Label>Saldo Real (Efectivo):</Label>
+                        <Input type="text" value={`$${formData.actual_balance.toLocaleString()}`} readOnly />
+                      </div>
                     </div>
-                    <div>
-                      <Label>Saldo Real:</Label>
-                      <Input type="text" value={`$${formData.actual_balance.toLocaleString()}`} readOnly />
+
+                    <div className="mt-3 p-3 border rounded-md bg-amber-500/10">
+                      <div className="flex items-center space-x-2">
+                        {diferencia !== 0 ? (
+                          <AlertTriangle className="h-4 w-4 text-amber-500" />
+                        ) : (
+                          <CheckCircle className="h-4 w-4 text-green-500" />
+                        )}
+                        <Label className="text-sm font-medium">
+                          Diferencia Efectivo:{" "}
+                          <span
+                            className={diferencia !== 0 ? (diferencia > 0 ? "text-green-600" : "text-red-600") : ""}
+                          >
+                            ${diferencia.toLocaleString()} ({porcentajeDiferencia.toFixed(2)}%)
+                          </span>
+                        </Label>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="mt-6 p-4 border rounded-md bg-amber-500/10">
-                    <div className="flex items-center space-x-2">
-                      {diferencia !== 0 ? (
-                        <AlertTriangle className="h-4 w-4 text-amber-500" />
-                      ) : (
-                        <CheckCircle className="h-4 w-4 text-green-500" />
-                      )}
-                      <Label className="text-sm font-medium">
-                        Diferencia:{" "}
-                        <span className={diferencia !== 0 ? (diferencia > 0 ? "text-green-600" : "text-red-600") : ""}>
-                          ${diferencia.toLocaleString()} ({porcentajeDiferencia.toFixed(2)}%)
-                        </span>
-                      </Label>
+                  {/* Nueva Sección de Posnet */}
+                  <div className="mt-4 p-4 border rounded-md">
+                    <h3 className="text-lg font-medium mb-3">Balance de Posnet</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label>Posnet Esperado:</Label>
+                        <Input type="text" value={`$${formData.posnet_sales.toLocaleString()}`} readOnly />
+                      </div>
+                      <div>
+                        <Label>Posnet Real (Impreso):</Label>
+                        <Input type="text" value={`$${formData.posnet_impreso.toLocaleString()}`} readOnly />
+                      </div>
                     </div>
-                    {diferencia !== 0 && (
+
+                    <div className="mt-3 p-3 border rounded-md bg-amber-500/10">
+                      <div className="flex items-center space-x-2">
+                        {diferenciaPosnet !== 0 ? (
+                          <AlertTriangle className="h-4 w-4 text-amber-500" />
+                        ) : (
+                          <CheckCircle className="h-4 w-4 text-green-500" />
+                        )}
+                        <Label className="text-sm font-medium">
+                          Diferencia Posnet:{" "}
+                          <span
+                            className={
+                              diferenciaPosnet !== 0 ? (diferenciaPosnet > 0 ? "text-green-600" : "text-red-600") : ""
+                            }
+                          >
+                            ${diferenciaPosnet.toLocaleString()} ({porcentajeDiferenciaPosnet.toFixed(2)}%)
+                          </span>
+                        </Label>
+                      </div>
+                    </div>
+                  </div>
+
+                  {(diferencia !== 0 || diferenciaPosnet !== 0) && (
+                    <div className="mt-4">
+                      <Label htmlFor="difference_justification">Justificación de la diferencia:</Label>
                       <Textarea
+                        id="difference_justification"
                         placeholder="Justificación de la diferencia"
                         name="difference_justification"
                         value={formData.difference_justification}
                         onChange={handleInputChange}
                         className="mt-2"
                       />
-                    )}
-                  </div>
+                    </div>
+                  )}
 
                   {needsSupervisor && (
                     <div className="mt-6 p-4 border rounded-md bg-red-500/10">
@@ -1322,16 +1410,6 @@ export default function CierreCajaPage() {
                   </Button>
                 </CardFooter>
               </Card>
-              {/* Añade este código justo antes del return en la pestaña de Balance Final */}
-              {console.log("Valores finales para el balance:", {
-                initial_balance: formData.initial_balance,
-                cash_sales: formData.cash_sales, // Asegúrate de que este valor sea correcto
-                total_sales: formData.total_sales,
-                total_expenses: formData.total_expenses,
-                total_withdrawals: formData.total_withdrawals,
-                expected_balance: formData.expected_balance,
-                actual_balance: formData.actual_balance,
-              })}
             </TabsContent>
           </Tabs>
         </form>
@@ -1359,9 +1437,26 @@ export default function CierreCajaPage() {
                 <span>${formData.actual_balance.toLocaleString()}</span>
               </div>
               <div className="flex justify-between font-bold">
-                <span>Diferencia:</span>
+                <span>Diferencia Efectivo:</span>
                 <span className={diferencia !== 0 ? (diferencia > 0 ? "text-green-600" : "text-red-600") : ""}>
                   ${diferencia.toLocaleString()}
+                </span>
+              </div>
+              {/* Agregar información de Posnet al diálogo de confirmación */}
+              <div className="flex justify-between font-medium">
+                <span>Posnet Esperado:</span>
+                <span>${formData.posnet_sales.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between font-medium">
+                <span>Posnet Real (Impreso):</span>
+                <span>${formData.posnet_impreso.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between font-bold">
+                <span>Diferencia Posnet:</span>
+                <span
+                  className={diferenciaPosnet !== 0 ? (diferenciaPosnet > 0 ? "text-green-600" : "text-red-600") : ""}
+                >
+                  ${diferenciaPosnet.toLocaleString()}
                 </span>
               </div>
             </div>
@@ -1381,6 +1476,7 @@ export default function CierreCajaPage() {
     </DashboardLayout>
   )
 }
+
 
 
 

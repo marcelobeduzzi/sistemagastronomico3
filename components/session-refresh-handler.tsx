@@ -1,35 +1,53 @@
 "use client"
 
-import { useEffect } from "react"
-import { usePathname } from "next/navigation"
+import { useEffect, useRef } from "react"
 import { useAuth } from "@/lib/auth-context"
 
-// Este componente se puede agregar al layout principal para refrescar la sesión
-// periódicamente en todas las páginas
 export function SessionRefreshHandler() {
-  const { user, refreshSession } = useAuth()
-  const pathname = usePathname()
+  const { refreshSession } = useAuth()
+  const lastRefreshTime = useRef<number>(Date.now())
+  const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Refrescar la sesión cuando cambia la ruta
   useEffect(() => {
-    if (user) {
-      refreshSession().catch(console.error)
+    // Función para refrescar la sesión con límite de frecuencia
+    const handleRefresh = async () => {
+      const now = Date.now()
+      const timeSinceLastRefresh = now - lastRefreshTime.current
+
+      // Solo refrescar si han pasado al menos 10 minutos desde el último refresco
+      if (timeSinceLastRefresh >= 10 * 60 * 1000) {
+        try {
+          await refreshSession()
+          console.log("Session refreshed successfully")
+          lastRefreshTime.current = Date.now()
+        } catch (error) {
+          console.error("Error refreshing session:", error)
+        }
+      }
     }
-  }, [pathname, user, refreshSession])
 
-  // Refrescar la sesión periódicamente
-  useEffect(() => {
-    if (user) {
-      const interval = setInterval(
-        () => {
-          refreshSession().catch(console.error)
-        },
-        15 * 60 * 1000,
-      ) // 15 minutos
+    // Configurar un intervalo para verificar si es necesario refrescar
+    // Verificamos cada 5 minutos, pero solo refrescamos si han pasado 10 minutos
+    const intervalId = setInterval(handleRefresh, 5 * 60 * 1000)
 
-      return () => clearInterval(interval)
+    // Refrescar cuando la ventana recupera el foco, pero respetando el límite de tiempo
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        handleRefresh()
+      }
     }
-  }, [user, refreshSession])
 
-  return null // Este componente no renderiza nada
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+
+    // Limpiar
+    return () => {
+      clearInterval(intervalId)
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current)
+      }
+    }
+  }, [refreshSession])
+
+  return null
 }
