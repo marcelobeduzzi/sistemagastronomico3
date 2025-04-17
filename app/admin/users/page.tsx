@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -29,26 +28,19 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/components/ui/use-toast"
 import { Eye, EyeOff, Edit, Key, Loader2, RefreshCcw, UserPlus } from "lucide-react"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import DashboardLayout from "@/app/dashboard-layout"
 
 // Tipo para usuario
 interface User {
   id: string
+  name: string
   email: string
   role: string
-  created_at: string
-  raw_user_meta_data?: {
-    name?: string
-    phone?: string
-    position?: string
-    branch?: string
-    pin?: string
-  }
-  // Campos calculados para la interfaz
-  name?: string
   hasPin?: boolean
   pin?: string | null
+  active?: boolean
   phone?: string
   position?: string
   branch?: string
@@ -112,10 +104,11 @@ export default function UsersPage() {
 
       if (data) {
         // Procesar los usuarios
-        const processedUsers = data.map((user: User) => ({
+        const processedUsers = data.map((user: any) => ({
           id: user.id,
           email: user.email,
-          role: user.raw_user_meta_data?.role || user.role || "encargado", // Usar role de donde esté disponible
+          // Usar el campo role directamente si existe, o buscarlo en los metadatos
+          role: user.role || user.raw_user_meta_data?.role || "encargado",
           created_at: user.created_at,
           // Extraer metadatos
           name: user.raw_user_meta_data?.name || user.email.split("@")[0],
@@ -152,8 +145,7 @@ export default function UsersPage() {
     let filteredUsers = userData
 
     if (tab !== "all") {
-      const roleFilter = tab.slice(0, -1) // Quitar la 's' del final
-      filteredUsers = userData.filter((user) => user.role === roleFilter)
+      filteredUsers = userData.filter((user) => user.role === tab.slice(0, -1)) // Quitar la 's' del final
     }
 
     setTotalPages(Math.max(1, Math.ceil(filteredUsers.length / itemsPerPage)))
@@ -198,15 +190,15 @@ export default function UsersPage() {
     }
 
     try {
-      // Actualizar el usuario usando la función RPC update_user_metadata
-      const { error } = await supabase.rpc("update_user_metadata", {
-        user_id: editedUser.id,
-        metadata: {
+      // Actualizar el usuario en Supabase Auth
+      const { error } = await supabase.auth.admin.updateUserById(editedUser.id, {
+        user_metadata: {
           name: editedUser.name,
           phone: editedUser.phone,
           position: editedUser.position,
           branch: editedUser.branch,
         },
+        email: editedUser.email,
       })
 
       if (error) throw error
@@ -236,7 +228,7 @@ export default function UsersPage() {
       console.error("Error al actualizar usuario:", error)
       toast({
         title: "Error",
-        description: "No se pudo actualizar la información del usuario: " + error.message,
+        description: "No se pudo actualizar la información del usuario.",
         variant: "destructive",
       })
     }
@@ -262,10 +254,10 @@ export default function UsersPage() {
     try {
       setUpdatingPin(true)
 
-      // Actualizar el PIN usando la función RPC update_user_metadata
-      const { error } = await supabase.rpc("update_user_metadata", {
-        user_id: selectedUser!.id,
-        metadata: {
+      // Actualizar el PIN en los metadatos del usuario
+      const { error } = await supabase.auth.admin.updateUserById(selectedUser!.id, {
+        user_metadata: {
+          ...selectedUser?.user_metadata,
           pin: newPin,
         },
       })
@@ -287,7 +279,7 @@ export default function UsersPage() {
 
       toast({
         title: "PIN actualizado",
-        description: `El PIN ha sido actualizado correctamente.`,
+        description: `El PIN de ${selectedUser!.name} ha sido actualizado correctamente.`,
       })
 
       setShowPinDialog(false)
@@ -297,7 +289,7 @@ export default function UsersPage() {
       setPinError("")
     } catch (error) {
       console.error("Error al actualizar PIN:", error)
-      setPinError("Error al actualizar el PIN: " + error.message)
+      setPinError("Error al actualizar el PIN. Intente nuevamente.")
     } finally {
       setUpdatingPin(false)
     }
@@ -317,27 +309,40 @@ export default function UsersPage() {
     try {
       setCreatingUser(true)
 
-      // Crear el usuario usando la función de autenticación de Supabase
-      const { data, error } = await supabase.auth.signUp({
+      // Crear el usuario en Supabase Auth
+      const { data, error } = await supabase.auth.admin.createUser({
         email: newUser.email,
         password: newUser.password,
-        options: {
-          data: {
-            name: newUser.name,
-            role: newUser.role,
-          },
+        email_confirm: true,
+        user_metadata: {
+          name: newUser.name,
         },
       })
 
       if (error) throw error
 
-      toast({
-        title: "Usuario creado",
-        description: `El usuario ${newUser.name} ha sido creado correctamente con rol de ${newUser.role}.`,
+      // Asignar el rol al usuario
+      const { error: roleError } = await supabase.auth.admin.updateUserById(data.user.id, {
+        role: newUser.role,
       })
 
-      // Refrescar la lista de usuarios
-      await loadUsers()
+      if (roleError) throw roleError
+
+      // Añadir el nuevo usuario al estado local
+      const newUserData = {
+        id: data.user.id,
+        name: newUser.name,
+        email: newUser.email,
+        role: newUser.role,
+        phone: "",
+        position: "",
+        branch: "",
+        active: true,
+        hasPin: false,
+        pin: null,
+      }
+
+      setUsers([...users, newUserData])
 
       setShowCreateDialog(false)
       setNewUser({
@@ -345,6 +350,11 @@ export default function UsersPage() {
         password: "",
         name: "",
         role: "encargado",
+      })
+
+      toast({
+        title: "Usuario creado",
+        description: `El usuario ${newUser.name} ha sido creado correctamente con rol de ${newUser.role}.`,
       })
     } catch (error) {
       console.error("Error al crear usuario:", error)
@@ -515,7 +525,7 @@ export default function UsersPage() {
                                     setSelectedUser(user)
                                     setEditedUser({
                                       id: user.id,
-                                      name: user.name || "",
+                                      name: user.name,
                                       email: user.email,
                                       role: user.role,
                                       phone: user.phone || "",
@@ -656,10 +666,7 @@ export default function UsersPage() {
                   type="email"
                   value={editedUser.email}
                   onChange={(e) => setEditedUser({ ...editedUser, email: e.target.value })}
-                  disabled
-                  className="bg-muted"
                 />
-                <p className="text-xs text-muted-foreground">El email no puede ser modificado.</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">Teléfono</Label>
@@ -693,7 +700,7 @@ export default function UsersPage() {
                   disabled
                   className="bg-muted"
                 />
-                <p className="text-xs text-muted-foreground">Para cambiar el rol, usa la página de gestión de roles.</p>
+                <p className="text-xs text-muted-foreground">El rol no puede ser modificado desde esta interfaz.</p>
               </div>
             </div>
 
@@ -868,3 +875,4 @@ export default function UsersPage() {
     </DashboardLayout>
   )
 }
+
