@@ -91,43 +91,26 @@ export default function UsersPage() {
     loadUsers()
   }, [])
 
-  // Función para cargar usuarios usando la función RPC personalizada
+  // Función para cargar usuarios usando la API Route
   const loadUsers = async () => {
     setLoading(true)
     try {
-      // Usar la función RPC get_all_users que ya existe en tu proyecto
-      const { data, error } = await supabase.rpc("get_all_users")
+      // Llamar a nuestra API Route
+      const response = await fetch("/api/admin/users")
 
-      if (error) {
-        throw error
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Error al cargar usuarios")
       }
 
-      if (data) {
-        // Procesar los usuarios
-        const processedUsers = data.map((user: any) => ({
-          id: user.id,
-          email: user.email,
-          // Usar el campo role directamente si existe, o buscarlo en los metadatos
-          role: user.role || user.raw_user_meta_data?.role || "encargado",
-          created_at: user.created_at,
-          // Extraer metadatos
-          name: user.raw_user_meta_data?.name || user.email.split("@")[0],
-          phone: user.raw_user_meta_data?.phone || "",
-          position: user.raw_user_meta_data?.position || "",
-          branch: user.raw_user_meta_data?.branch || "",
-          hasPin: !!user.raw_user_meta_data?.pin,
-          pin: user.raw_user_meta_data?.pin || null,
-        }))
+      const data = await response.json()
+      setUsers(data.users)
+      calculateTotalPages(activeTab, data.users)
 
-        setUsers(processedUsers)
-        calculateTotalPages(activeTab, processedUsers)
-
-        // Mostrar mensaje de éxito
-        toast({
-          title: "Datos cargados correctamente",
-          description: `Se han cargado ${processedUsers.length} usuarios del sistema.`,
-        })
-      }
+      toast({
+        title: "Datos cargados correctamente",
+        description: `Se han cargado ${data.users.length} usuarios del sistema.`,
+      })
     } catch (error) {
       console.error("Error al cargar usuarios:", error)
       toast({
@@ -190,18 +173,27 @@ export default function UsersPage() {
     }
 
     try {
-      // Actualizar el usuario en Supabase Auth
-      const { error } = await supabase.auth.admin.updateUserById(editedUser.id, {
-        user_metadata: {
-          name: editedUser.name,
-          phone: editedUser.phone,
-          position: editedUser.position,
-          branch: editedUser.branch,
+      // Actualizar el usuario usando nuestra API Route
+      const response = await fetch("/api/admin/users", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
         },
-        email: editedUser.email,
+        body: JSON.stringify({
+          userId: editedUser.id,
+          userData: {
+            name: editedUser.name,
+            phone: editedUser.phone,
+            position: editedUser.position,
+            branch: editedUser.branch,
+          },
+        }),
       })
 
-      if (error) throw error
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Error al actualizar usuario")
+      }
 
       // Actualizar el usuario en el estado local
       setUsers(
@@ -210,7 +202,6 @@ export default function UsersPage() {
             ? {
                 ...u,
                 name: editedUser.name,
-                email: editedUser.email,
                 phone: editedUser.phone,
                 position: editedUser.position,
                 branch: editedUser.branch,
@@ -228,7 +219,7 @@ export default function UsersPage() {
       console.error("Error al actualizar usuario:", error)
       toast({
         title: "Error",
-        description: "No se pudo actualizar la información del usuario.",
+        description: error.message || "No se pudo actualizar la información del usuario.",
         variant: "destructive",
       })
     }
@@ -254,15 +245,24 @@ export default function UsersPage() {
     try {
       setUpdatingPin(true)
 
-      // Actualizar el PIN en los metadatos del usuario
-      const { error } = await supabase.auth.admin.updateUserById(selectedUser!.id, {
-        user_metadata: {
-          ...selectedUser?.user_metadata,
-          pin: newPin,
+      // Actualizar el PIN usando nuestra API Route
+      const response = await fetch("/api/admin/users", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify({
+          userId: selectedUser!.id,
+          userData: {
+            pin: newPin,
+          },
+        }),
       })
 
-      if (error) throw error
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Error al actualizar PIN")
+      }
 
       // Actualizar el usuario en el estado local
       setUsers(
@@ -279,7 +279,7 @@ export default function UsersPage() {
 
       toast({
         title: "PIN actualizado",
-        description: `El PIN de ${selectedUser!.name} ha sido actualizado correctamente.`,
+        description: `El PIN ha sido actualizado correctamente.`,
       })
 
       setShowPinDialog(false)
@@ -289,7 +289,7 @@ export default function UsersPage() {
       setPinError("")
     } catch (error) {
       console.error("Error al actualizar PIN:", error)
-      setPinError("Error al actualizar el PIN. Intente nuevamente.")
+      setPinError(error.message || "Error al actualizar el PIN. Intente nuevamente.")
     } finally {
       setUpdatingPin(false)
     }
@@ -310,27 +310,22 @@ export default function UsersPage() {
       setCreatingUser(true)
 
       // Crear el usuario en Supabase Auth
-      const { data, error } = await supabase.auth.admin.createUser({
+      const { data, error } = await supabase.auth.signUp({
         email: newUser.email,
         password: newUser.password,
-        email_confirm: true,
-        user_metadata: {
-          name: newUser.name,
+        options: {
+          data: {
+            name: newUser.name,
+            role: newUser.role,
+          },
         },
       })
 
       if (error) throw error
 
-      // Asignar el rol al usuario
-      const { error: roleError } = await supabase.auth.admin.updateUserById(data.user.id, {
-        role: newUser.role,
-      })
-
-      if (roleError) throw roleError
-
       // Añadir el nuevo usuario al estado local
       const newUserData = {
-        id: data.user.id,
+        id: data.user?.id || `new-${Date.now()}`,
         name: newUser.name,
         email: newUser.email,
         role: newUser.role,
@@ -666,7 +661,10 @@ export default function UsersPage() {
                   type="email"
                   value={editedUser.email}
                   onChange={(e) => setEditedUser({ ...editedUser, email: e.target.value })}
+                  disabled
+                  className="bg-muted"
                 />
+                <p className="text-xs text-muted-foreground">El email no puede ser modificado.</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">Teléfono</Label>
@@ -875,4 +873,3 @@ export default function UsersPage() {
     </DashboardLayout>
   )
 }
-
