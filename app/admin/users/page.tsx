@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -28,19 +29,26 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/components/ui/use-toast"
 import { Eye, EyeOff, Edit, Key, Loader2, RefreshCcw, UserPlus } from "lucide-react"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import DashboardLayout from "@/app/dashboard-layout"
 
 // Tipo para usuario
 interface User {
   id: string
-  name: string
   email: string
   role: string
+  created_at: string
+  raw_user_meta_data?: {
+    name?: string
+    phone?: string
+    position?: string
+    branch?: string
+    pin?: string
+  }
+  // Campos calculados para la interfaz
+  name?: string
   hasPin?: boolean
   pin?: string | null
-  active?: boolean
   phone?: string
   position?: string
   branch?: string
@@ -91,30 +99,31 @@ export default function UsersPage() {
     loadUsers()
   }, [])
 
-  // Función para cargar usuarios de Supabase Auth
+  // Función para cargar usuarios usando la función RPC personalizada
   const loadUsers = async () => {
     setLoading(true)
     try {
-      // Obtener todos los usuarios de Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.admin.listUsers()
+      // Usar la función RPC get_all_users que ya existe en tu proyecto
+      const { data, error } = await supabase.rpc("get_all_users")
 
-      if (authError) {
-        throw authError
+      if (error) {
+        throw error
       }
 
-      if (authData?.users) {
+      if (data) {
         // Procesar los usuarios
-        const processedUsers = authData.users.map((user) => ({
+        const processedUsers = data.map((user: User) => ({
           id: user.id,
-          name: user.user_metadata?.name || user.email.split("@")[0],
           email: user.email,
-          role: user.role || "encargado", // Rol por defecto si no tiene
-          phone: user.user_metadata?.phone || "",
-          position: user.user_metadata?.position || "",
-          branch: user.user_metadata?.branch || "",
-          active: !user.banned_until,
-          hasPin: !!user.user_metadata?.pin,
-          pin: user.user_metadata?.pin || null,
+          role: user.raw_user_meta_data?.role || user.role || "encargado", // Usar role de donde esté disponible
+          created_at: user.created_at,
+          // Extraer metadatos
+          name: user.raw_user_meta_data?.name || user.email.split("@")[0],
+          phone: user.raw_user_meta_data?.phone || "",
+          position: user.raw_user_meta_data?.position || "",
+          branch: user.raw_user_meta_data?.branch || "",
+          hasPin: !!user.raw_user_meta_data?.pin,
+          pin: user.raw_user_meta_data?.pin || null,
         }))
 
         setUsers(processedUsers)
@@ -124,71 +133,15 @@ export default function UsersPage() {
         toast({
           title: "Datos cargados correctamente",
           description: `Se han cargado ${processedUsers.length} usuarios del sistema.`,
-          variant: "success",
         })
       }
     } catch (error) {
       console.error("Error al cargar usuarios:", error)
       toast({
-        title: "Error",
-        description: "No se pudieron cargar los usuarios. Usando datos de ejemplo temporalmente.",
+        title: "Error al cargar usuarios",
+        description: error.message || "No se pudieron cargar los usuarios.",
         variant: "destructive",
       })
-
-      // Usar datos de ejemplo como fallback
-      const exampleUsers = [
-        {
-          id: "emp-1",
-          name: "Juan Pérez",
-          email: "juan@quadrifoglio.com",
-          role: "empleado",
-          phone: "1155667788",
-          position: "Cajero",
-          branch: "Cabildo",
-          active: true,
-          hasPin: false,
-          pin: null,
-        },
-        {
-          id: "enc-1",
-          name: "Roberto Fernández",
-          email: "roberto@quadrifoglio.com",
-          role: "encargado",
-          phone: "1155667791",
-          position: "Encargado de turno",
-          branch: "Cabildo",
-          active: true,
-          hasPin: false,
-          pin: null,
-        },
-        {
-          id: "sup-1",
-          name: "Ana Gómez",
-          email: "ana@quadrifoglio.com",
-          role: "supervisor",
-          phone: "1155667795",
-          position: "Supervisor",
-          branch: "Central",
-          active: true,
-          hasPin: true,
-          pin: "1234",
-        },
-        {
-          id: "admin-1",
-          name: "Javier Acosta",
-          email: "javier@quadrifoglio.com",
-          role: "admin",
-          phone: "1155667793",
-          position: "Administrador",
-          branch: "Central",
-          active: true,
-          hasPin: false,
-          pin: null,
-        },
-      ]
-
-      setUsers(exampleUsers)
-      calculateTotalPages(activeTab, exampleUsers)
     } finally {
       setLoading(false)
     }
@@ -199,7 +152,8 @@ export default function UsersPage() {
     let filteredUsers = userData
 
     if (tab !== "all") {
-      filteredUsers = userData.filter((user) => user.role === tab.slice(0, -1)) // Quitar la 's' del final
+      const roleFilter = tab.slice(0, -1) // Quitar la 's' del final
+      filteredUsers = userData.filter((user) => user.role === roleFilter)
     }
 
     setTotalPages(Math.max(1, Math.ceil(filteredUsers.length / itemsPerPage)))
@@ -244,15 +198,15 @@ export default function UsersPage() {
     }
 
     try {
-      // Actualizar el usuario en Supabase Auth
-      const { error } = await supabase.auth.admin.updateUserById(editedUser.id, {
-        user_metadata: {
+      // Actualizar el usuario usando la función RPC update_user_metadata
+      const { error } = await supabase.rpc("update_user_metadata", {
+        user_id: editedUser.id,
+        metadata: {
           name: editedUser.name,
           phone: editedUser.phone,
           position: editedUser.position,
           branch: editedUser.branch,
         },
-        email: editedUser.email,
       })
 
       if (error) throw error
@@ -282,7 +236,7 @@ export default function UsersPage() {
       console.error("Error al actualizar usuario:", error)
       toast({
         title: "Error",
-        description: "No se pudo actualizar la información del usuario.",
+        description: "No se pudo actualizar la información del usuario: " + error.message,
         variant: "destructive",
       })
     }
@@ -308,10 +262,10 @@ export default function UsersPage() {
     try {
       setUpdatingPin(true)
 
-      // Actualizar el PIN en los metadatos del usuario
-      const { error } = await supabase.auth.admin.updateUserById(selectedUser!.id, {
-        user_metadata: {
-          ...selectedUser?.user_metadata,
+      // Actualizar el PIN usando la función RPC update_user_metadata
+      const { error } = await supabase.rpc("update_user_metadata", {
+        user_id: selectedUser!.id,
+        metadata: {
           pin: newPin,
         },
       })
@@ -333,7 +287,7 @@ export default function UsersPage() {
 
       toast({
         title: "PIN actualizado",
-        description: `El PIN de ${selectedUser!.name} ha sido actualizado correctamente.`,
+        description: `El PIN ha sido actualizado correctamente.`,
       })
 
       setShowPinDialog(false)
@@ -343,7 +297,7 @@ export default function UsersPage() {
       setPinError("")
     } catch (error) {
       console.error("Error al actualizar PIN:", error)
-      setPinError("Error al actualizar el PIN. Intente nuevamente.")
+      setPinError("Error al actualizar el PIN: " + error.message)
     } finally {
       setUpdatingPin(false)
     }
@@ -363,40 +317,27 @@ export default function UsersPage() {
     try {
       setCreatingUser(true)
 
-      // Crear el usuario en Supabase Auth
-      const { data, error } = await supabase.auth.admin.createUser({
+      // Crear el usuario usando la función de autenticación de Supabase
+      const { data, error } = await supabase.auth.signUp({
         email: newUser.email,
         password: newUser.password,
-        email_confirm: true,
-        user_metadata: {
-          name: newUser.name,
+        options: {
+          data: {
+            name: newUser.name,
+            role: newUser.role,
+          },
         },
       })
 
       if (error) throw error
 
-      // Asignar el rol al usuario
-      const { error: roleError } = await supabase.auth.admin.updateUserById(data.user.id, {
-        role: newUser.role,
+      toast({
+        title: "Usuario creado",
+        description: `El usuario ${newUser.name} ha sido creado correctamente con rol de ${newUser.role}.`,
       })
 
-      if (roleError) throw roleError
-
-      // Añadir el nuevo usuario al estado local
-      const newUserData = {
-        id: data.user.id,
-        name: newUser.name,
-        email: newUser.email,
-        role: newUser.role,
-        phone: "",
-        position: "",
-        branch: "",
-        active: true,
-        hasPin: false,
-        pin: null,
-      }
-
-      setUsers([...users, newUserData])
+      // Refrescar la lista de usuarios
+      await loadUsers()
 
       setShowCreateDialog(false)
       setNewUser({
@@ -404,11 +345,6 @@ export default function UsersPage() {
         password: "",
         name: "",
         role: "encargado",
-      })
-
-      toast({
-        title: "Usuario creado",
-        description: `El usuario ${newUser.name} ha sido creado correctamente con rol de ${newUser.role}.`,
       })
     } catch (error) {
       console.error("Error al crear usuario:", error)
@@ -579,7 +515,7 @@ export default function UsersPage() {
                                     setSelectedUser(user)
                                     setEditedUser({
                                       id: user.id,
-                                      name: user.name,
+                                      name: user.name || "",
                                       email: user.email,
                                       role: user.role,
                                       phone: user.phone || "",
@@ -720,7 +656,10 @@ export default function UsersPage() {
                   type="email"
                   value={editedUser.email}
                   onChange={(e) => setEditedUser({ ...editedUser, email: e.target.value })}
+                  disabled
+                  className="bg-muted"
                 />
+                <p className="text-xs text-muted-foreground">El email no puede ser modificado.</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">Teléfono</Label>
@@ -754,7 +693,7 @@ export default function UsersPage() {
                   disabled
                   className="bg-muted"
                 />
-                <p className="text-xs text-muted-foreground">El rol no puede ser modificado desde esta interfaz.</p>
+                <p className="text-xs text-muted-foreground">Para cambiar el rol, usa la página de gestión de roles.</p>
               </div>
             </div>
 
@@ -929,9 +868,3 @@ export default function UsersPage() {
     </DashboardLayout>
   )
 }
-
-
-
-
-
-
