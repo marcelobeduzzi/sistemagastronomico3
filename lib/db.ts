@@ -108,22 +108,49 @@ class DatabaseService {
     }
   }
 
-  async updateEmployee(employee: Employee) {
+  async updateEmployee(id: string, employee: Partial<Employee>) {
     try {
+      // Guardar el estado original del empleado antes de actualizarlo
+      const { data: originalEmployee, error: originalError } = await this.supabase
+        .from("employees")
+        .select("*")
+        .eq("id", id)
+        .single()
+
+      if (originalError) throw originalError
+
       // Convertir automáticamente de camelCase a snake_case
       const updateData = objectToSnakeCase({
         ...employee,
         updated_at: new Date().toISOString(),
       })
 
-      const { data, error } = await this.supabase
-        .from("employees")
-        .update(updateData)
-        .eq("id", employee.id)
-        .select()
-        .single()
+      const { data, error } = await this.supabase.from("employees").update(updateData).eq("id", id).select().single()
 
       if (error) throw error
+
+      // Verificar si el empleado cambió de activo a inactivo o si hubo cambios en el salario
+      const statusChanged = originalEmployee.status === "active" && employee.status === "inactive"
+      const salaryChanged =
+        (originalEmployee.base_salary !== employee.baseSalary && employee.baseSalary !== undefined) ||
+        (originalEmployee.bank_salary !== employee.bankSalary && employee.bankSalary !== undefined)
+
+      // Si el empleado es inactivo y hubo cambios en el salario o estado, actualizar liquidaciones pendientes
+      if (employee.status === "inactive" && (statusChanged || salaryChanged)) {
+        try {
+          // Verificar si hay liquidaciones pendientes
+          const pendingLiquidations = await this.getPendingLiquidationsByEmployeeId(id)
+
+          if (pendingLiquidations && pendingLiquidations.length > 0) {
+            // Actualizar liquidaciones pendientes con los nuevos datos
+            await this.updatePendingLiquidations(id, objectToCamelCase(data))
+            console.log(`Actualizadas ${pendingLiquidations.length} liquidaciones pendientes para el empleado ${id}`)
+          }
+        } catch (liquidationError) {
+          console.error("Error al actualizar liquidaciones pendientes:", liquidationError)
+          // No lanzar error para no interrumpir la actualización del empleado
+        }
+      }
 
       // Convertir automáticamente de snake_case a camelCase
       return objectToCamelCase(data)
@@ -730,7 +757,6 @@ class DatabaseService {
         }
       } else {
         // Para nóminas pendientes, solo filtramos por is_paid=false
-        // No filtramos por mes/año para mostrar todas las pendientes
         query = query.eq("is_paid", false)
       }
 
@@ -1102,7 +1128,79 @@ class DatabaseService {
     }
   }
 
-  // Agregar esta nueva función después de generateLiquidations en la clase DatabaseService
+  /**
+   * Obtiene liquidaciones pendientes por empleado
+   * @param employeeId ID del empleado
+   * @returns Lista de liquidaciones pendientes
+   */
+  async getPendingLiquidationsByEmployeeId(employeeId: string) {
+    try {
+      const { data, error } = await this.supabase
+        .from("liquidations")
+        .select("*")
+        .eq("employee_id", employeeId)
+        .eq("is_paid", false)
+
+      if (error) throw error
+      return data.map((item) => objectToCamelCase(item))
+    } catch (error) {
+      console.error("Error al obtener liquidaciones pendientes:", error)
+      throw error
+    }
+  }
+
+  /**
+   * Actualiza liquidaciones pendientes con nuevos datos del empleado
+   * @param employeeId ID del empleado
+   * @param employeeData Datos actualizados del empleado
+   * @returns true si se actualizaron correctamente, false en caso contrario
+   */
+  async updatePendingLiquidations(employeeId: string, employeeData: any) {
+    try {
+      // Obtener liquidaciones pendientes
+      const pendingLiquidations = await this.getPendingLiquidationsByEmployeeId(employeeId)
+
+      if (!pendingLiquidations || pendingLiquidations.length === 0) return true
+
+      // Para cada liquidación pendiente
+      for (const liquidation of pendingLiquidations) {
+        // Recalcular montos basados en los nuevos datos
+        const baseSalary = employeeData.baseSalary || employeeData.totalSalary || 0
+        const dailySalary = baseSalary / 30
+
+        // Calcular proporcionales
+        const proportionalVacation = liquidation.includeVacation
+          ? (baseSalary / 12) * (liquidation.workedMonths / 12)
+          : 0
+
+        const proportionalBonus = liquidation.includeBonus ? (baseSalary / 12) * (liquidation.workedMonths / 12) : 0
+
+        // Días a pagar del último mes
+        const lastMonthPayment = dailySalary * (liquidation.daysToPayInLastMonth || 0)
+
+        // Total
+        const totalAmount = proportionalVacation + proportionalBonus + lastMonthPayment
+
+        // Actualizar liquidación
+        await this.supabase
+          .from("liquidations")
+          .update({
+            base_salary: baseSalary,
+            proportional_vacation: proportionalVacation,
+            proportional_bonus: proportionalBonus,
+            compensation_amount: lastMonthPayment,
+            total_amount: totalAmount,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", liquidation.id)
+      }
+
+      return true
+    } catch (error) {
+      console.error("Error al actualizar liquidaciones pendientes:", error)
+      throw error
+    }
+  }
 
   /**
    * Actualiza los días a pagar del último mes en las liquidaciones existentes
@@ -1506,6 +1604,7 @@ class DatabaseService {
       return []
     }
   }
+
   // UPDATED: Simplified getDashboardStats method to fix the error
   async getDashboardStats() {
     try {
@@ -1977,6 +2076,7 @@ export const db = {
 
 // Exportar también el servicio original para mantener compatibilidad
 export { dbService }
+
 
 
 

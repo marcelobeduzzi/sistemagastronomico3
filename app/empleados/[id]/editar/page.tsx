@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { dbService } from "@/lib/db-service"
 import type { Employee, Local, WorkShift, EmployeeStatus, UserRole } from "@/types"
-import { ArrowLeft, Save } from "lucide-react"
+import { AlertCircle, ArrowLeft, Save } from "lucide-react"
 import Link from "next/link"
 import { useToast } from "@/components/ui/use-toast"
 
@@ -23,8 +23,10 @@ export default function EditarEmpleadoPage({ params }: { params: { id: string } 
   const { id } = params
 
   const [formData, setFormData] = useState<Employee | null>(null)
+  const [originalStatus, setOriginalStatus] = useState<EmployeeStatus | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [hasLiquidaciones, setHasLiquidaciones] = useState(false)
 
   useEffect(() => {
     const fetchEmployee = async () => {
@@ -46,6 +48,16 @@ export default function EditarEmpleadoPage({ params }: { params: { id: string } 
           employee.totalSalary = (employee.baseSalary || 0) + (employee.bankSalary || 0)
 
           setFormData(employee)
+          setOriginalStatus(employee.status)
+
+          // Verificar si el empleado tiene liquidaciones pendientes
+          try {
+            const liquidaciones = await dbService.getPendingLiquidationsByEmployeeId(id)
+            setHasLiquidaciones(liquidaciones && liquidaciones.length > 0)
+          } catch (error) {
+            console.error("Error al verificar liquidaciones:", error)
+            // No mostrar error al usuario, solo registrar en consola
+          }
         } else {
           toast({
             title: "Error",
@@ -122,6 +134,14 @@ export default function EditarEmpleadoPage({ params }: { params: { id: string } 
         totalSalary: typeof formData.totalSalary === "number" ? formData.totalSalary : 0,
       }
 
+      // Verificar si hay cambios importantes en datos salariales
+      const salaryChanged =
+        dataToSubmit.baseSalary !== (formData.baseSalary || 0) || dataToSubmit.bankSalary !== (formData.bankSalary || 0)
+
+      // Verificar si cambió el estado del empleado
+      const statusChanged = originalStatus !== dataToSubmit.status
+
+      // Actualizar el empleado
       const updatedEmployee = await dbService.updateEmployee(id, dataToSubmit)
 
       if (updatedEmployee) {
@@ -129,6 +149,25 @@ export default function EditarEmpleadoPage({ params }: { params: { id: string } 
           title: "Empleado actualizado",
           description: `${updatedEmployee.firstName} ${updatedEmployee.lastName} ha sido actualizado correctamente.`,
         })
+
+        // Si el empleado es inactivo y tiene liquidaciones pendientes, actualizar las liquidaciones
+        if (
+          dataToSubmit.status === "inactive" &&
+          (hasLiquidaciones || statusChanged) &&
+          (statusChanged || salaryChanged)
+        ) {
+          try {
+            await dbService.updatePendingLiquidations(id, dataToSubmit)
+
+            toast({
+              title: "Liquidaciones actualizadas",
+              description: "Las liquidaciones pendientes han sido actualizadas con los nuevos datos del empleado.",
+            })
+          } catch (error) {
+            console.error("Error al actualizar liquidaciones:", error)
+            // No mostrar error al usuario, solo registrar en consola
+          }
+        }
 
         router.push("/empleados")
       } else {
@@ -295,6 +334,21 @@ export default function EditarEmpleadoPage({ params }: { params: { id: string } 
                   <CardDescription>Actualiza los datos laborales del empleado</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {hasLiquidaciones && formData.status === "inactive" && (
+                    <div className="p-4 border rounded-md bg-blue-500/10 mb-4">
+                      <div className="flex items-start space-x-2">
+                        <AlertCircle className="h-5 w-5 text-blue-500 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium">Este empleado tiene liquidaciones pendientes</p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Los cambios en salario o datos laborales actualizarán automáticamente sus liquidaciones
+                            pendientes.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="position">Cargo</Label>
@@ -466,6 +520,7 @@ export default function EditarEmpleadoPage({ params }: { params: { id: string } 
     </DashboardLayout>
   )
 }
+
 
 
 
