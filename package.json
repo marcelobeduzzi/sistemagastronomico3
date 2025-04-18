@@ -60,7 +60,7 @@
     "next": "^15.2.4",
     "next-themes": "latest",
     "prisma": "latest",
-    "qrcode.react": "^4.2.0",
+    "qrcode.react": "^3.1.0",
     "react": "^19",
     "react-datepicker": "^8.2.1",
     "react-day-picker": "latest",
@@ -84,3 +84,4 @@
     "typescript": "^5"
   }
 }
+
