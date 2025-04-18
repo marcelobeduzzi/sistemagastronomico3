@@ -5,31 +5,7 @@ import type React from "react"
 import { useState, useEffect, useCallback, memo, useMemo } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import {
-  BarChart3,
-  Users,
-  DollarSign,
-  Calendar,
-  Settings,
-  ChevronDown,
-  Menu,
-  TrendingUp,
-  LogOut,
-  ClipboardCheck,
-  ReceiptText,
-  PieChart,
-  LayoutDashboard,
-  Star,
-  MessageSquare,
-  ShoppingCart,
-  CreditCard,
-  Package,
-  Shield,
-  Calculator,
-  Truck,
-  CreditCardIcon,
-  History,
-} from "lucide-react"
+import { BarChart3, Users, DollarSign, Calendar, Settings, ChevronDown, Menu, TrendingUp, LogOut, ClipboardCheck, Receipt, PieChart, LayoutDashboard, Star, MessageSquare, ShoppingCart, CreditCard, Package, Shield, Calculator, Truck, CreditCardIcon, History } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { useAuth } from "@/lib/auth-context"
@@ -302,7 +278,7 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
       {
         title: "Facturación",
         href: "/facturacion",
-        icon: ReceiptText,
+        icon: Receipt,
         roles: ["admin", "gerente"],
       },
       {
