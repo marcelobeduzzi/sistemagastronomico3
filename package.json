@@ -56,10 +56,10 @@
     "next": "14.0.4",
     "next-themes": "^0.2.1",
     "qrcode.react": "^3.1.0",
-    "react": "18.2.0",
+    "react": "^0.0.0-experimental-bc6184dd-20250417",
     "react-chartjs-2": "^5.2.0",
     "react-day-picker": "^8.9.1",
-    "react-dom": "18.2.0",
+    "react-dom": "^0.0.0-experimental-bc6184dd-20250417",
     "react-hook-form": "^7.48.2",
     "react-resizable-panels": "^1.0.5",
     "recharts": "^2.10.3",
@@ -84,4 +84,3 @@
     "typescript": "^5"
   }
 }
-
