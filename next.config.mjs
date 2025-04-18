@@ -20,10 +20,7 @@ const nextConfig = {
     webpackBuildWorker: true,
     parallelServerBuildTraces: true,
     parallelServerCompiles: true,
-    serverActions: true,
   },
-  // Añadimos transpilePackages para resolver el problema con @radix-ui/react-use-effect-event
-  transpilePackages: ['@radix-ui/react-use-effect-event'],
 }
 
 mergeConfig(nextConfig, userConfig)
