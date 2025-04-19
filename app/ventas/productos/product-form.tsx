@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm } from "react-hook-form"
+import { useForm, useFieldArray } from "react-hook-form"
 import { z } from "zod"
 import { Button } from "@/components/ui/button"
 import {
@@ -27,8 +27,16 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Plus, Trash2 } from 'lucide-react'
 import { salesService } from "@/lib/sales-service"
 import type { Product, Category } from "@/lib/sales-service"
+
+// Esquema para variantes
+const variantSchema = z.object({
+  variantName: z.string().min(1, { message: "El nombre de la variante es requerido" }),
+  localPrice: z.coerce.number().min(0, { message: "El precio debe ser mayor o igual a 0" }),
+})
 
 const productSchema = z.object({
   name: z.string().min(2, { message: "El nombre debe tener al menos 2 caracteres" }),
@@ -43,6 +51,7 @@ const productSchema = z.object({
   pedidosYaPrice: z.coerce.number().min(0, { message: "El precio debe ser mayor o igual a 0" }).optional(),
   rappiPrice: z.coerce.number().min(0, { message: "El precio debe ser mayor o igual a 0" }).optional(),
   mercadoPagoPrice: z.coerce.number().min(0, { message: "El precio debe ser mayor o igual a 0" }).optional(),
+  variants: z.array(variantSchema).optional(),
 })
 
 type ProductFormValues = z.infer<typeof productSchema>
@@ -85,6 +94,7 @@ export default function ProductForm({ product, parentProduct }: ProductFormProps
     pedidosYaPrice: undefined,
     rappiPrice: undefined,
     mercadoPagoPrice: undefined,
+    variants: [],
   }
 
   // Si hay un producto, cargar los precios
@@ -107,6 +117,12 @@ export default function ProductForm({ product, parentProduct }: ProductFormProps
     defaultValues,
   })
 
+  // Configurar el fieldArray para las variantes
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "variants",
+  });
+
   // Observar cambios en el tipo de producto
   const productType = form.watch("productType")
 
@@ -115,7 +131,7 @@ export default function ProductForm({ product, parentProduct }: ProductFormProps
       setIsSubmitting(true)
 
       // Extraer los precios del formulario
-      const { localPrice, pedidosYaPrice, rappiPrice, mercadoPagoPrice, productType, ...productData } = data
+      const { localPrice, pedidosYaPrice, rappiPrice, mercadoPagoPrice, productType, variants, ...productData } = data
 
       // Preparar datos según si es variante o producto principal
       const isVariant = !!parentProduct || !!productData.parentId
@@ -171,6 +187,28 @@ export default function ProductForm({ product, parentProduct }: ProductFormProps
         }
         if (mercadoPagoPrice !== undefined) {
           await salesService.setProductPrice(newProduct.id, "mercadopago", mercadoPagoPrice)
+        }
+
+        // Si es un producto con variantes, crear las variantes
+        if (productType === "withVariants" && variants && variants.length > 0) {
+          for (const variant of variants) {
+            const variantData = {
+              name: productData.name,
+              description: productData.description,
+              categoryId: productData.categoryId,
+              imageUrl: productData.imageUrl,
+              isActive: productData.isActive,
+              variantName: variant.variantName,
+            };
+
+            const newVariant = await salesService.createProductVariant(
+              newProduct.id,
+              variantData
+            );
+
+            // Establecer precio para la variante
+            await salesService.setProductPrice(newVariant.id, "local", variant.localPrice);
+          }
         }
       }
 
@@ -340,78 +378,152 @@ export default function ProductForm({ product, parentProduct }: ProductFormProps
           )}
         />
 
-        <Tabs defaultValue="local" className="w-full">
-          <TabsList className="grid grid-cols-4 mb-4">
-            <TabsTrigger value="local">Local</TabsTrigger>
-            <TabsTrigger value="pedidosya">PedidosYa</TabsTrigger>
-            <TabsTrigger value="rappi">Rappi</TabsTrigger>
-            <TabsTrigger value="mercadopago">MercadoPago</TabsTrigger>
-          </TabsList>
-          <TabsContent value="local">
-            <FormField
-              control={form.control}
-              name="localPrice"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Precio Local</FormLabel>
-                  <FormControl>
-                    <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                  </FormControl>
-                  <FormDescription>Precio para ventas en el local</FormDescription>
-                  <FormMessage />
-                </FormItem>
+        {/* Sección de precios para producto principal o variante única */}
+        {(productType === "simple" || isVariant) && (
+          <Tabs defaultValue="local" className="w-full">
+            <TabsList className="grid grid-cols-4 mb-4">
+              <TabsTrigger value="local">Local</TabsTrigger>
+              <TabsTrigger value="pedidosya">PedidosYa</TabsTrigger>
+              <TabsTrigger value="rappi">Rappi</TabsTrigger>
+              <TabsTrigger value="mercadopago">MercadoPago</TabsTrigger>
+            </TabsList>
+            <TabsContent value="local">
+              <FormField
+                control={form.control}
+                name="localPrice"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Precio Local</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                    </FormControl>
+                    <FormDescription>Precio para ventas en el local</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </TabsContent>
+            <TabsContent value="pedidosya">
+              <FormField
+                control={form.control}
+                name="pedidosYaPrice"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Precio PedidosYa</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                    </FormControl>
+                    <FormDescription>Precio para ventas a través de PedidosYa</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </TabsContent>
+            <TabsContent value="rappi">
+              <FormField
+                control={form.control}
+                name="rappiPrice"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Precio Rappi</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                    </FormControl>
+                    <FormDescription>Precio para ventas a través de Rappi</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </TabsContent>
+            <TabsContent value="mercadopago">
+              <FormField
+                control={form.control}
+                name="mercadoPagoPrice"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Precio MercadoPago</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                    </FormControl>
+                    <FormDescription>Precio para ventas a través de MercadoPago</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </TabsContent>
+          </Tabs>
+        )}
+
+        {/* Sección de variantes para productos con variantes */}
+        {productType === "withVariants" && !isVariant && !product && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex justify-between items-center">
+                <span>Variantes del Producto</span>
+                <Button 
+                  type="button" 
+                  onClick={() => append({ variantName: "", localPrice: 0 })}
+                  size="sm"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Agregar Variante
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {fields.length === 0 ? (
+                <div className="text-center py-4 text-muted-foreground">
+                  No hay variantes agregadas. Haz clic en "Agregar Variante" para comenzar.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {fields.map((field, index) => (
+                    <div key={field.id} className="flex items-start gap-4 p-4 border rounded-md">
+                      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name={`variants.${index}.variantName`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Nombre de la Variante</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Ej: Grande, Mediano, etc." {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`variants.${index}.localPrice`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Precio</FormLabel>
+                              <FormControl>
+                                <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      <Button 
+                        type="button" 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => remove(index)}
+                        className="mt-8"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span className="sr-only">Eliminar variante</span>
+                      </Button>
+                    </div>
+                  ))}
+                </div>
               )}
-            />
-          </TabsContent>
-          <TabsContent value="pedidosya">
-            <FormField
-              control={form.control}
-              name="pedidosYaPrice"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Precio PedidosYa</FormLabel>
-                  <FormControl>
-                    <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                  </FormControl>
-                  <FormDescription>Precio para ventas a través de PedidosYa</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </TabsContent>
-          <TabsContent value="rappi">
-            <FormField
-              control={form.control}
-              name="rappiPrice"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Precio Rappi</FormLabel>
-                  <FormControl>
-                    <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                  </FormControl>
-                  <FormDescription>Precio para ventas a través de Rappi</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </TabsContent>
-          <TabsContent value="mercadopago">
-            <FormField
-              control={form.control}
-              name="mercadoPagoPrice"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Precio MercadoPago</FormLabel>
-                  <FormControl>
-                    <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                  </FormControl>
-                  <FormDescription>Precio para ventas a través de MercadoPago</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </TabsContent>
-        </Tabs>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="flex justify-end gap-4">
           <Button
