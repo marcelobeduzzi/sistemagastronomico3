@@ -7,40 +7,25 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/use-toast"
-import { format } from "date-fns"
-import { es } from "date-fns/locale"
-import { CalendarIcon, Loader2 } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Loader2, AlertCircle } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Separator } from "@/components/ui/separator"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
+import { formatCurrency } from "@/lib/utils"
 
-export default function LiquidationDetails({ params }) {
+export default function EditLiquidation({ params }: { params: { id: string } }) {
   const router = useRouter()
   const supabase = createClientComponentClient()
-  const [liquidation, setLiquidation] = useState(null)
-  const [employee, setEmployee] = useState(null)
+  const [liquidation, setLiquidation] = useState<any>(null)
+  const [employee, setEmployee] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [updating, setUpdating] = useState(false)
-  const [paymentData, setPaymentData] = useState({
-    payment_date: undefined,
-    payment_method: "",
-    payment_reference: "",
-    notes: "",
-  })
+  const [saving, setSaving] = useState(false)
+  const [editReason, setEditReason] = useState("")
+  const [formData, setFormData] = useState<any>({})
+  const [originalData, setOriginalData] = useState<any>({})
+  const [hasChanges, setHasChanges] = useState(false)
 
   useEffect(() => {
     const fetchLiquidation = async () => {
@@ -49,6 +34,19 @@ export default function LiquidationDetails({ params }) {
 
         if (error) throw error
         setLiquidation(data)
+        setOriginalData(data)
+        
+        // Inicializar formData con los valores de la liquidación
+        setFormData({
+          base_salary: data.base_salary,
+          proportional_vacation: data.proportional_vacation,
+          proportional_bonus: data.proportional_bonus,
+          compensation_amount: data.compensation_amount,
+          total_amount: data.total_amount,
+          include_vacation: data.include_vacation,
+          include_bonus: data.include_bonus,
+          days_to_pay_in_last_month: data.days_to_pay_in_last_month,
+        })
 
         // Fetch employee data
         if (data) {
@@ -76,63 +74,122 @@ export default function LiquidationDetails({ params }) {
     fetchLiquidation()
   }, [supabase, params.id])
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target
-    setPaymentData({
-      ...paymentData,
-      [name]: value,
-    })
+  // Detectar cambios en el formulario
+  useEffect(() => {
+    if (originalData && formData) {
+      const changed = 
+        formData.base_salary !== originalData.base_salary ||
+        formData.proportional_vacation !== originalData.proportional_vacation ||
+        formData.proportional_bonus !== originalData.proportional_bonus ||
+        formData.compensation_amount !== originalData.compensation_amount ||
+        formData.total_amount !== originalData.total_amount ||
+        formData.include_vacation !== originalData.include_vacation ||
+        formData.include_bonus !== originalData.include_bonus ||
+        formData.days_to_pay_in_last_month !== originalData.days_to_pay_in_last_month;
+      
+      setHasChanges(changed);
+    }
+  }, [formData, originalData]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type } = e.target
+    
+    if (type === "number") {
+      const numValue = parseFloat(value) || 0
+      setFormData({
+        ...formData,
+        [name]: numValue,
+      })
+      
+      // Recalcular el total automáticamente
+      if (name === "base_salary" || name === "proportional_vacation" || 
+          name === "proportional_bonus" || name === "compensation_amount") {
+        
+        const newValues = {
+          ...formData,
+          [name]: numValue,
+        }
+        
+        const newTotal = 
+          newValues.compensation_amount + 
+          (newValues.include_vacation ? newValues.proportional_vacation : 0) +
+          (newValues.include_bonus ? newValues.proportional_bonus : 0);
+        
+        setFormData({
+          ...newValues,
+          total_amount: newTotal,
+        })
+      }
+    } else {
+      setFormData({
+        ...formData,
+        [name]: value,
+      })
+    }
   }
 
-  const handleDateChange = (date) => {
-    setPaymentData({
-      ...paymentData,
-      payment_date: date,
+  const handleCheckboxChange = (field: string) => (checked: boolean) => {
+    setFormData({
+      ...formData,
+      [field]: checked,
     })
+    
+    // Recalcular el total cuando cambian los checkboxes
+    setTimeout(() => {
+      const newTotal = 
+        formData.compensation_amount + 
+        (checked && field === "include_vacation" ? formData.proportional_vacation : 0) +
+        (checked && field === "include_bonus" ? formData.proportional_bonus : 0) +
+        (field !== "include_vacation" && formData.include_vacation ? formData.proportional_vacation : 0) +
+        (field !== "include_bonus" && formData.include_bonus ? formData.proportional_bonus : 0);
+      
+      setFormData({
+        ...formData,
+        [field]: checked,
+        total_amount: newTotal,
+      });
+    }, 0);
   }
 
-  const handleSelectChange = (name, value) => {
-    setPaymentData({
-      ...paymentData,
-      [name]: value,
-    })
-  }
-
-  const handleMarkAsPaid = async () => {
-    if (!paymentData.payment_date || !paymentData.payment_method) {
+  const handleSave = async () => {
+    if (!editReason.trim()) {
       toast({
         title: "Error",
-        description: "Por favor complete la fecha y método de pago",
+        description: "Por favor ingrese el motivo de la edición",
         variant: "destructive",
       })
       return
     }
 
-    setUpdating(true)
+    setSaving(true)
     try {
+      // Crear una nueva versión de la liquidación
+      const newVersion = (liquidation.version || 1) + 1
+      
+      // Preparar datos para actualización
+      const updateData = {
+        ...formData,
+        version: newVersion,
+        previous_version_id: liquidation.id,
+        edit_reason: editReason,
+        edited_by: "admin", // Idealmente, usar el usuario actual
+        edited_at: new Date().toISOString(),
+      }
+      
+      // Actualizar la liquidación
       const { error } = await supabase
         .from("liquidations")
-        .update({
-          is_paid: true,
-          payment_date: paymentData.payment_date,
-          payment_method: paymentData.payment_method,
-          payment_reference: paymentData.payment_reference,
-          notes: paymentData.notes,
-        })
+        .update(updateData)
         .eq("id", params.id)
 
       if (error) throw error
 
       toast({
-        title: "Liquidación actualizada",
-        description: "La liquidación ha sido marcada como pagada",
+        title: "Éxito",
+        description: "La liquidación ha sido actualizada correctamente",
       })
 
-      // Refresh liquidation data
-      const { data, error: fetchError } = await supabase.from("liquidations").select("*").eq("id", params.id).single()
-
-      if (fetchError) throw fetchError
-      setLiquidation(data)
+      router.push("/nomina/liquidations")
     } catch (error) {
       console.error("Error updating liquidation:", error)
       toast({
@@ -141,29 +198,7 @@ export default function LiquidationDetails({ params }) {
         variant: "destructive",
       })
     } finally {
-      setUpdating(false)
-    }
-  }
-
-  const handleDelete = async () => {
-    try {
-      const { error } = await supabase.from("liquidations").delete().eq("id", params.id)
-
-      if (error) throw error
-
-      toast({
-        title: "Liquidación eliminada",
-        description: "La liquidación ha sido eliminada exitosamente",
-      })
-
-      router.push("/dashboard/liquidations")
-    } catch (error) {
-      console.error("Error deleting liquidation:", error)
-      toast({
-        title: "Error",
-        description: "No se pudo eliminar la liquidación",
-        variant: "destructive",
-      })
+      setSaving(false)
     }
   }
 
@@ -178,51 +213,32 @@ export default function LiquidationDetails({ params }) {
   if (!liquidation || !employee) {
     return (
       <div className="container mx-auto py-6">
-        <h1 className="text-2xl font-bold mb-6">Liquidación no encontrada</h1>
-        <Button onClick={() => router.push("/dashboard/liquidations")}>Volver a Liquidaciones</Button>
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>No se pudo cargar la información de la liquidación</AlertDescription>
+        </Alert>
+        <Button onClick={() => router.push("/nomina/liquidations")} className="mt-4">
+          Volver a Liquidaciones
+        </Button>
       </div>
     )
   }
 
-  // Calcular el pago por días del último mes
-  const dailySalary = liquidation.base_salary / 30
-  const lastMonthPayment = dailySalary * (liquidation.days_to_pay_in_last_month || 0)
-
   return (
     <div className="container mx-auto py-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Detalles de Liquidación</h1>
-        <div className="flex space-x-2">
-          <Button variant="outline" onClick={() => router.push("/dashboard/liquidations")}>
-            Volver
-          </Button>
-          {!liquidation.is_paid && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive">Eliminar</Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>¿Está seguro?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Esta acción no se puede deshacer. Esto eliminará permanentemente la liquidación.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDelete}>Eliminar</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
-        </div>
+        <h1 className="text-2xl font-bold">Editar Liquidación</h1>
+        <Button variant="outline" onClick={() => router.push("/nomina/liquidations")}>
+          Cancelar
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="md:col-span-2">
           <CardHeader>
             <CardTitle>Información de la Liquidación</CardTitle>
-            <CardDescription>Detalles del cálculo de la liquidación</CardDescription>
+            <CardDescription>Edite los valores de la liquidación según sea necesario</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -235,180 +251,240 @@ export default function LiquidationDetails({ params }) {
               <div>
                 <Label>Fecha de Terminación</Label>
                 <p className="text-lg font-medium">
-                  {format(new Date(liquidation.termination_date), "PPP", { locale: es })}
+                  {new Date(liquidation.termination_date).toLocaleDateString()}
                 </p>
-              </div>
-              <div>
-                <Label>Tiempo Trabajado</Label>
-                <p className="text-lg font-medium">
-                  {liquidation.worked_months} meses y {liquidation.worked_days} días
-                </p>
-              </div>
-              <div>
-                <Label>Salario Base</Label>
-                <p className="text-lg font-medium">${liquidation.base_salary.toFixed(2)}</p>
               </div>
             </div>
 
             <Separator />
 
-            <div>
-              <h3 className="font-semibold text-lg mb-4">Desglose de la Liquidación</h3>
-              <div className="space-y-3">
-                {liquidation.include_vacation && (
-                  <div className="flex justify-between">
-                    <span>Vacaciones Proporcionales:</span>
-                    <span>${liquidation.proportional_vacation.toFixed(2)}</span>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="base_salary">Salario Base</Label>
+                  <Input
+                    id="base_salary"
+                    name="base_salary"
+                    type="number"
+                    value={formData.base_salary}
+                    onChange={handleInputChange}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="days_to_pay_in_last_month">Días a pagar del último mes</Label>
+                  <Input
+                    id="days_to_pay_in_last_month"
+                    name="days_to_pay_in_last_month"
+                    type="number"
+                    value={formData.days_to_pay_in_last_month}
+                    onChange={handleInputChange}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="compensation_amount">Pago por último mes</Label>
+                  <Input
+                    id="compensation_amount"
+                    name="compensation_amount"
+                    type="number"
+                    value={formData.compensation_amount}
+                    onChange={handleInputChange}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <Checkbox
+                      id="include_vacation"
+                      checked={formData.include_vacation}
+                      onCheckedChange={handleCheckboxChange("include_vacation")}
+                    />
+                    <Label htmlFor="include_vacation">Incluir vacaciones</Label>
                   </div>
-                )}
-                {liquidation.include_bonus && (
-                  <div className="flex justify-between">
-                    <span>Aguinaldo Proporcional:</span>
-                    <span>${liquidation.proportional_bonus.toFixed(2)}</span>
+                  <Input
+                    id="proportional_vacation"
+                    name="proportional_vacation"
+                    type="number"
+                    value={formData.proportional_vacation}
+                    onChange={handleInputChange}
+                    disabled={!formData.include_vacation}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <Checkbox
+                      id="include_bonus"
+                      checked={formData.include_bonus}
+                      onCheckedChange={handleCheckboxChange("include_bonus")}
+                    />
+                    <Label htmlFor="include_bonus">Incluir aguinaldo</Label>
                   </div>
-                )}
-                {liquidation.days_to_pay_in_last_month > 0 && (
-                  <div className="flex justify-between">
-                    <span>Pago por {liquidation.days_to_pay_in_last_month} días del último mes:</span>
-                    <span>${liquidation.compensation_amount.toFixed(2)}</span>
-                  </div>
-                )}
-                <Separator />
-                <div className="flex justify-between font-bold text-lg">
-                  <span>Total:</span>
-                  <span>${liquidation.total_amount.toFixed(2)}</span>
+                  <Input
+                    id="proportional_bonus"
+                    name="proportional_bonus"
+                    type="number"
+                    value={formData.proportional_bonus}
+                    onChange={handleInputChange}
+                    disabled={!formData.include_bonus}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="total_amount">Total a Pagar</Label>
+                  <Input
+                    id="total_amount"
+                    name="total_amount"
+                    type="number"
+                    value={formData.total_amount}
+                    onChange={handleInputChange}
+                    className="font-bold"
+                  />
                 </div>
               </div>
             </div>
 
-            {liquidation.is_paid && (
-              <>
-                <Separator />
-                <div>
-                  <h3 className="font-semibold text-lg mb-4">Información de Pago</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label>Fecha de Pago</Label>
-                      <p className="text-lg font-medium">
-                        {format(new Date(liquidation.payment_date), "PPP", { locale: es })}
-                      </p>
-                    </div>
-                    <div>
-                      <Label>Método de Pago</Label>
-                      <p className="text-lg font-medium">{liquidation.payment_method}</p>
-                    </div>
-                    {liquidation.payment_reference && (
-                      <div>
-                        <Label>Referencia de Pago</Label>
-                        <p className="text-lg font-medium">{liquidation.payment_reference}</p>
-                      </div>
-                    )}
-                    {liquidation.notes && (
-                      <div className="md:col-span-2">
-                        <Label>Notas</Label>
-                        <p className="text-lg font-medium">{liquidation.notes}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
+            <Separator />
+
+            <div className="space-y-2">
+              <Label htmlFor="edit_reason">Motivo de la Edición</Label>
+              <Textarea
+                id="edit_reason"
+                value={editReason}
+                onChange={(e) => setEditReason(e.target.value)}
+                placeholder="Explique por qué está editando esta liquidación"
+                required
+              />
+            </div>
           </CardContent>
         </Card>
 
-        {!liquidation.is_paid && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Registrar Pago</CardTitle>
-              <CardDescription>Complete la información para registrar el pago de esta liquidación</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="payment_date">Fecha de Pago</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !paymentData.payment_date && "text-muted-foreground",
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {paymentData.payment_date ? (
-                        format(paymentData.payment_date, "PPP", { locale: es })
-                      ) : (
-                        <span>Seleccionar fecha</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
-                    <Calendar
-                      mode="single"
-                      selected={paymentData.payment_date}
-                      onSelect={handleDateChange}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="payment_method">Método de Pago</Label>
-                <Select
-                  value={paymentData.payment_method}
-                  onValueChange={(value) => handleSelectChange("payment_method", value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar método" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="efectivo">Efectivo</SelectItem>
-                    <SelectItem value="transferencia">Transferencia Bancaria</SelectItem>
-                    <SelectItem value="cheque">Cheque</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="payment_reference">Referencia de Pago (opcional)</Label>
-                <Input
-                  id="payment_reference"
-                  name="payment_reference"
-                  value={paymentData.payment_reference}
-                  onChange={handleInputChange}
-                  placeholder="Número de transferencia, cheque, etc."
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="notes">Notas (opcional)</Label>
-                <Input
-                  id="notes"
-                  name="notes"
-                  value={paymentData.notes}
-                  onChange={handleInputChange}
-                  placeholder="Observaciones adicionales"
-                />
-              </div>
-
-              <Button
-                className="w-full"
-                onClick={handleMarkAsPaid}
-                disabled={updating || !paymentData.payment_date || !paymentData.payment_method}
-              >
-                {updating ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Procesando...
-                  </>
-                ) : (
-                  "Marcar como Pagado"
+        <Card>
+          <CardHeader>
+            <CardTitle>Resumen de Cambios</CardTitle>
+            <CardDescription>Comparación de valores originales y nuevos</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {hasChanges ? (
+              <>
+                {formData.base_salary !== originalData.base_salary && (
+                  <div className="flex justify-between">
+                    <span>Salario Base:</span>
+                    <div className="text-right">
+                      <div className="line-through text-muted-foreground">
+                        {formatCurrency(originalData.base_salary)}
+                      </div>
+                      <div className="font-medium text-green-600">{formatCurrency(formData.base_salary)}</div>
+                    </div>
+                  </div>
                 )}
-              </Button>
-            </CardContent>
-          </Card>
-        )}
+
+                {formData.days_to_pay_in_last_month !== originalData.days_to_pay_in_last_month && (
+                  <div className="flex justify-between">
+                    <span>Días último mes:</span>
+                    <div className="text-right">
+                      <div className="line-through text-muted-foreground">{originalData.days_to_pay_in_last_month}</div>
+                      <div className="font-medium text-green-600">{formData.days_to_pay_in_last_month}</div>
+                    </div>
+                  </div>
+                )}
+
+                {formData.compensation_amount !== originalData.compensation_amount && (
+                  <div className="flex justify-between">
+                    <span>Pago último mes:</span>
+                    <div className="text-right">
+                      <div className="line-through text-muted-foreground">
+                        {formatCurrency(originalData.compensation_amount)}
+                      </div>
+                      <div className="font-medium text-green-600">{formatCurrency(formData.compensation_amount)}</div>
+                    </div>
+                  </div>
+                )}
+
+                {formData.include_vacation !== originalData.include_vacation && (
+                  <div className="flex justify-between">
+                    <span>Incluir vacaciones:</span>
+                    <div className="text-right">
+                      <div className="line-through text-muted-foreground">
+                        {originalData.include_vacation ? "Sí" : "No"}
+                      </div>
+                      <div className="font-medium text-green-600">{formData.include_vacation ? "Sí" : "No"}</div>
+                    </div>
+                  </div>
+                )}
+
+                {formData.proportional_vacation !== originalData.proportional_vacation && (
+                  <div className="flex justify-between">
+                    <span>Vacaciones proporcionales:</span>
+                    <div className="text-right">
+                      <div className="line-through text-muted-foreground">
+                        {formatCurrency(originalData.proportional_vacation)}
+                      </div>
+                      <div className="font-medium text-green-600">{formatCurrency(formData.proportional_vacation)}</div>
+                    </div>
+                  </div>
+                )}
+
+                {formData.include_bonus !== originalData.include_bonus && (
+                  <div className="flex justify-between">
+                    <span>Incluir aguinaldo:</span>
+                    <div className="text-right">
+                      <div className="line-through text-muted-foreground">
+                        {originalData.include_bonus ? "Sí" : "No"}
+                      </div>
+                      <div className="font-medium text-green-600">{formData.include_bonus ? "Sí" : "No"}</div>
+                    </div>
+                  </div>
+                )}
+
+                {formData.proportional_bonus !== originalData.proportional_bonus && (
+                  <div className="flex justify-between">
+                    <span>Aguinaldo proporcional:</span>
+                    <div className="text-right">
+                      <div className="line-through text-muted-foreground">
+                        {formatCurrency(originalData.proportional_bonus)}
+                      </div>
+                      <div className="font-medium text-green-600">{formatCurrency(formData.proportional_bonus)}</div>
+                    </div>
+                  </div>
+                )}
+
+                {formData.total_amount !== originalData.total_amount && (
+                  <>
+                    <Separator />
+                    <div className="flex justify-between font-bold">
+                      <span>Total:</span>
+                      <div className="text-right">
+                        <div className="line-through text-muted-foreground">
+                          {formatCurrency(originalData.total_amount)}
+                        </div>
+                        <div className="text-green-600">{formatCurrency(formData.total_amount)}</div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </>
+            ) : (
+              <div className="text-center py-4 text-muted-foreground">No hay cambios realizados</div>
+            )}
+
+            <Button
+              className="w-full mt-4"
+              onClick={handleSave}
+              disabled={saving || !hasChanges || !editReason.trim()}
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                "Guardar Cambios"
+              )}
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

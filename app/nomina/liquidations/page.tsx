@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { Loader2, CheckCircle, AlertCircle, FileText } from "lucide-react"
-import { generateLiquidations, markLiquidationsAsPaid } from "@/lib/liquidation-service-column-fix"
+import { Loader2, CheckCircle, AlertCircle, FileText, Edit, RefreshCw } from 'lucide-react'
+import { generateLiquidations, markLiquidationsAsPaid, regenerateLiquidation } from "@/lib/liquidation-service-column-fix"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -25,8 +25,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { format } from "date-fns"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { formatCurrency } from "@/lib/utils"
+import { useRouter } from "next/navigation"
 
 export default function LiquidationsPage() {
+  const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [pendingLiquidations, setPendingLiquidations] = useState<any[]>([])
   const [paidLiquidations, setPaidLiquidations] = useState<any[]>([])
@@ -41,6 +43,10 @@ export default function LiquidationsPage() {
   })
   const [paymentLoading, setPaymentLoading] = useState(false)
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
+  const [regenerateDialogOpen, setRegenerateDialogOpen] = useState(false)
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null)
+  const [regenerateLoading, setRegenerateLoading] = useState(false)
+  const [regenerateResult, setRegenerateResult] = useState<any>(null)
 
   useEffect(() => {
     loadLiquidations()
@@ -67,9 +73,13 @@ export default function LiquidationsPage() {
           proportional_bonus,
           compensation_amount,
           total_amount,
+          version,
+          previous_version_id,
           employees (
+            id,
             first_name,
-            last_name
+            last_name,
+            status
           )
         `)
         .eq("is_paid", false)
@@ -88,7 +98,10 @@ export default function LiquidationsPage() {
           payment_date,
           payment_method,
           total_amount,
+          version,
+          previous_version_id,
           employees (
+            id,
             first_name,
             last_name
           )
@@ -164,20 +177,54 @@ export default function LiquidationsPage() {
     }
   }
 
+  const handleEditLiquidation = (liquidationId: string) => {
+    router.push(`/nomina/liquidations/edit/${liquidationId}`)
+  }
+
+  const handleRegenerateLiquidation = async () => {
+    if (!regeneratingId) return
+
+    setRegenerateLoading(true)
+    try {
+      const result = await regenerateLiquidation(regeneratingId)
+      setRegenerateResult(result)
+
+      if (result.success) {
+        // Recargar liquidaciones
+        await loadLiquidations()
+        // Cerrar diálogo
+        setRegenerateDialogOpen(false)
+      }
+    } catch (error) {
+      console.error("Error al regenerar liquidación:", error)
+      setRegenerateResult({ success: false, error: String(error) })
+    } finally {
+      setRegenerateLoading(false)
+    }
+  }
+
+  const openRegenerateDialog = (liquidationId: string) => {
+    setRegeneratingId(liquidationId)
+    setRegenerateDialogOpen(true)
+    setRegenerateResult(null)
+  }
+
   return (
     <div className="container mx-auto py-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Liquidaciones</h1>
-        <Button onClick={handleGenerateLiquidations} disabled={loading}>
-          {loading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Generando...
-            </>
-          ) : (
-            "Generar Liquidaciones"
-          )}
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={handleGenerateLiquidations} disabled={loading}>
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Generando...
+              </>
+            ) : (
+              "Generar Liquidaciones"
+            )}
+          </Button>
+        </div>
       </div>
 
       {result && (
@@ -328,7 +375,7 @@ export default function LiquidationsPage() {
                         <TableHead>Aguinaldo</TableHead>
                         <TableHead>Pago Último Mes</TableHead>
                         <TableHead>Total</TableHead>
-                        <TableHead className="w-[100px]">Acciones</TableHead>
+                        <TableHead className="w-[150px]">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -342,6 +389,11 @@ export default function LiquidationsPage() {
                           </TableCell>
                           <TableCell>
                             {liquidation.employees?.first_name} {liquidation.employees?.last_name}
+                            {liquidation.version > 1 && (
+                              <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-1 py-0.5 rounded">
+                                v{liquidation.version}
+                              </span>
+                            )}
                           </TableCell>
                           <TableCell>
                             {liquidation.termination_date
@@ -354,11 +406,29 @@ export default function LiquidationsPage() {
                           <TableCell>{formatCurrency(liquidation.compensation_amount)}</TableCell>
                           <TableCell className="font-medium">{formatCurrency(liquidation.total_amount)}</TableCell>
                           <TableCell>
-                            <Button variant="ghost" size="icon" asChild>
-                              <a href={`/nomina/liquidations/${liquidation.id}`} target="_blank" rel="noreferrer">
-                                <FileText className="h-4 w-4" />
-                              </a>
-                            </Button>
+                            <div className="flex space-x-1">
+                              <Button variant="ghost" size="icon" asChild>
+                                <a href={`/nomina/liquidations/${liquidation.id}`} target="_blank" rel="noreferrer">
+                                  <FileText className="h-4 w-4" />
+                                </a>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleEditLiquidation(liquidation.id)}
+                                title="Editar liquidación"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => openRegenerateDialog(liquidation.id)}
+                                title="Regenerar liquidación"
+                              >
+                                <RefreshCw className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -401,6 +471,11 @@ export default function LiquidationsPage() {
                         <TableRow key={liquidation.id}>
                           <TableCell>
                             {liquidation.employees?.first_name} {liquidation.employees?.last_name}
+                            {liquidation.version > 1 && (
+                              <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-1 py-0.5 rounded">
+                                v{liquidation.version}
+                              </span>
+                            )}
                           </TableCell>
                           <TableCell>
                             {liquidation.termination_date
@@ -434,6 +509,47 @@ export default function LiquidationsPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Diálogo de regeneración */}
+      <Dialog open={regenerateDialogOpen} onOpenChange={setRegenerateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Regenerar Liquidación</DialogTitle>
+            <DialogDescription>
+              Esta acción regenerará la liquidación con los datos actuales del empleado. La liquidación anterior quedará
+              en el historial.
+            </DialogDescription>
+          </DialogHeader>
+
+          {regenerateResult && (
+            <Alert variant={regenerateResult.success ? "default" : "destructive"} className="my-4">
+              {regenerateResult.success ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
+              <AlertTitle>{regenerateResult.success ? "Éxito" : "Error"}</AlertTitle>
+              <AlertDescription>
+                {regenerateResult.success
+                  ? "La liquidación ha sido regenerada correctamente."
+                  : regenerateResult.error}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRegenerateDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleRegenerateLiquidation} disabled={regenerateLoading}>
+              {regenerateLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Procesando...
+                </>
+              ) : (
+                "Confirmar Regeneración"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
