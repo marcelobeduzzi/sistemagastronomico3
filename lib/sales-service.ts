@@ -1,10 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
-
-// Crear una instancia de Supabase
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+import { supabase } from "@/lib/db"
 
 export interface Category {
   id: string
@@ -223,24 +217,41 @@ export class SalesService {
         .from("sales_products")
         .select(`
           *,
-          category:sales_categories(*),
-          variants:sales_products(*)
+          category:sales_categories(*)
         `)
-        .is("parent_id", null)
+        .is("is_variant", false)
         .order("name")
 
       if (error) throw error
 
-      return (data || []).map((product) => {
+      console.log("Productos obtenidos de la base de datos:", data)
+
+      // Para cada producto, obtener sus variantes
+      const productsWithVariants = await Promise.all((data || []).map(async (product) => {
         const productData = objectToCamelCase(product)
+        
         if (productData.category) {
           productData.category = objectToCamelCase(productData.category)
         }
-        if (productData.variants) {
-          productData.variants = productData.variants.map((variant: any) => objectToCamelCase(variant))
+        
+        // Obtener variantes para este producto
+        const { data: variantsData, error: variantsError } = await supabase
+          .from("sales_products")
+          .select("*")
+          .eq("parent_id", product.id)
+          .eq("is_variant", true)
+          .order("variant_name")
+        
+        if (!variantsError && variantsData) {
+          productData.variants = variantsData.map(variant => objectToCamelCase(variant))
+        } else {
+          productData.variants = []
         }
+        
         return productData
-      })
+      }))
+
+      return productsWithVariants
     } catch (error) {
       console.error("Error al obtener productos con variantes:", error)
       return []
@@ -253,6 +264,7 @@ export class SalesService {
         .from("sales_products")
         .select("*")
         .eq("parent_id", productId)
+        .eq("is_variant", true)
         .order("variant_name")
 
       if (error) throw error

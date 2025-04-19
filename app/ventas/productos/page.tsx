@@ -22,6 +22,7 @@ export default async function ProductsPage() {
   
   try {
     products = await salesService.getProductsWithVariants()
+    console.log("Productos cargados en la página:", products)
   } catch (error) {
     console.error("Error al cargar productos:", error)
   }
@@ -54,7 +55,7 @@ export default async function ProductsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {products.length === 0 ? (
+              {!products || products.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                     No hay productos registrados. Crea tu primer producto haciendo clic en "Nuevo Producto".
