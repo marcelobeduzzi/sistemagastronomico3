@@ -108,7 +108,8 @@ class DatabaseService {
     }
   }
 
-  async updateEmployee(employee: Employee) {
+  // MÉTODO CORREGIDO: Ahora recibe el ID como parámetro separado
+  async updateEmployee(id: string, employee: Employee) {
     try {
       // Convertir automáticamente de camelCase a snake_case
       const updateData = objectToSnakeCase({
@@ -116,14 +117,24 @@ class DatabaseService {
         updated_at: new Date().toISOString(),
       })
 
+      // Eliminar el id del objeto de datos para evitar conflictos
+      if (updateData.id) {
+        delete updateData.id;
+      }
+
+      console.log("Actualizando empleado con ID:", id, "Datos:", updateData);
+
       const { data, error } = await this.supabase
         .from("employees")
         .update(updateData)
-        .eq("id", employee.id)
+        .eq("id", id)  // Usar el ID como parámetro separado
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error("Error updating employee:", error)
+        throw error
+      }
 
       // Convertir automáticamente de snake_case a camelCase
       return objectToCamelCase(data)
@@ -1977,7 +1988,3 @@ export const db = {
 
 // Exportar también el servicio original para mantener compatibilidad
 export { dbService }
-
-
-
-
