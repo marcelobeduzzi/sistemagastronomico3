@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/db"
+import { supabase, objectToCamelCase, objectToSnakeCase } from "@/lib/sales-db"
 
 export interface Category {
   id: string
@@ -34,50 +34,15 @@ export interface Product {
   variants?: Product[]
 }
 
-// Función auxiliar para convertir snake_case a camelCase
-function objectToCamelCase(obj: any): any {
-  if (typeof obj !== "object" || obj === null) {
-    return obj
-  }
-
-  if (Array.isArray(obj)) {
-    return obj.map((item) => objectToCamelCase(item))
-  }
-
-  const newObj: any = {}
-  for (const key in obj) {
-    if (obj.hasOwnProperty(key)) {
-      const camelCaseKey = key.replace(/_([a-z])/g, (match, letter) => letter.toUpperCase())
-      newObj[camelCaseKey] = objectToCamelCase(obj[key])
-    }
-  }
-  return newObj
-}
-
-// Función auxiliar para convertir camelCase a snake_case
-function objectToSnakeCase(obj: any): any {
-  if (typeof obj !== "object" || obj === null) {
-    return obj
-  }
-
-  if (Array.isArray(obj)) {
-    return obj.map((item) => objectToSnakeCase(item))
-  }
-
-  const newObj: any = {}
-  for (const key in obj) {
-    if (obj.hasOwnProperty(key)) {
-      const snakeCaseKey = key.replace(/([A-Z])/g, (match) => `_${match.toLowerCase()}`)
-      newObj[snakeCaseKey] = objectToSnakeCase(obj[key])
-    }
-  }
-  return newObj
-}
-
 export class SalesService {
   // Categorías
   async getCategories() {
     try {
+      if (!supabase) {
+        console.error("El cliente de Supabase no está disponible")
+        return []
+      }
+
       const { data, error } = await supabase.from("sales_categories").select("*").order("name")
 
       if (error) throw error
@@ -91,6 +56,11 @@ export class SalesService {
 
   async getCategoryById(id: string) {
     try {
+      if (!supabase) {
+        console.error("El cliente de Supabase no está disponible")
+        return null
+      }
+
       const { data, error } = await supabase.from("sales_categories").select("*").eq("id", id).single()
 
       if (error) throw error
@@ -105,6 +75,11 @@ export class SalesService {
   // Productos
   async getProducts() {
     try {
+      if (!supabase) {
+        console.error("El cliente de Supabase no está disponible")
+        return []
+      }
+
       const { data, error } = await supabase
         .from("sales_products")
         .select("*")
@@ -122,6 +97,11 @@ export class SalesService {
 
   async getProductById(id: string) {
     try {
+      if (!supabase) {
+        console.error("El cliente de Supabase no está disponible")
+        return null
+      }
+
       const { data, error } = await supabase.from("sales_products").select("*").eq("id", id).single()
 
       if (error) throw error
@@ -135,6 +115,11 @@ export class SalesService {
 
   async getProductWithPrices(id: string) {
     try {
+      if (!supabase) {
+        console.error("El cliente de Supabase no está disponible")
+        return null
+      }
+
       const { data, error } = await supabase.from("sales_products").select("*").eq("id", id).single()
 
       if (error) throw error
@@ -154,6 +139,11 @@ export class SalesService {
 
   async createProduct(product: Omit<Product, "id" | "createdAt" | "updatedAt">) {
     try {
+      if (!supabase) {
+        console.error("El cliente de Supabase no está disponible")
+        throw new Error("No se puede conectar a la base de datos")
+      }
+
       const now = new Date().toISOString()
       const productData = objectToSnakeCase({
         ...product,
@@ -174,6 +164,11 @@ export class SalesService {
 
   async updateProduct(id: string, product: Partial<Omit<Product, "id" | "createdAt" | "updatedAt">>) {
     try {
+      if (!supabase) {
+        console.error("El cliente de Supabase no está disponible")
+        throw new Error("No se puede conectar a la base de datos")
+      }
+
       const now = new Date().toISOString()
       const productData = objectToSnakeCase({
         ...product,
@@ -198,6 +193,11 @@ export class SalesService {
 
   async deleteProduct(id: string) {
     try {
+      if (!supabase) {
+        console.error("El cliente de Supabase no está disponible")
+        throw new Error("No se puede conectar a la base de datos")
+      }
+
       const { error } = await supabase.from("sales_products").delete().eq("id", id)
 
       if (error) throw error
@@ -212,6 +212,11 @@ export class SalesService {
   // Productos con variantes
   async getProductsWithVariants() {
     try {
+      if (!supabase) {
+        console.error("El cliente de Supabase no está disponible")
+        return []
+      }
+
       // Obtener productos principales (no variantes)
       const { data, error } = await supabase
         .from("sales_products")
@@ -260,6 +265,11 @@ export class SalesService {
 
   async getProductVariants(productId: string) {
     try {
+      if (!supabase) {
+        console.error("El cliente de Supabase no está disponible")
+        return []
+      }
+
       const { data, error } = await supabase
         .from("sales_products")
         .select("*")
@@ -281,6 +291,11 @@ export class SalesService {
     variant: Omit<Product, "id" | "createdAt" | "updatedAt" | "isVariant" | "parentId">,
   ) {
     try {
+      if (!supabase) {
+        console.error("El cliente de Supabase no está disponible")
+        throw new Error("No se puede conectar a la base de datos")
+      }
+
       const now = new Date().toISOString()
       const variantData = objectToSnakeCase({
         ...variant,
@@ -304,6 +319,11 @@ export class SalesService {
   // Precios
   async getProductPrices(productId: string) {
     try {
+      if (!supabase) {
+        console.error("El cliente de Supabase no está disponible")
+        return []
+      }
+
       const { data, error } = await supabase.from("sales_product_prices").select("*").eq("product_id", productId)
 
       if (error) throw error
@@ -317,6 +337,11 @@ export class SalesService {
 
   async setProductPrice(productId: string, channel: string, price: number) {
     try {
+      if (!supabase) {
+        console.error("El cliente de Supabase no está disponible")
+        throw new Error("No se puede conectar a la base de datos")
+      }
+
       const now = new Date().toISOString()
 
       // Verificar si ya existe un precio para este canal
@@ -373,6 +398,11 @@ export class SalesService {
   // Alertas de stock
   async getActiveStockAlerts() {
     try {
+      if (!supabase) {
+        console.error("El cliente de Supabase no está disponible")
+        return []
+      }
+
       const { data, error } = await supabase
         .from("sales_stock_alerts")
         .select(`
