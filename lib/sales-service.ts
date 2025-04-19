@@ -1,17 +1,12 @@
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import type { SupabaseClient } from "@supabase/supabase-js"
 import { objectToCamelCase, objectToSnakeCase } from "./utils"
 
-// Tipos
-export interface Product {
+export interface Category {
   id: string
   name: string
   description?: string
-  category?: string
-  imageUrl?: string
-  isActive: boolean
   createdAt: string
   updatedAt: string
-  prices?: ProductPrice[]
 }
 
 export interface ProductPrice {
@@ -23,88 +18,136 @@ export interface ProductPrice {
   updatedAt: string
 }
 
+export interface Product {
+  id: string
+  name: string
+  description?: string
+  categoryId?: string
+  category?: Category
+  imageUrl?: string
+  isActive: boolean
+  parentId?: string
+  isVariant: boolean
+  variantName?: string
+  createdAt: string
+  updatedAt: string
+  prices?: ProductPrice[]
+  variants?: Product[]
+}
+
 export interface Inventory {
   id: string
   productId: string
-  locationId: string
   quantity: number
-  minStock: number
+  minQuantity: number
+  createdAt: string
   updatedAt: string
 }
 
 export interface InventoryMovement {
   id: string
   productId: string
-  locationId: string
-  movementType: string
   quantity: number
-  referenceId?: string
-  notes?: string
+  type: "in" | "out"
+  reason: string
   createdBy: string
   createdAt: string
 }
 
 export interface Sale {
   id: string
-  locationId: string
-  shiftId?: string
   channel: string
-  totalAmount: number
-  paymentMethod: string
-  isInvoiced: boolean
+  total: number
+  status: string
   createdBy: string
   createdAt: string
+  updatedAt: string
   items?: SaleItem[]
 }
 
 export interface SaleItem {
   id: string
-  transactionId: string
+  saleId: string
   productId: string
   quantity: number
-  unitPrice: number
-  totalPrice: number
+  price: number
+  subtotal: number
   createdAt: string
 }
 
-export interface ProductBundle {
+export interface Combo {
   id: string
   name: string
   description?: string
-  price: number
+  imageUrl?: string
   isActive: boolean
   createdAt: string
   updatedAt: string
-  items?: BundleItem[]
+  items?: ComboItem[]
+  prices?: ProductPrice[]
 }
 
-export interface BundleItem {
+export interface ComboItem {
   id: string
-  bundleId: string
+  comboId: string
   productId: string
   quantity: number
   createdAt: string
 }
 
-export interface InventoryAlert {
+export interface StockAlert {
   id: string
   productId: string
-  locationId: string
+  product?: Product
   currentQuantity: number
   minQuantity: number
-  status: string
-  resolvedAt?: string
-  resolvedBy?: string
+  status: "pending" | "resolved"
   createdAt: string
+  resolvedAt?: string
 }
 
-class SalesService {
-  private supabase = createClientComponentClient()
+export class SalesService {
+  supabase: SupabaseClient
+
+  constructor(supabaseClient: SupabaseClient) {
+    this.supabase = supabaseClient
+  }
+
+  // Categorías
+  async getCategories() {
+    try {
+      const { data, error } = await this.supabase.from("sales_categories").select("*").order("name")
+
+      if (error) throw error
+
+      return (data || []).map((category) => objectToCamelCase(category))
+    } catch (error) {
+      console.error("Error al obtener categorías:", error)
+      throw error
+    }
+  }
+
+  async getCategoryById(id: string) {
+    try {
+      const { data, error } = await this.supabase.from("sales_categories").select("*").eq("id", id).single()
+
+      if (error) throw error
+
+      return objectToCamelCase(data)
+    } catch (error) {
+      console.error(`Error al obtener categoría con ID ${id}:`, error)
+      throw error
+    }
+  }
 
   // Productos
   async getProducts() {
     try {
-      const { data, error } = await this.supabase.from("sales_products").select("*").order("name")
+      const { data, error } = await this.supabase
+        .from("sales_products")
+        .select("*")
+        .is("is_variant", false)
+        .order("name")
 
       if (error) throw error
 
@@ -132,20 +175,21 @@ class SalesService {
     try {
       const { data, error } = await this.supabase
         .from("sales_products")
-        .select(`*, prices:sales_product_prices(*)`)
+        .select("*")
         .eq("id", id)
         .single()
 
       if (error) throw error
 
       const product = objectToCamelCase(data)
-      if (product.prices) {
-        product.prices = product.prices.map((price: any) => objectToCamelCase(price))
-      }
+
+      // Obtener precios
+      const prices = await this.getProductPrices(id)
+      product.prices = prices
 
       return product
     } catch (error) {
-      console.error(`Error al obtener producto con precios, ID ${id}:`, error)
+      console.error(`Error al obtener producto con precios para ID ${id}:`, error)
       throw error
     }
   }
@@ -170,16 +214,17 @@ class SalesService {
     }
   }
 
-  async updateProduct(id: string, product: Partial<Product>) {
+  async updateProduct(id: string, product: Partial<Omit<Product, "id" | "createdAt" | "updatedAt">>) {
     try {
-      const updateData = objectToSnakeCase({
+      const now = new Date().toISOString()
+      const productData = objectToSnakeCase({
         ...product,
-        updated_at: new Date().toISOString(),
+        updated_at: now,
       })
 
       const { data, error } = await this.supabase
         .from("sales_products")
-        .update(updateData)
+        .update(productData)
         .eq("id", id)
         .select()
         .single()
@@ -206,14 +251,87 @@ class SalesService {
     }
   }
 
-  // Precios de productos
+  // Productos con variantes
+  async getProductsWithVariants() {
+    try {
+      // Obtener productos principales (no variantes)
+      const { data, error } = await this.supabase
+        .from("sales_products")
+        .select(`
+          *,
+          category:sales_categories(*),
+          variants:sales_products(*)
+        `)
+        .is("parent_id", null)
+        .order("name")
+
+      if (error) throw error
+
+      return (data || []).map((product) => {
+        const productData = objectToCamelCase(product)
+        if (productData.category) {
+          productData.category = objectToCamelCase(productData.category)
+        }
+        if (productData.variants) {
+          productData.variants = productData.variants.map((variant: any) => objectToCamelCase(variant))
+        }
+        return productData
+      })
+    } catch (error) {
+      console.error("Error al obtener productos con variantes:", error)
+      throw error
+    }
+  }
+
+  async getProductVariants(productId: string) {
+    try {
+      const { data, error } = await this.supabase
+        .from("sales_products")
+        .select("*")
+        .eq("parent_id", productId)
+        .order("variant_name")
+
+      if (error) throw error
+
+      return (data || []).map((variant) => objectToCamelCase(variant))
+    } catch (error) {
+      console.error(`Error al obtener variantes para producto ${productId}:`, error)
+      throw error
+    }
+  }
+
+  async createProductVariant(
+    parentId: string,
+    variant: Omit<Product, "id" | "createdAt" | "updatedAt" | "isVariant" | "parentId">
+  ) {
+    try {
+      const now = new Date().toISOString()
+      const variantData = objectToSnakeCase({
+        ...variant,
+        parent_id: parentId,
+        is_variant: true,
+        created_at: now,
+        updated_at: now,
+      })
+
+      const { data, error } = await this.supabase.from("sales_products").insert([variantData]).select().single()
+
+      if (error) throw error
+
+      return objectToCamelCase(data)
+    } catch (error) {
+      console.error(`Error al crear variante para producto ${parentId}:`, error)
+      throw error
+    }
+  }
+
+  // Precios
   async getProductPrices(productId: string) {
     try {
       const { data, error } = await this.supabase
         .from("sales_product_prices")
         .select("*")
         .eq("product_id", productId)
-        .order("channel")
 
       if (error) throw error
 
@@ -227,30 +345,25 @@ class SalesService {
   async setProductPrice(productId: string, channel: string, price: number) {
     try {
       const now = new Date().toISOString()
-      const priceData = {
-        product_id: productId,
-        channel,
-        price,
-        updated_at: now,
-      }
 
-      // Verificar si ya existe un precio para este producto y canal
-      const { data: existingPrice, error: checkError } = await this.supabase
+      // Verificar si ya existe un precio para este canal
+      const { data: existingPrice, error: queryError } = await this.supabase
         .from("sales_product_prices")
-        .select("id")
+        .select("*")
         .eq("product_id", productId)
         .eq("channel", channel)
-        .single()
+        .maybeSingle()
 
-      if (checkError && checkError.code !== "PGRST116") {
-        throw checkError
-      }
+      if (queryError) throw queryError
 
       if (existingPrice) {
         // Actualizar precio existente
         const { data, error } = await this.supabase
           .from("sales_product_prices")
-          .update({ price, updated_at: now })
+          .update({
+            price,
+            updated_at: now,
+          })
           .eq("id", existingPrice.id)
           .select()
           .single()
@@ -262,7 +375,15 @@ class SalesService {
         // Crear nuevo precio
         const { data, error } = await this.supabase
           .from("sales_product_prices")
-          .insert([{ ...priceData, created_at: now }])
+          .insert([
+            {
+              product_id: productId,
+              channel,
+              price,
+              created_at: now,
+              updated_at: now,
+            },
+          ])
           .select()
           .single()
 
@@ -271,19 +392,21 @@ class SalesService {
         return objectToCamelCase(data)
       }
     } catch (error) {
-      console.error(`Error al establecer precio para producto ${productId}, canal ${channel}:`, error)
+      console.error(`Error al establecer precio para producto ${productId} en canal ${channel}:`, error)
       throw error
     }
   }
 
   // Inventario
-  async getInventory(locationId: string) {
+  async getInventory() {
     try {
       const { data, error } = await this.supabase
         .from("sales_inventory")
-        .select(`*, product:sales_products(*)`)
-        .eq("location_id", locationId)
-        .order("updated_at", { ascending: false })
+        .select(`
+          *,
+          product:sales_products(*)
+        `)
+        .order("created_at", { ascending: false })
 
       if (error) throw error
 
@@ -295,270 +418,484 @@ class SalesService {
         return inventoryItem
       })
     } catch (error) {
-      console.error(`Error al obtener inventario para local ${locationId}:`, error)
+      console.error("Error al obtener inventario:", error)
       throw error
     }
   }
 
-  async getProductInventory(productId: string, locationId: string) {
+  async getProductInventory(productId: string) {
     try {
       const { data, error } = await this.supabase
         .from("sales_inventory")
         .select("*")
         .eq("product_id", productId)
-        .eq("location_id", locationId)
-        .single()
+        .maybeSingle()
 
-      if (error) {
-        if (error.code === "PGRST116") {
-          // No se encontró inventario para este producto en este local
-          return null
-        }
-        throw error
-      }
+      if (error) throw error
 
-      return objectToCamelCase(data)
+      return data ? objectToCamelCase(data) : null
     } catch (error) {
-      console.error(`Error al obtener inventario para producto ${productId} en local ${locationId}:`, error)
+      console.error(`Error al obtener inventario para producto ${productId}:`, error)
       throw error
     }
   }
 
-  async updateInventory(productId: string, locationId: string, quantity: number, minStock?: number) {
+  async updateInventory(productId: string, quantity: number, minQuantity: number) {
     try {
       const now = new Date().toISOString()
 
-      // Verificar si ya existe un registro de inventario para este producto y local
-      const { data: existingInventory, error: checkError } = await this.supabase
+      // Verificar si ya existe un registro de inventario para este producto
+      const { data: existingInventory, error: queryError } = await this.supabase
         .from("sales_inventory")
-        .select("id, quantity")
+        .select("*")
         .eq("product_id", productId)
-        .eq("location_id", locationId)
-        .single()
+        .maybeSingle()
 
-      if (checkError && checkError.code !== "PGRST116") {
-        throw checkError
-      }
+      if (queryError) throw queryError
 
       if (existingInventory) {
         // Actualizar inventario existente
-        const updateData: any = {
-          quantity,
-          updated_at: now,
-        }
-
-        if (minStock !== undefined) {
-          updateData.min_stock = minStock
-        }
-
         const { data, error } = await this.supabase
           .from("sales_inventory")
-          .update(updateData)
+          .update({
+            quantity,
+            min_quantity: minQuantity,
+            updated_at: now,
+          })
           .eq("id", existingInventory.id)
           .select()
           .single()
 
         if (error) throw error
 
-        // Verificar si se debe crear una alerta de stock bajo
-        await this.checkStockAlert(productId, locationId, quantity, minStock || 5)
-
         return objectToCamelCase(data)
       } else {
         // Crear nuevo registro de inventario
-        const inventoryData = {
-          product_id: productId,
-          location_id: locationId,
-          quantity,
-          min_stock: minStock || 5,
-          updated_at: now,
-        }
-
         const { data, error } = await this.supabase
           .from("sales_inventory")
-          .insert([inventoryData])
+          .insert([
+            {
+              product_id: productId,
+              quantity,
+              min_quantity: minQuantity,
+              created_at: now,
+              updated_at: now,
+            },
+          ])
           .select()
           .single()
 
         if (error) throw error
 
-        // Verificar si se debe crear una alerta de stock bajo
-        await this.checkStockAlert(productId, locationId, quantity, minStock || 5)
-
         return objectToCamelCase(data)
       }
     } catch (error) {
-      console.error(`Error al actualizar inventario para producto ${productId} en local ${locationId}:`, error)
+      console.error(`Error al actualizar inventario para producto ${productId}:`, error)
       throw error
     }
   }
 
-  async registerInventoryMovement(
+  async addInventoryMovement(
     productId: string,
-    locationId: string,
-    movementType: string,
     quantity: number,
-    referenceId?: string,
-    notes?: string,
-    createdBy?: string
+    type: "in" | "out",
+    reason: string,
+    createdBy: string
   ) {
     try {
       const now = new Date().toISOString()
-      const movementData = {
-        product_id: productId,
-        location_id: locationId,
-        movement_type: movementType,
-        quantity,
-        reference_id: referenceId,
-        notes,
-        created_by: createdBy || "system",
-        created_at: now,
+
+      // Registrar movimiento
+      const { data: movementData, error: movementError } = await this.supabase
+        .from("sales_inventory_movements")
+        .insert([
+          {
+            product_id: productId,
+            quantity: Math.abs(quantity),
+            type,
+            reason,
+            created_by: createdBy,
+            created_at: now,
+          },
+        ])
+        .select()
+        .single()
+
+      if (movementError) throw movementError
+
+      // Actualizar cantidad en inventario
+      const { data: inventoryData, error: inventoryError } = await this.supabase
+        .from("sales_inventory")
+        .select("*")
+        .eq("product_id", productId)
+        .maybeSingle()
+
+      if (inventoryError) throw inventoryError
+
+      const inventoryQuantity = inventoryData ? inventoryData.quantity : 0
+      const newQuantity = type === "in" ? inventoryQuantity + quantity : inventoryQuantity - quantity
+
+      await this.updateInventory(productId, newQuantity, inventoryData?.min_quantity || 0)
+
+      return objectToCamelCase(movementData)
+    } catch (error) {
+      console.error(`Error al registrar movimiento de inventario para producto ${productId}:`, error)
+      throw error
+    }
+  }
+
+  // Ventas
+  async getSales() {
+    try {
+      const { data, error } = await this.supabase
+        .from("sales_sales")
+        .select("*")
+        .order("created_at", { ascending: false })
+
+      if (error) throw error
+
+      return (data || []).map((sale) => objectToCamelCase(sale))
+    } catch (error) {
+      console.error("Error al obtener ventas:", error)
+      throw error
+    }
+  }
+
+  async getSaleById(id: string) {
+    try {
+      const { data, error } = await this.supabase
+        .from("sales_sales")
+        .select(`
+          *,
+          items:sales_sale_items(
+            *,
+            product:sales_products(*)
+          )
+        `)
+        .eq("id", id)
+        .single()
+
+      if (error) throw error
+
+      const sale = objectToCamelCase(data)
+      if (sale.items) {
+        sale.items = sale.items.map((item: any) => {
+          const saleItem = objectToCamelCase(item)
+          if (saleItem.product) {
+            saleItem.product = objectToCamelCase(saleItem.product)
+          }
+          return saleItem
+        })
       }
 
-      // Registrar el movimiento
+      return sale
+    } catch (error) {
+      console.error(`Error al obtener venta con ID ${id}:`, error)
+      throw error
+    }
+  }
+
+  async createSale(
+    channel: string,
+    items: Array<{ productId: string; quantity: number; price: number }>,
+    createdBy: string
+  ) {
+    try {
+      const now = new Date().toISOString()
+
+      // Calcular total
+      const total = items.reduce((sum, item) => sum + item.quantity * item.price, 0)
+
+      // Crear venta
+      const { data: saleData, error: saleError } = await this.supabase
+        .from("sales_sales")
+        .insert([
+          {
+            channel,
+            total,
+            status: "completed",
+            created_by: createdBy,
+            created_at: now,
+            updated_at: now,
+          },
+        ])
+        .select()
+        .single()
+
+      if (saleError) throw saleError
+
+      const saleId = saleData.id
+
+      // Crear items de venta
+      const saleItems = items.map((item) => ({
+        sale_id: saleId,
+        product_id: item.productId,
+        quantity: item.quantity,
+        price: item.price,
+        subtotal: item.quantity * item.price,
+        created_at: now,
+      }))
+
+      const { data: itemsData, error: itemsError } = await this.supabase
+        .from("sales_sale_items")
+        .insert(saleItems)
+        .select()
+
+      if (itemsError) throw itemsError
+
+      // Actualizar inventario
+      for (const item of items) {
+        await this.addInventoryMovement(
+          item.productId,
+          item.quantity,
+          "out",
+          `Venta #${saleId}`,
+          createdBy
+        )
+      }
+
+      return objectToCamelCase(saleData)
+    } catch (error) {
+      console.error("Error al crear venta:", error)
+      throw error
+    }
+  }
+
+  // Combos
+  async getCombos() {
+    try {
+      const { data, error } = await this.supabase.from("sales_combos").select("*").order("name")
+
+      if (error) throw error
+
+      return (data || []).map((combo) => objectToCamelCase(combo))
+    } catch (error) {
+      console.error("Error al obtener combos:", error)
+      throw error
+    }
+  }
+
+  async getComboById(id: string) {
+    try {
       const { data, error } = await this.supabase
-        .from("sales_inventory_movements")
-        .insert([movementData])
+        .from("sales_combos")
+        .select(`
+          *,
+          items:sales_combo_items(
+            *,
+            product:sales_products(*)
+          )
+        `)
+        .eq("id", id)
+        .single()
+
+      if (error) throw error
+
+      const combo = objectToCamelCase(data)
+      if (combo.items) {
+        combo.items = combo.items.map((item: any) => {
+          const comboItem = objectToCamelCase(item)
+          if (comboItem.product) {
+            comboItem.product = objectToCamelCase(comboItem.product)
+          }
+          return comboItem
+        })
+      }
+
+      // Obtener precios
+      const prices = await this.getComboPrices(id)
+      combo.prices = prices
+
+      return combo
+    } catch (error) {
+      console.error(`Error al obtener combo con ID ${id}:`, error)
+      throw error
+    }
+  }
+
+  async createCombo(combo: Omit<Combo, "id" | "createdAt" | "updatedAt">) {
+    try {
+      const now = new Date().toISOString()
+      const comboData = objectToSnakeCase({
+        ...combo,
+        created_at: now,
+        updated_at: now,
+      })
+
+      // Eliminar items si existen
+      const { items, ...comboWithoutItems } = comboData
+
+      const { data, error } = await this.supabase
+        .from("sales_combos")
+        .insert([comboWithoutItems])
         .select()
         .single()
 
       if (error) throw error
 
-      // Actualizar el inventario según el tipo de movimiento
-      let inventoryChange = 0
-      if (
-        movementType === "ingreso" ||
-        movementType === "traslado_entrada" ||
-        movementType === "ajuste_positivo"
-      ) {
-        inventoryChange = quantity
-      } else if (
-        movementType === "venta" ||
-        movementType === "decomiso" ||
-        movementType === "consumo_personal" ||
-        movementType === "traslado_salida" ||
-        movementType === "ajuste_negativo"
-      ) {
-        inventoryChange = -quantity
-      }
+      const comboId = data.id
 
-      if (inventoryChange !== 0) {
-        // Obtener inventario actual
-        const { data: currentInventory, error: inventoryError } = await this.supabase
-          .from("sales_inventory")
-          .select("quantity, min_stock")
-          .eq("product_id", productId)
-          .eq("location_id", locationId)
-          .single()
+      // Crear items si existen
+      if (items && items.length > 0) {
+        const comboItems = items.map((item: any) => ({
+          combo_id: comboId,
+          product_id: item.product_id,
+          quantity: item.quantity,
+          created_at: now,
+        }))
 
-        if (inventoryError && inventoryError.code !== "PGRST116") {
-          throw inventoryError
-        }
-
-        const currentQuantity = currentInventory ? currentInventory.quantity : 0
-        const minStock = currentInventory ? currentInventory.min_stock : 5
-        const newQuantity = currentQuantity + inventoryChange
-
-        // Actualizar inventario
-        await this.updateInventory(productId, locationId, newQuantity, minStock)
+        await this.supabase.from("sales_combo_items").insert(comboItems)
       }
 
       return objectToCamelCase(data)
     } catch (error) {
-      console.error(
-        `Error al registrar movimiento de inventario para producto ${productId} en local ${locationId}:`,
-        error
-      )
+      console.error("Error al crear combo:", error)
+      throw error
+    }
+  }
+
+  async updateCombo(id: string, combo: Partial<Omit<Combo, "id" | "createdAt" | "updatedAt">>) {
+    try {
+      const now = new Date().toISOString()
+      const comboData = objectToSnakeCase({
+        ...combo,
+        updated_at: now,
+      })
+
+      // Eliminar items si existen
+      const { items, ...comboWithoutItems } = comboData
+
+      const { data, error } = await this.supabase
+        .from("sales_combos")
+        .update(comboWithoutItems)
+        .eq("id", id)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      // Actualizar items si existen
+      if (items) {
+        // Eliminar items existentes
+        await this.supabase.from("sales_combo_items").delete().eq("combo_id", id)
+
+        // Crear nuevos items
+        if (items.length > 0) {
+          const comboItems = items.map((item: any) => ({
+            combo_id: id,
+            product_id: item.product_id,
+            quantity: item.quantity,
+            created_at: now,
+          }))
+
+          await this.supabase.from("sales_combo_items").insert(comboItems)
+        }
+      }
+
+      return objectToCamelCase(data)
+    } catch (error) {
+      console.error(`Error al actualizar combo con ID ${id}:`, error)
+      throw error
+    }
+  }
+
+  async deleteCombo(id: string) {
+    try {
+      const { error } = await this.supabase.from("sales_combos").delete().eq("id", id)
+
+      if (error) throw error
+
+      return true
+    } catch (error) {
+      console.error(`Error al eliminar combo con ID ${id}:`, error)
+      throw error
+    }
+  }
+
+  async getComboPrices(comboId: string) {
+    try {
+      const { data, error } = await this.supabase
+        .from("sales_combo_prices")
+        .select("*")
+        .eq("combo_id", comboId)
+
+      if (error) throw error
+
+      return (data || []).map((price) => objectToCamelCase(price))
+    } catch (error) {
+      console.error(`Error al obtener precios para combo ${comboId}:`, error)
+      throw error
+    }
+  }
+
+  async setComboPrice(comboId: string, channel: string, price: number) {
+    try {
+      const now = new Date().toISOString()
+
+      // Verificar si ya existe un precio para este canal
+      const { data: existingPrice, error: queryError } = await this.supabase
+        .from("sales_combo_prices")
+        .select("*")
+        .eq("combo_id", comboId)
+        .eq("channel", channel)
+        .maybeSingle()
+
+      if (queryError) throw queryError
+
+      if (existingPrice) {
+        // Actualizar precio existente
+        const { data, error } = await this.supabase
+          .from("sales_combo_prices")
+          .update({
+            price,
+            updated_at: now,
+          })
+          .eq("id", existingPrice.id)
+          .select()
+          .single()
+
+        if (error) throw error
+
+        return objectToCamelCase(data)
+      } else {
+        // Crear nuevo precio
+        const { data, error } = await this.supabase
+          .from("sales_combo_prices")
+          .insert([
+            {
+              combo_id: comboId,
+              channel,
+              price,
+              created_at: now,
+              updated_at: now,
+            },
+          ])
+          .select()
+          .single()
+
+        if (error) throw error
+
+        return objectToCamelCase(data)
+      }
+    } catch (error) {
+      console.error(`Error al establecer precio para combo ${comboId} en canal ${channel}:`, error)
       throw error
     }
   }
 
   // Alertas de stock
-  async checkStockAlert(productId: string, locationId: string, currentQuantity: number, minQuantity: number) {
-    try {
-      // Si la cantidad actual es menor o igual al mínimo, crear una alerta
-      if (currentQuantity <= minQuantity) {
-        // Verificar si ya existe una alerta activa para este producto y local
-        const { data: existingAlert, error: checkError } = await this.supabase
-          .from("sales_inventory_alerts")
-          .select("id")
-          .eq("product_id", productId)
-          .eq("location_id", locationId)
-          .eq("status", "active")
-          .single()
-
-        if (checkError && checkError.code !== "PGRST116") {
-          throw checkError
-        }
-
-        if (!existingAlert) {
-          // Crear nueva alerta
-          const alertData = {
-            product_id: productId,
-            location_id: locationId,
-            current_quantity: currentQuantity,
-            min_quantity: minQuantity,
-            status: "active",
-            created_at: new Date().toISOString(),
-          }
-
-          const { error } = await this.supabase.from("sales_inventory_alerts").insert([alertData])
-
-          if (error) throw error
-
-          console.log(`Alerta de stock bajo creada para producto ${productId} en local ${locationId}`)
-          return true
-        }
-      } else {
-        // Si la cantidad actual es mayor al mínimo, resolver alertas activas
-        const { data: existingAlerts, error: checkError } = await this.supabase
-          .from("sales_inventory_alerts")
-          .select("id")
-          .eq("product_id", productId)
-          .eq("location_id", locationId)
-          .eq("status", "active")
-
-        if (checkError) throw checkError
-
-        if (existingAlerts && existingAlerts.length > 0) {
-          const now = new Date().toISOString()
-          const updateData = {
-            status: "resolved",
-            resolved_at: now,
-            resolved_by: "system",
-          }
-
-          for (const alert of existingAlerts) {
-            const { error } = await this.supabase
-              .from("sales_inventory_alerts")
-              .update(updateData)
-              .eq("id", alert.id)
-
-            if (error) throw error
-          }
-
-          console.log(`Alertas de stock resueltas para producto ${productId} en local ${locationId}`)
-          return true
-        }
-      }
-
-      return false
-    } catch (error) {
-      console.error(`Error al verificar alerta de stock para producto ${productId} en local ${locationId}:`, error)
-      throw error
-    }
-  }
-
-  async getActiveStockAlerts(locationId?: string) {
+  async getStockAlerts(status?: "pending" | "resolved") {
     try {
       let query = this.supabase
-        .from("sales_inventory_alerts")
-        .select(`*, product:sales_products(*)`)
-        .eq("status", "active")
+        .from("sales_stock_alerts")
+        .select(`
+          *,
+          product:sales_products(*)
+        `)
         .order("created_at", { ascending: false })
 
-      if (locationId) {
-        query = query.eq("location_id", locationId)
+      if (status) {
+        query = query.eq("status", status)
       }
 
       const { data, error } = await query
@@ -573,276 +910,128 @@ class SalesService {
         return stockAlert
       })
     } catch (error) {
-      console.error("Error al obtener alertas de stock activas:", error)
+      console.error("Error al obtener alertas de stock:", error)
       throw error
     }
   }
 
-  // Ventas
-  async createSale(sale: Omit<Sale, "id" | "createdAt">, items: Omit<SaleItem, "id" | "transactionId" | "createdAt">[]) {
+  async createStockAlert(productId: string, currentQuantity: number, minQuantity: number) {
     try {
-      // Iniciar transacción
       const now = new Date().toISOString()
-      const saleData = objectToSnakeCase({
-        ...sale,
-        created_at: now,
-      })
 
-      // Crear la venta
-      const { data: newSale, error: saleError } = await this.supabase
-        .from("sales_transactions")
-        .insert([saleData])
-        .select()
-        .single()
+      // Verificar si ya existe una alerta pendiente para este producto
+      const { data: existingAlert, error: queryError } = await this.supabase
+        .from("sales_stock_alerts")
+        .select("*")
+        .eq("product_id", productId)
+        .eq("status", "pending")
+        .maybeSingle()
 
-      if (saleError) throw saleError
+      if (queryError) throw queryError
 
-      // Crear los items de la venta
-      const saleItems = items.map((item) => ({
-        transaction_id: newSale.id,
-        product_id: item.product_id,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        total_price: item.total_price,
-        created_at: now,
-      }))
+      if (existingAlert) {
+        // Actualizar alerta existente
+        const { data, error } = await this.supabase
+          .from("sales_stock_alerts")
+          .update({
+            current_quantity: currentQuantity,
+            updated_at: now,
+          })
+          .eq("id", existingAlert.id)
+          .select()
+          .single()
 
-      const { error: itemsError } = await this.supabase.from("sales_transaction_items").insert(saleItems)
+        if (error) throw error
 
-      if (itemsError) throw itemsError
+        return objectToCamelCase(data)
+      } else {
+        // Crear nueva alerta
+        const { data, error } = await this.supabase
+          .from("sales_stock_alerts")
+          .insert([
+            {
+              product_id: productId,
+              current_quantity: currentQuantity,
+              min_quantity: minQuantity,
+              status: "pending",
+              created_at: now,
+            },
+          ])
+          .select()
+          .single()
 
-      // Registrar movimientos de inventario para cada item
-      for (const item of items) {
-        await this.registerInventoryMovement(
-          item.product_id,
-          sale.location_id,
-          "venta",
-          item.quantity,
-          newSale.id,
-          `Venta ${newSale.id}`,
-          sale.created_by
-        )
+        if (error) throw error
+
+        return objectToCamelCase(data)
       }
-
-      return objectToCamelCase(newSale)
     } catch (error) {
-      console.error("Error al crear venta:", error)
+      console.error(`Error al crear alerta de stock para producto ${productId}:`, error)
       throw error
     }
   }
 
-  async getSaleById(id: string) {
+  async resolveStockAlert(id: string) {
     try {
+      const now = new Date().toISOString()
+
       const { data, error } = await this.supabase
-        .from("sales_transactions")
-        .select(`*, items:sales_transaction_items(*)`)
-        .eq("id", id)
-        .single()
-
-      if (error) throw error
-
-      const sale = objectToCamelCase(data)
-      if (sale.items) {
-        sale.items = sale.items.map((item: any) => objectToCamelCase(item))
-      }
-
-      return sale
-    } catch (error) {
-      console.error(`Error al obtener venta con ID ${id}:`, error)
-      throw error
-    }
-  }
-
-  async getSalesByShift(shiftId: string) {
-    try {
-      const { data, error } = await this.supabase
-        .from("sales_transactions")
-        .select(`*, items:sales_transaction_items(*)`)
-        .eq("shift_id", shiftId)
-        .order("created_at", { ascending: false })
-
-      if (error) throw error
-
-      return (data || []).map((sale) => {
-        const saleData = objectToCamelCase(sale)
-        if (saleData.items) {
-          saleData.items = saleData.items.map((item: any) => objectToCamelCase(item))
-        }
-        return saleData
-      })
-    } catch (error) {
-      console.error(`Error al obtener ventas para turno ${shiftId}:`, error)
-      throw error
-    }
-  }
-
-  async getSalesByDateRange(locationId: string, startDate: string, endDate: string) {
-    try {
-      const { data, error } = await this.supabase
-        .from("sales_transactions")
-        .select(`*, items:sales_transaction_items(*)`)
-        .eq("location_id", locationId)
-        .gte("created_at", startDate)
-        .lte("created_at", endDate)
-        .order("created_at", { ascending: false })
-
-      if (error) throw error
-
-      return (data || []).map((sale) => {
-        const saleData = objectToCamelCase(sale)
-        if (saleData.items) {
-          saleData.items = saleData.items.map((item: any) => objectToCamelCase(item))
-        }
-        return saleData
-      })
-    } catch (error) {
-      console.error(
-        `Error al obtener ventas para local ${locationId} entre ${startDate} y ${endDate}:`,
-        error
-      )
-      throw error
-    }
-  }
-
-  // Combos
-  async getProductBundles() {
-    try {
-      const { data, error } = await this.supabase.from("sales_product_bundles").select("*").order("name")
-
-      if (error) throw error
-
-      return (data || []).map((bundle) => objectToCamelCase(bundle))
-    } catch (error) {
-      console.error("Error al obtener combos:", error)
-      throw error
-    }
-  }
-
-  async getProductBundleById(id: string) {
-    try {
-      const { data, error } = await this.supabase
-        .from("sales_product_bundles")
-        .select(`*, items:sales_bundle_items(*, product:sales_products(*))`)
-        .eq("id", id)
-        .single()
-
-      if (error) throw error
-
-      const bundle = objectToCamelCase(data)
-      if (bundle.items) {
-        bundle.items = bundle.items.map((item: any) => {
-          const bundleItem = objectToCamelCase(item)
-          if (bundleItem.product) {
-            bundleItem.product = objectToCamelCase(bundleItem.product)
-          }
-          return bundleItem
+        .from("sales_stock_alerts")
+        .update({
+          status: "resolved",
+          resolved_at: now,
         })
-      }
-
-      return bundle
-    } catch (error) {
-      console.error(`Error al obtener combo con ID ${id}:`, error)
-      throw error
-    }
-  }
-
-  async createProductBundle(bundle: Omit<ProductBundle, "id" | "createdAt" | "updatedAt">, items: { productId: string; quantity: number }[]) {
-    try {
-      const now = new Date().toISOString()
-      const bundleData = objectToSnakeCase({
-        ...bundle,
-        created_at: now,
-        updated_at: now,
-      })
-
-      // Crear el combo
-      const { data: newBundle, error: bundleError } = await this.supabase
-        .from("sales_product_bundles")
-        .insert([bundleData])
-        .select()
-        .single()
-
-      if (bundleError) throw bundleError
-
-      // Crear los items del combo
-      const bundleItems = items.map((item) => ({
-        bundle_id: newBundle.id,
-        product_id: item.productId,
-        quantity: item.quantity,
-        created_at: now,
-      }))
-
-      const { error: itemsError } = await this.supabase.from("sales_bundle_items").insert(bundleItems)
-
-      if (itemsError) throw itemsError
-
-      return objectToCamelCase(newBundle)
-    } catch (error) {
-      console.error("Error al crear combo:", error)
-      throw error
-    }
-  }
-
-  async updateProductBundle(id: string, bundle: Partial<ProductBundle>, items?: { productId: string; quantity: number }[]) {
-    try {
-      const now = new Date().toISOString()
-      const updateData = objectToSnakeCase({
-        ...bundle,
-        updated_at: now,
-      })
-
-      // Actualizar el combo
-      const { data, error: bundleError } = await this.supabase
-        .from("sales_product_bundles")
-        .update(updateData)
         .eq("id", id)
         .select()
         .single()
 
-      if (bundleError) throw bundleError
-
-      // Si se proporcionaron items, actualizar los items del combo
-      if (items) {
-        // Eliminar items existentes
-        const { error: deleteError } = await this.supabase.from("sales_bundle_items").delete().eq("bundle_id", id)
-
-        if (deleteError) throw deleteError
-
-        // Crear nuevos items
-        const bundleItems = items.map((item) => ({
-          bundle_id: id,
-          product_id: item.productId,
-          quantity: item.quantity,
-          created_at: now,
-        }))
-
-        const { error: itemsError } = await this.supabase.from("sales_bundle_items").insert(bundleItems)
-
-        if (itemsError) throw itemsError
-      }
+      if (error) throw error
 
       return objectToCamelCase(data)
     } catch (error) {
-      console.error(`Error al actualizar combo con ID ${id}:`, error)
+      console.error(`Error al resolver alerta de stock con ID ${id}:`, error)
       throw error
     }
   }
 
-  async deleteProductBundle(id: string) {
+  // Utilidades
+  async checkLowStock() {
     try {
-      const { error } = await this.supabase.from("sales_product_bundles").delete().eq("id", id)
+      // Obtener todos los productos con inventario
+      const { data, error } = await this.supabase
+        .from("sales_inventory")
+        .select(`
+          *,
+          product:sales_products(*)
+        `)
+        .order("quantity")
 
       if (error) throw error
 
-      return true
+      const lowStockItems = []
+
+      for (const item of data) {
+        if (item.quantity <= item.min_quantity) {
+          lowStockItems.push(item)
+
+          // Crear alerta de stock si es necesario
+          await this.createStockAlert(item.product_id, item.quantity, item.min_quantity)
+        }
+      }
+
+      return lowStockItems.map((item) => {
+        const inventoryItem = objectToCamelCase(item)
+        if (inventoryItem.product) {
+          inventoryItem.product = objectToCamelCase(inventoryItem.product)
+        }
+        return inventoryItem
+      })
     } catch (error) {
-      console.error(`Error al eliminar combo con ID ${id}:`, error)
+      console.error("Error al verificar stock bajo:", error)
       throw error
     }
   }
 }
 
-// Crear una instancia del servicio
-const salesService = new SalesService()
-
-export { salesService }
+// Instancia del servicio
+import { supabase } from "./supabase"
+export const salesService = new SalesService(supabase)

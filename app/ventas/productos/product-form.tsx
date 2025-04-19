@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
@@ -19,15 +19,26 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { salesService } from "@/lib/sales-service"
-import type { Product } from "@/lib/sales-service"
+import type { Product, Category } from "@/lib/sales-service"
 
 const productSchema = z.object({
   name: z.string().min(2, { message: "El nombre debe tener al menos 2 caracteres" }),
   description: z.string().optional(),
-  category: z.string().optional(),
+  categoryId: z.string().optional(),
   imageUrl: z.string().optional(),
   isActive: z.boolean().default(true),
+  productType: z.enum(["simple", "withVariants"]),
+  parentId: z.string().optional(),
+  variantName: z.string().optional(),
   localPrice: z.coerce.number().min(0, { message: "El precio debe ser mayor o igual a 0" }),
   pedidosYaPrice: z.coerce.number().min(0, { message: "El precio debe ser mayor o igual a 0" }).optional(),
   rappiPrice: z.coerce.number().min(0, { message: "El precio debe ser mayor o igual a 0" }).optional(),
@@ -38,18 +49,38 @@ type ProductFormValues = z.infer<typeof productSchema>
 
 interface ProductFormProps {
   product?: Product
+  parentProduct?: Product
 }
 
-export default function ProductForm({ product }: ProductFormProps) {
+export default function ProductForm({ product, parentProduct }: ProductFormProps) {
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [categories, setCategories] = useState<Category[]>([])
+  const [isVariant, setIsVariant] = useState(!!parentProduct)
+
+  // Cargar categorías
+  useEffect(() => {
+    async function loadCategories() {
+      try {
+        const categoriesData = await salesService.getCategories()
+        setCategories(categoriesData)
+      } catch (error) {
+        console.error("Error al cargar categorías:", error)
+      }
+    }
+
+    loadCategories()
+  }, [])
 
   const defaultValues: Partial<ProductFormValues> = {
     name: product?.name || "",
     description: product?.description || "",
-    category: product?.category || "",
+    categoryId: product?.categoryId || "",
     imageUrl: product?.imageUrl || "",
     isActive: product?.isActive ?? true,
+    productType: parentProduct ? "simple" : (product?.variants && product.variants.length > 0) ? "withVariants" : "simple",
+    parentId: parentProduct?.id || product?.parentId,
+    variantName: product?.variantName || "",
     localPrice: 0,
     pedidosYaPrice: undefined,
     rappiPrice: undefined,
@@ -76,16 +107,26 @@ export default function ProductForm({ product }: ProductFormProps) {
     defaultValues,
   })
 
+  // Observar cambios en el tipo de producto
+  const productType = form.watch("productType")
+
   async function onSubmit(data: ProductFormValues) {
     try {
       setIsSubmitting(true)
 
       // Extraer los precios del formulario
-      const { localPrice, pedidosYaPrice, rappiPrice, mercadoPagoPrice, ...productData } = data
+      const { localPrice, pedidosYaPrice, rappiPrice, mercadoPagoPrice, productType, ...productData } = data
+
+      // Preparar datos según si es variante o producto principal
+      const isVariant = !!parentProduct || !!productData.parentId
+      const finalProductData = {
+        ...productData,
+        isVariant,
+      }
 
       if (product) {
         // Actualizar producto existente
-        await salesService.updateProduct(product.id, productData)
+        await salesService.updateProduct(product.id, finalProductData)
 
         // Actualizar precios
         await salesService.setProductPrice(product.id, "local", localPrice)
@@ -98,9 +139,27 @@ export default function ProductForm({ product }: ProductFormProps) {
         if (mercadoPagoPrice !== undefined) {
           await salesService.setProductPrice(product.id, "mercadopago", mercadoPagoPrice)
         }
+      } else if (isVariant) {
+        // Crear nueva variante
+        const newVariant = await salesService.createProductVariant(
+          productData.parentId!,
+          finalProductData
+        )
+
+        // Establecer precios
+        await salesService.setProductPrice(newVariant.id, "local", localPrice)
+        if (pedidosYaPrice !== undefined) {
+          await salesService.setProductPrice(newVariant.id, "pedidosya", pedidosYaPrice)
+        }
+        if (rappiPrice !== undefined) {
+          await salesService.setProductPrice(newVariant.id, "rappi", rappiPrice)
+        }
+        if (mercadoPagoPrice !== undefined) {
+          await salesService.setProductPrice(newVariant.id, "mercadopago", mercadoPagoPrice)
+        }
       } else {
-        // Crear nuevo producto
-        const newProduct = await salesService.createProduct(productData)
+        // Crear nuevo producto principal
+        const newProduct = await salesService.createProduct(finalProductData)
 
         // Establecer precios
         await salesService.setProductPrice(newProduct.id, "local", localPrice)
@@ -115,7 +174,7 @@ export default function ProductForm({ product }: ProductFormProps) {
         }
       }
 
-      router.push("/ventas/productos")
+      router.push(parentProduct ? `/ventas/productos/${parentProduct.id}` : "/ventas/productos")
       router.refresh()
     } catch (error) {
       console.error("Error al guardar producto:", error)
@@ -128,6 +187,46 @@ export default function ProductForm({ product }: ProductFormProps) {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+        {!isVariant && (
+          <FormField
+            control={form.control}
+            name="productType"
+            render={({ field }) => (
+              <FormItem className="space-y-3">
+                <FormLabel>Tipo de Producto</FormLabel>
+                <FormControl>
+                  <RadioGroup
+                    onValueChange={field.onChange}
+                    defaultValue={field.value}
+                    className="flex flex-col space-y-1"
+                  >
+                    <FormItem className="flex items-center space-x-3 space-y-0">
+                      <FormControl>
+                        <RadioGroupItem value="simple" />
+                      </FormControl>
+                      <FormLabel className="font-normal">
+                        Producto Simple
+                      </FormLabel>
+                    </FormItem>
+                    <FormItem className="flex items-center space-x-3 space-y-0">
+                      <FormControl>
+                        <RadioGroupItem value="withVariants" />
+                      </FormControl>
+                      <FormLabel className="font-normal">
+                        Producto con Variantes
+                      </FormLabel>
+                    </FormItem>
+                  </RadioGroup>
+                </FormControl>
+                <FormDescription>
+                  Selecciona "Producto con Variantes" si este producto tiene diferentes sabores, tamaños, etc.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <FormField
             control={form.control}
@@ -143,15 +242,48 @@ export default function ProductForm({ product }: ProductFormProps) {
             )}
           />
 
+          {isVariant && (
+            <FormField
+              control={form.control}
+              name="variantName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nombre de la Variante</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Sabor Jamón y Queso" {...field} />
+                  </FormControl>
+                  <FormDescription>
+                    Ej: "Jamón y Queso", "Grande", "500ml", etc.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+
           <FormField
             control={form.control}
-            name="category"
+            name="categoryId"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Categoría</FormLabel>
-                <FormControl>
-                  <Input placeholder="Hamburguesas" {...field} />
-                </FormControl>
+                <Select
+                  onValueChange={field.onChange}
+                  defaultValue={field.value}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona una categoría" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {categories.map((category) => (
+                      <SelectItem key={category.id} value={category.id}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <FormMessage />
               </FormItem>
             )}
@@ -285,7 +417,7 @@ export default function ProductForm({ product }: ProductFormProps) {
           <Button
             type="button"
             variant="outline"
-            onClick={() => router.push("/ventas/productos")}
+            onClick={() => router.push(parentProduct ? `/ventas/productos/${parentProduct.id}` : "/ventas/productos")}
             disabled={isSubmitting}
           >
             Cancelar
