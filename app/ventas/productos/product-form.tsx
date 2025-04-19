@@ -204,6 +204,8 @@ export default function ProductForm({ product, parentProduct }: ProductFormProps
                       <FormControl>
                         <RadioGroupItem value="simple" />
                       </FormControl>
+                      <FormLabel className="font-  />
+                      </FormControl>
                       <FormLabel className="font-normal">
                         Producto Simple
                       </FormLabel>

@@ -1,9 +1,16 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Plus } from "lucide-react"
+import { Plus } from 'lucide-react'
 import { salesService } from "@/lib/sales-service"
 
 export const metadata = {
@@ -11,11 +18,13 @@ export const metadata = {
 }
 
 export default async function ProductsPage() {
-  const products = await salesService.getProductsWithVariants()
-
-  // Aquí está el problema - esta función no existe en salesService
-  // Comentamos o eliminamos esta línea
-  // const stockAlerts = await salesService.getActiveStockAlerts()
+  let products = []
+  
+  try {
+    products = await salesService.getProductsWithVariants()
+  } catch (error) {
+    console.error("Error al cargar productos:", error)
+  }
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -28,27 +37,6 @@ export default async function ProductsPage() {
           </Button>
         </Link>
       </div>
-
-      {/* Comentamos o eliminamos esta sección que usa stockAlerts
-      {stockAlerts && stockAlerts.length > 0 && (
-        <Card className="bg-amber-50 border-amber-200">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-amber-800 flex items-center">
-              <AlertTriangle className="mr-2 h-5 w-5" />
-              Alertas de Stock Bajo
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-amber-800">
-              Hay {stockAlerts.length} producto(s) con stock bajo.{" "}
-              <Link href="/ventas/inventario/alertas" className="font-medium underline">
-                Ver alertas
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-      */}
 
       <Card>
         <CardHeader>
@@ -115,8 +103,12 @@ export default async function ProductsPage() {
 }
 
 async function ProductPriceDisplay({ productId }: { productId: string }) {
-  const prices = await salesService.getProductPrices(productId)
-  const localPrice = prices.find((price) => price.channel === "local")
+  try {
+    const prices = await salesService.getProductPrices(productId)
+    const localPrice = prices.find((price) => price.channel === "local")
 
-  return <span>{localPrice ? `$${localPrice.price.toFixed(2)}` : "-"}</span>
+    return <span>{localPrice ? `$${localPrice.price.toFixed(2)}` : "-"}</span>
+  } catch (error) {
+    return <span>-</span>
+  }
 }

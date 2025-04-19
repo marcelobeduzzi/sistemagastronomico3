@@ -207,8 +207,12 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
 }
 
 async function VariantPriceDisplay({ variantId }: { variantId: string }) {
-  const prices = await salesService.getProductPrices(variantId)
-  const localPrice = prices.find((price) => price.channel === "local")
+  try {
+    const prices = await salesService.getProductPrices(variantId)
+    const localPrice = prices.find((price) => price.channel === "local")
 
-  return <span>{localPrice ? `$${localPrice.price.toFixed(2)}` : "-"}</span>
+    return <span>{localPrice ? `$${localPrice.price.toFixed(2)}` : "-"}</span>
+  } catch (error) {
+    return <span>-</span>
+  }
 }
