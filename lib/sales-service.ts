@@ -305,20 +305,22 @@ async getProductsWithVariants() {
     const { data: allVariants, error: variantsError } = await supabase
       .from("sales_products")
       .select("*")
-      .is("is_variant", true);
+      .eq("is_variant", true);
 
     if (variantsError) throw variantsError;
 
     // Agrupamos las variantes por parent_id
     const variantsByParent: Record<string, any[]> = {};
-    allVariants.forEach(variant => {
-      if (variant.parent_id) {
-        if (!variantsByParent[variant.parent_id]) {
-          variantsByParent[variant.parent_id] = [];
+    if (allVariants) {
+      allVariants.forEach(variant => {
+        if (variant.parent_id) {
+          if (!variantsByParent[variant.parent_id]) {
+            variantsByParent[variant.parent_id] = [];
+          }
+          variantsByParent[variant.parent_id].push(variant);
         }
-        variantsByParent[variant.parent_id].push(variant);
-      }
-    });
+      });
+    }
 
     // Asignamos las variantes a cada producto principal
     const productsWithVariants = mainProducts.map(product => {

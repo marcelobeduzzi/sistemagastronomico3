@@ -25,10 +25,21 @@ export default async function ProductsPage() {
 let products = []
 
 try {
-  products = await salesService.getProductsWithVariants()
-  console.log("Productos cargados:", products.length)
+  console.log("Obteniendo productos con variantes...");
+  products = await salesService.getProductsWithVariants();
+  console.log("Productos cargados:", products.length);
+  
+  // Verificar si hay productos
+  if (products.length === 0) {
+    console.log("No se encontraron productos");
+    
+    // Intentar obtener productos sin variantes como fallback
+    console.log("Intentando obtener productos sin variantes...");
+    products = await salesService.getProducts();
+    console.log("Productos básicos cargados:", products.length);
+  }
 } catch (error) {
-  console.error("Error al cargar productos:", error)
+  console.error("Error al cargar productos:", error);
 }
 
 return (
@@ -114,6 +125,7 @@ try {
 
   return <span>{localPrice ? `$${localPrice.price.toFixed(2)}` : "-"}</span>
 } catch (error) {
+  console.error(`Error al obtener precio para producto ${productId}:`, error);
   return <span>-</span>
 }
 }
