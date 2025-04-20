@@ -289,87 +289,63 @@ async getProductsWithVariants() {
       return []
     }
 
-    console.log("Iniciando getProductsWithVariants...");
-
     // Primero obtenemos todos los productos principales (no variantes)
     const { data: mainProducts, error: mainError } = await supabase
       .from("sales_products")
-      .select(`
-        *,
-        category:sales_categories(*)
-      `)
+      .select("*")
       .is("is_variant", false)
-      .order("name");
+      .order("name")
 
     if (mainError) {
-      console.error("Error al obtener productos principales:", mainError);
-      return [];
+      console.error("Error al obtener productos principales:", mainError)
+      return []
     }
 
-    if (!mainProducts || mainProducts.length === 0) {
-      console.log("No se encontraron productos principales");
-      return [];
-    }
-
-    console.log(`Encontrados ${mainProducts.length} productos principales`);
-
-    // Ahora obtenemos todas las variantes en una sola consulta
-    const { data: allVariants, error: variantsError } = await supabase
-      .from("sales_products")
-      .select("*")
-      .eq("is_variant", true);
-
-    if (variantsError) {
-      console.error("Error al obtener variantes:", variantsError);
-      // Continuamos con los productos principales aunque no tengamos variantes
-      const productsWithoutVariants = mainProducts.map(product => {
-        const productData = objectToCamelCase(product);
-        if (productData.category) {
-          productData.category = objectToCamelCase(productData.category);
-        }
-        productData.variants = [];
-        return productData;
-      });
+    // Procesamos los productos principales
+    const productsWithVariants = []
+    
+    for (const product of mainProducts || []) {
+      // Convertimos a camelCase
+      const productData = objectToCamelCase(product)
       
-      console.log(`Retornando ${productsWithoutVariants.length} productos sin variantes debido a error`);
-      return productsWithoutVariants;
-    }
-
-    console.log(`Encontradas ${allVariants?.length || 0} variantes en total`);
-
-    // Agrupamos las variantes por parent_id
-    const variantsByParent: Record<string, any[]> = {};
-    if (allVariants && allVariants.length > 0) {
-      allVariants.forEach(variant => {
-        if (variant.parent_id) {
-          if (!variantsByParent[variant.parent_id]) {
-            variantsByParent[variant.parent_id] = [];
-          }
-          variantsByParent[variant.parent_id].push(variant);
-        }
-      });
-    }
-
-    // Asignamos las variantes a cada producto principal
-    const productsWithVariants = mainProducts.map(product => {
-      const productData = objectToCamelCase(product);
-      if (productData.category) {
-        productData.category = objectToCamelCase(productData.category);
+      // Obtenemos las variantes para este producto
+      const { data: variants, error: variantsError } = await supabase
+        .from("sales_products")
+        .select("*")
+        .eq("parent_id", product.id)
+        .eq("is_variant", true)
+      
+      if (variantsError) {
+        console.error(`Error al obtener variantes para producto ${product.id}:`, variantsError)
+        productData.variants = []
+      } else {
+        productData.variants = (variants || []).map(variant => objectToCamelCase(variant))
       }
       
-      // Asignamos las variantes correspondientes
-      productData.variants = (variantsByParent[product.id] || []).map(
-        variant => objectToCamelCase(variant)
-      );
+      // Obtenemos la categoría si existe
+      if (product.category_id) {
+        try {
+          const { data: category, error: categoryError } = await supabase
+            .from("sales_categories")
+            .select("*")
+            .eq("id", product.category_id)
+            .single()
+          
+          if (!categoryError && category) {
+            productData.category = objectToCamelCase(category)
+          }
+        } catch (error) {
+          console.error(`Error al obtener categoría para producto ${product.id}:`, error)
+        }
+      }
       
-      return productData;
-    });
+      productsWithVariants.push(productData)
+    }
 
-    console.log(`Retornando ${productsWithVariants.length} productos con sus variantes`);
-    return productsWithVariants;
+    return productsWithVariants
   } catch (error) {
-    console.error("Error al obtener productos con variantes:", error);
-    return [];
+    console.error("Error al obtener productos con variantes:", error)
+    return []
   }
 }
 
