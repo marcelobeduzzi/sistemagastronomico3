@@ -234,24 +234,6 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         roles: ["admin", "gerente", "supervisor", "encargado"],
       },
       {
-        title: "Planilla de Stock",
-        href: "/stock-check",
-        icon: Package,
-        roles: ["admin", "gerente", "supervisor", "encargado"],
-      },
-      {
-        title: "Control de Stock",
-        href: "/stock-control",
-        icon: Package,
-        roles: ["admin", "gerente", "supervisor", "encargado"],
-      },
-      {
-        title: "Control de Stock Prueba",
-        href: "/stock",
-        icon: Package,
-        roles: ["admin", "gerente", "supervisor", "encargado"],
-      },
-      {
         title: "Planilla Stock Matrix",
         href: "/stock-matrix",
         icon: Package,
