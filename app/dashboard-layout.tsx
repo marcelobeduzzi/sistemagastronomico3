@@ -5,31 +5,7 @@ import type React from "react"
 import { useState, useEffect, useCallback, memo, useMemo } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import {
-  BarChart3,
-  Users,
-  DollarSign,
-  Calendar,
-  Settings,
-  ChevronDown,
-  Menu,
-  TrendingUp,
-  LogOut,
-  ClipboardCheck,
-  ReceiptText,
-  PieChart,
-  LayoutDashboard,
-  Star,
-  MessageSquare,
-  ShoppingCart,
-  CreditCard,
-  Package,
-  Shield,
-  Calculator,
-  Truck,
-  CreditCardIcon,
-  History,
-} from "lucide-react"
+import { BarChart3, Users, DollarSign, Calendar, Settings, ChevronDown, Menu, TrendingUp, LogOut, ClipboardCheck, ReceiptText, PieChart, LayoutDashboard, Star, MessageSquare, ShoppingCart, CreditCard, Package, Shield, Calculator, Truck, CreditCardIcon, History, Store, Tag, Boxes, AlertTriangle, ShoppingBag } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { useAuth } from "@/lib/auth-context"
@@ -218,6 +194,38 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         href: "/asistencias",
         icon: Calendar,
         roles: ["admin", "gerente", "encargado"],
+      },
+      {
+        title: "Sistema de Ventas",
+        href: "#",
+        icon: Store,
+        roles: ["admin", "gerente", "supervisor", "encargado"],
+        submenu: [
+          {
+            title: "Productos",
+            href: "/ventas/productos",
+            icon: Tag,
+            roles: ["admin", "gerente", "supervisor", "encargado"],
+          },
+          {
+            title: "Inventario",
+            href: "/ventas/inventario",
+            icon: Boxes,
+            roles: ["admin", "gerente", "supervisor", "encargado"],
+          },
+          {
+            title: "Registro de Ventas",
+            href: "/ventas/registro",
+            icon: ShoppingBag,
+            roles: ["admin", "gerente", "supervisor", "encargado"],
+          },
+          {
+            title: "Alertas de Stock",
+            href: "/ventas/alertas",
+            icon: AlertTriangle,
+            roles: ["admin", "gerente", "supervisor", "encargado"],
+          },
+        ],
       },
       {
         title: "Control de Caja",
@@ -524,5 +532,3 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
 
 // También exportamos como default para mantener compatibilidad con ambos tipos de importación
 export default DashboardLayout
-
-
