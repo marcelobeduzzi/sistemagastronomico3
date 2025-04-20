@@ -1,3 +1,6 @@
+'use client'
+
+import { useEffect, useState } from 'react'
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,117 +14,77 @@ import {
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Plus } from 'lucide-react'
-import { supabase } from "@/lib/db"
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
-export const metadata = {
-  title: "Productos - Sistema de Ventas",
-}
+export default function ProductsPage() {
+  const [products, setProducts] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
-// Desactivamos la caché para esta página
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
-// Función auxiliar para convertir snake_case a camelCase
-function objectToCamelCase(obj: any): any {
-  if (typeof obj !== "object" || obj === null) {
-    return obj
-  }
-
-  if (Array.isArray(obj)) {
-    return obj.map((item) => objectToCamelCase(item))
-  }
-
-  const newObj: any = {}
-  for (const key in obj) {
-    if (obj.hasOwnProperty(key)) {
-      const camelCaseKey = key.replace(/_([a-z])/g, (match, letter) => letter.toUpperCase())
-      newObj[camelCaseKey] = objectToCamelCase(obj[key])
-    }
-  }
-  return newObj
-}
-
-// Función simplificada para obtener productos directamente en la página
-async function getProducts() {
-  try {
-    if (!supabase) {
-      console.error("El cliente de Supabase no está disponible")
-      return []
-    }
-
-    // Obtener productos principales (no variantes)
-    const { data: products, error } = await supabase
-      .from("sales_products")
-      .select("*, category:sales_categories(*)")
-      .is("is_variant", false)
-      .order("name")
-
-    if (error) {
-      console.error("Error al obtener productos:", error)
-      return []
-    }
-
-    // Convertir a camelCase
-    const productsWithVariants = []
-    
-    for (const product of products || []) {
-      const productData = objectToCamelCase(product)
-      
-      // Obtener variantes para este producto
-      const { data: variants, error: variantsError } = await supabase
-        .from("sales_products")
-        .select("*")
-        .eq("parent_id", product.id)
-        .eq("is_variant", true)
-      
-      if (variantsError) {
-        console.error(`Error al obtener variantes para producto ${product.id}:`, variantsError)
-        productData.variants = []
-      } else {
-        productData.variants = (variants || []).map(variant => objectToCamelCase(variant))
+  useEffect(() => {
+    async function fetchProducts() {
+      try {
+        setLoading(true)
+        const supabase = createClientComponentClient()
+        
+        // Obtener productos principales (no variantes)
+        const { data: mainProducts, error: productsError } = await supabase
+          .from("sales_products")
+          .select("*, category:sales_categories(*)")
+          .is("is_variant", false)
+          .order("name")
+        
+        if (productsError) {
+          throw productsError
+        }
+        
+        // Procesar productos y obtener variantes
+        const productsWithVariants = []
+        
+        for (const product of mainProducts || []) {
+          // Convertir a camelCase
+          const productData = objectToCamelCase(product)
+          
+          // Obtener variantes para este producto
+          const { data: variants, error: variantsError } = await supabase
+            .from("sales_products")
+            .select("*")
+            .eq("parent_id", product.id)
+            .eq("is_variant", true)
+          
+          if (!variantsError) {
+            productData.variants = (variants || []).map(variant => objectToCamelCase(variant))
+          } else {
+            console.error(`Error al obtener variantes para producto ${product.id}:`, variantsError)
+            productData.variants = []
+          }
+          
+          // Obtener precio local
+          const { data: priceData } = await supabase
+            .from("sales_product_prices")
+            .select("*")
+            .eq("product_id", product.id)
+            .eq("channel", "local")
+            .maybeSingle()
+          
+          if (priceData) {
+            productData.localPrice = objectToCamelCase(priceData)
+          }
+          
+          productsWithVariants.push(productData)
+        }
+        
+        setProducts(productsWithVariants)
+      } catch (err) {
+        console.error("Error al cargar productos:", err)
+        setError(err.message)
+      } finally {
+        setLoading(false)
       }
-      
-      productsWithVariants.push(productData)
     }
-
-    return productsWithVariants
-  } catch (error) {
-    console.error("Error al obtener productos:", error)
-    return []
-  }
-}
-
-// Función simplificada para obtener precios directamente en la página
-async function getProductPrice(productId: string) {
-  try {
-    if (!supabase) {
-      console.error("El cliente de Supabase no está disponible")
-      return null
-    }
-
-    const { data, error } = await supabase
-      .from("sales_product_prices")
-      .select("*")
-      .eq("product_id", productId)
-      .eq("channel", "local")
-      .maybeSingle()
-
-    if (error) {
-      console.error(`Error al obtener precio para producto ${productId}:`, error)
-      return null
-    }
-
-    return data ? objectToCamelCase(data) : null
-  } catch (error) {
-    console.error(`Error al obtener precio para producto ${productId}:`, error)
-    return null
-  }
-}
-
-export default async function ProductsPage() {
-  console.log("Renderizando página de productos...")
-  const products = await getProducts()
-  console.log(`Se obtuvieron ${products.length} productos`)
+    
+    fetchProducts()
+  }, [])
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -140,67 +103,89 @@ export default async function ProductsPage() {
           <CardTitle>Lista de Productos</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nombre</TableHead>
-                <TableHead>Categoría</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead className="text-right">Precio Local</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {products.length === 0 ? (
+          {loading ? (
+            <div className="text-center py-8">Cargando productos...</div>
+          ) : error ? (
+            <div className="text-center py-8 text-red-500">
+              Error al cargar productos: {error}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                    No hay productos registrados. Crea tu primer producto haciendo clic en "Nuevo Producto".
-                  </TableCell>
+                  <TableHead>Nombre</TableHead>
+                  <TableHead>Categoría</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead className="text-right">Precio Local</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
-              ) : (
-                products.map((product) => (
-                  <TableRow key={product.id}>
-                    <TableCell className="font-medium">
-                      <Link href={`/ventas/productos/${product.id}`} className="hover:underline">
-                        {product.name}
-                      </Link>
-                      {product.variants && product.variants.length > 0 && (
-                        <Badge variant="outline" className="ml-2">
-                          {product.variants.length} variante(s)
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>{product.category?.name || "-"}</TableCell>
-                    <TableCell>
-                      {product.isActive ? (
-                        <Badge variant="success">Activo</Badge>
-                      ) : (
-                        <Badge variant="secondary">Inactivo</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <PriceDisplay productId={product.id} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Link href={`/ventas/productos/${product.id}`}>
-                        <Button variant="ghost" size="sm">
-                          Ver detalles
-                        </Button>
-                      </Link>
+              </TableHeader>
+              <TableBody>
+                {products.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                      No hay productos registrados. Crea tu primer producto haciendo clic en "Nuevo Producto".
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : (
+                  products.map((product) => (
+                    <TableRow key={product.id}>
+                      <TableCell className="font-medium">
+                        <Link href={`/ventas/productos/${product.id}`} className="hover:underline">
+                          {product.name}
+                        </Link>
+                        {product.variants && product.variants.length > 0 && (
+                          <Badge variant="outline" className="ml-2">
+                            {product.variants.length} variante(s)
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>{product.category?.name || "-"}</TableCell>
+                      <TableCell>
+                        {product.isActive ? (
+                          <Badge variant="success">Activo</Badge>
+                        ) : (
+                          <Badge variant="secondary">Inactivo</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {product.localPrice ? `$${product.localPrice.price.toFixed(2)}` : "-"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Link href={`/ventas/productos/${product.id}`}>
+                          <Button variant="ghost" size="sm">
+                            Ver detalles
+                          </Button>
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>
   )
 }
 
-// Componente para mostrar el precio (sin usar Server Actions)
-async function PriceDisplay({ productId }: { productId: string }) {
-  const price = await getProductPrice(productId)
-  return <span>{price ? `$${price.price.toFixed(2)}` : "-"}</span>
+// Función auxiliar para convertir snake_case a camelCase
+function objectToCamelCase(obj) {
+  if (typeof obj !== "object" || obj === null) {
+    return obj
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map((item) => objectToCamelCase(item))
+  }
+
+  const newObj = {}
+  for (const key in obj) {
+    if (obj.hasOwnProperty(key)) {
+      const camelCaseKey = key.replace(/_([a-z])/g, (match, letter) => letter.toUpperCase())
+      newObj[camelCaseKey] = objectToCamelCase(obj[key])
+    }
+  }
+  return newObj
 }
