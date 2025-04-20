@@ -1,5 +1,7 @@
+'use client'
+
+import { useEffect, useState } from 'react'
 import Link from "next/link"
-import { notFound } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -12,27 +14,162 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Edit, Plus, ArrowLeft } from 'lucide-react'
-import { salesService } from "@/lib/sales-service"
+import { Edit, Plus, ArrowLeft, Trash } from 'lucide-react'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
-export const metadata = {
-  title: "Detalles del Producto - Sistema de Ventas",
-}
+export default function ProductDetailPage({ params }: { params: { id: string } }) {
+  const [product, setProduct] = useState(null)
+  const [variants, setVariants] = useState([])
+  const [category, setCategory] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
-export default async function ProductDetailPage({ params }: { params: { id: string } }) {
-  const product = await salesService.getProductWithPrices(params.id)
-  
+  useEffect(() => {
+    async function fetchProductDetails() {
+      try {
+        setLoading(true)
+        const supabase = createClientComponentClient()
+        
+        // Obtener el producto
+        const { data: productData, error: productError } = await supabase
+          .from("sales_products")
+          .select("*")
+          .eq("id", params.id)
+          .single()
+        
+        if (productError) {
+          throw productError
+        }
+        
+        if (!productData) {
+          setError("Producto no encontrado")
+          return
+        }
+        
+        // Si es una variante, no mostrar esta página
+        if (productData.is_variant && productData.parent_id) {
+          setError("Este producto es una variante")
+          return
+        }
+        
+        // Convertir a camelCase
+        const productObj = objectToCamelCase(productData)
+        
+        // Obtener precios
+        const { data: pricesData } = await supabase
+          .from("sales_product_prices")
+          .select("*")
+          .eq("product_id", params.id)
+        
+        productObj.prices = pricesData ? pricesData.map(price => objectToCamelCase(price)) : []
+        
+        // Obtener categoría si existe
+        if (productData.category_id) {
+          const { data: categoryData } = await supabase
+            .from("sales_categories")
+            .select("*")
+            .eq("id", productData.category_id)
+            .single()
+          
+          if (categoryData) {
+            setCategory(objectToCamelCase(categoryData))
+          }
+        }
+        
+        // Obtener variantes
+        const { data: variantsData } = await supabase
+          .from("sales_products")
+          .select("*")
+          .eq("parent_id", params.id)
+          .eq("is_variant", true)
+        
+        // Para cada variante, obtener sus precios
+        const variantsWithPrices = []
+        
+        for (const variant of variantsData || []) {
+          const variantObj = objectToCamelCase(variant)
+          
+          const { data: variantPrices } = await supabase
+            .from("sales_product_prices")
+            .select("*")
+            .eq("product_id", variant.id)
+          
+          variantObj.prices = variantPrices ? variantPrices.map(price => objectToCamelCase(price)) : []
+          variantsWithPrices.push(variantObj)
+        }
+        
+        setProduct(productObj)
+        setVariants(variantsWithPrices)
+      } catch (err) {
+        console.error("Error al cargar detalles del producto:", err)
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    fetchProductDetails()
+  }, [params.id])
+
+  if (loading) {
+    return (
+      <div className="container mx-auto py-6 text-center">
+        <p>Cargando detalles del producto...</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto py-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Link href="/ventas/productos">
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-4 w-4" />
+              <span className="sr-only">Volver</span>
+            </Button>
+          </Link>
+          <h1 className="text-3xl font-bold">Error</h1>
+        </div>
+        <Card>
+          <CardContent className="py-8">
+            <p className="text-center text-red-500">{error}</p>
+            <div className="mt-4 text-center">
+              <Link href="/ventas/productos">
+                <Button>Volver a la lista de productos</Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   if (!product) {
-    notFound()
+    return (
+      <div className="container mx-auto py-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Link href="/ventas/productos">
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-4 w-4" />
+              <span className="sr-only">Volver</span>
+            </Button>
+          </Link>
+          <h1 className="text-3xl font-bold">Producto no encontrado</h1>
+        </div>
+        <Card>
+          <CardContent className="py-8">
+            <p className="text-center">El producto solicitado no existe o ha sido eliminado.</p>
+            <div className="mt-4 text-center">
+              <Link href="/ventas/productos">
+                <Button>Volver a la lista de productos</Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
-
-  // Si es una variante, redirigir a la página del producto principal
-  if (product.isVariant && product.parentId) {
-    return notFound()
-  }
-
-  const variants = await salesService.getProductVariants(product.id)
-  const category = product.categoryId ? await salesService.getCategoryById(product.categoryId) : null
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -183,7 +320,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <VariantPriceDisplay variantId={variant.id} />
+                      {variant.prices?.find(p => p.channel === "local")?.price.toFixed(2) || "-"}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
@@ -206,13 +343,22 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
   )
 }
 
-async function VariantPriceDisplay({ variantId }: { variantId: string }) {
-  try {
-    const prices = await salesService.getProductPrices(variantId)
-    const localPrice = prices.find((price) => price.channel === "local")
-
-    return <span>{localPrice ? `$${localPrice.price.toFixed(2)}` : "-"}</span>
-  } catch (error) {
-    return <span>-</span>
+// Función auxiliar para convertir snake_case a camelCase
+function objectToCamelCase(obj) {
+  if (typeof obj !== "object" || obj === null) {
+    return obj
   }
+
+  if (Array.isArray(obj)) {
+    return obj.map((item) => objectToCamelCase(item))
+  }
+
+  const newObj = {}
+  for (const key in obj) {
+    if (obj.hasOwnProperty(key)) {
+      const camelCaseKey = key.replace(/_([a-z])/g, (match, letter) => letter.toUpperCase())
+      newObj[camelCaseKey] = objectToCamelCase(obj[key])
+    }
+  }
+  return newObj
 }
