@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle } from 'lucide-react'
 import { salesService } from "@/lib/sales-service"
@@ -19,9 +19,14 @@ export function StockCheck({ items, onStockCheck }: StockCheckProps) {
   const [error, setError] = useState<React.ReactNode | null>(null)
 
   const checkStock = async () => {
-    if (items.length === 0) {
-      onStockCheck(false)
-      setError("No hay productos en la venta")
+    // Verificar que haya items válidos para verificar
+    const validItems = items.filter(item => 
+      item.productId && item.quantity > 0
+    )
+    
+    if (validItems.length === 0) {
+      onStockCheck(true) // No hay items para verificar, permitir continuar
+      setError(null)
       return
     }
 
@@ -29,7 +34,7 @@ export function StockCheck({ items, onStockCheck }: StockCheckProps) {
     setError(null)
 
     try {
-      const stockCheck = await salesService.checkStockForSale(items)
+      const stockCheck = await salesService.checkStockForSale(validItems)
       
       if (!stockCheck.hasStock) {
         setError(
@@ -50,6 +55,7 @@ export function StockCheck({ items, onStockCheck }: StockCheckProps) {
         )
         onStockCheck(false)
       } else {
+        setError(null)
         onStockCheck(true)
       }
     } catch (error) {
@@ -62,11 +68,14 @@ export function StockCheck({ items, onStockCheck }: StockCheckProps) {
   }
 
   // Verificar stock cuando cambian los items
-  useState(() => {
-    if (items.length > 0) {
+  useEffect(() => {
+    // Debounce para no hacer demasiadas verificaciones
+    const timer = setTimeout(() => {
       checkStock()
-    }
-  })
+    }, 500)
+    
+    return () => clearTimeout(timer)
+  }, [items])
 
   if (!error) return null
 
