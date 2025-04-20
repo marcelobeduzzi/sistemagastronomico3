@@ -289,6 +289,8 @@ async getProductsWithVariants() {
       return []
     }
 
+    console.log("Iniciando getProductsWithVariants...");
+
     // Primero obtenemos todos los productos principales (no variantes)
     const { data: mainProducts, error: mainError } = await supabase
       .from("sales_products")
@@ -299,7 +301,17 @@ async getProductsWithVariants() {
       .is("is_variant", false)
       .order("name");
 
-    if (mainError) throw mainError;
+    if (mainError) {
+      console.error("Error al obtener productos principales:", mainError);
+      return [];
+    }
+
+    if (!mainProducts || mainProducts.length === 0) {
+      console.log("No se encontraron productos principales");
+      return [];
+    }
+
+    console.log(`Encontrados ${mainProducts.length} productos principales`);
 
     // Ahora obtenemos todas las variantes en una sola consulta
     const { data: allVariants, error: variantsError } = await supabase
@@ -307,11 +319,27 @@ async getProductsWithVariants() {
       .select("*")
       .eq("is_variant", true);
 
-    if (variantsError) throw variantsError;
+    if (variantsError) {
+      console.error("Error al obtener variantes:", variantsError);
+      // Continuamos con los productos principales aunque no tengamos variantes
+      const productsWithoutVariants = mainProducts.map(product => {
+        const productData = objectToCamelCase(product);
+        if (productData.category) {
+          productData.category = objectToCamelCase(productData.category);
+        }
+        productData.variants = [];
+        return productData;
+      });
+      
+      console.log(`Retornando ${productsWithoutVariants.length} productos sin variantes debido a error`);
+      return productsWithoutVariants;
+    }
+
+    console.log(`Encontradas ${allVariants?.length || 0} variantes en total`);
 
     // Agrupamos las variantes por parent_id
     const variantsByParent: Record<string, any[]> = {};
-    if (allVariants) {
+    if (allVariants && allVariants.length > 0) {
       allVariants.forEach(variant => {
         if (variant.parent_id) {
           if (!variantsByParent[variant.parent_id]) {
@@ -337,6 +365,7 @@ async getProductsWithVariants() {
       return productData;
     });
 
+    console.log(`Retornando ${productsWithVariants.length} productos con sus variantes`);
     return productsWithVariants;
   } catch (error) {
     console.error("Error al obtener productos con variantes:", error);
