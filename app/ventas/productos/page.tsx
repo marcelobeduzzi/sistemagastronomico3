@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Plus } from 'lucide-react'
-import { salesService } from "@/lib/sales-service"
+import { supabase } from "@/lib/db"
 
 export const metadata = {
   title: "Productos - Sistema de Ventas",
@@ -21,34 +21,107 @@ export const metadata = {
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-export default async function ProductsPage() {
-  let products = []
+// Función auxiliar para convertir snake_case a camelCase
+function objectToCamelCase(obj: any): any {
+  if (typeof obj !== "object" || obj === null) {
+    return obj
+  }
 
-  try {
-    console.log("Obteniendo productos con variantes...");
-    products = await salesService.getProductsWithVariants();
-    console.log("Productos cargados:", products.length);
-    
-    // Verificar si hay productos
-    if (products.length === 0) {
-      console.log("No se encontraron productos");
-      
-      // Intentar obtener productos sin variantes como fallback
-      console.log("Intentando obtener productos sin variantes...");
-      products = await salesService.getProducts();
-      console.log("Productos básicos cargados:", products.length);
-    }
-  } catch (error) {
-    console.error("Error al cargar productos:", error);
-    // Intentar obtener productos básicos como último recurso
-    try {
-      console.log("Error en getProductsWithVariants, intentando getProducts como último recurso");
-      products = await salesService.getProducts();
-      console.log("Productos básicos cargados como último recurso:", products.length);
-    } catch (fallbackError) {
-      console.error("Error también en getProducts:", fallbackError);
+  if (Array.isArray(obj)) {
+    return obj.map((item) => objectToCamelCase(item))
+  }
+
+  const newObj: any = {}
+  for (const key in obj) {
+    if (obj.hasOwnProperty(key)) {
+      const camelCaseKey = key.replace(/_([a-z])/g, (match, letter) => letter.toUpperCase())
+      newObj[camelCaseKey] = objectToCamelCase(obj[key])
     }
   }
+  return newObj
+}
+
+// Función simplificada para obtener productos directamente en la página
+async function getProducts() {
+  try {
+    if (!supabase) {
+      console.error("El cliente de Supabase no está disponible")
+      return []
+    }
+
+    // Obtener productos principales (no variantes)
+    const { data: products, error } = await supabase
+      .from("sales_products")
+      .select("*, category:sales_categories(*)")
+      .is("is_variant", false)
+      .order("name")
+
+    if (error) {
+      console.error("Error al obtener productos:", error)
+      return []
+    }
+
+    // Convertir a camelCase
+    const productsWithVariants = []
+    
+    for (const product of products || []) {
+      const productData = objectToCamelCase(product)
+      
+      // Obtener variantes para este producto
+      const { data: variants, error: variantsError } = await supabase
+        .from("sales_products")
+        .select("*")
+        .eq("parent_id", product.id)
+        .eq("is_variant", true)
+      
+      if (variantsError) {
+        console.error(`Error al obtener variantes para producto ${product.id}:`, variantsError)
+        productData.variants = []
+      } else {
+        productData.variants = (variants || []).map(variant => objectToCamelCase(variant))
+      }
+      
+      productsWithVariants.push(productData)
+    }
+
+    return productsWithVariants
+  } catch (error) {
+    console.error("Error al obtener productos:", error)
+    return []
+  }
+}
+
+// Función simplificada para obtener precios directamente en la página
+async function getProductPrice(productId: string) {
+  try {
+    if (!supabase) {
+      console.error("El cliente de Supabase no está disponible")
+      return null
+    }
+
+    const { data, error } = await supabase
+      .from("sales_product_prices")
+      .select("*")
+      .eq("product_id", productId)
+      .eq("channel", "local")
+      .maybeSingle()
+
+    if (error) {
+      console.error(`Error al obtener precio para producto ${productId}:`, error)
+      return null
+    }
+
+    return data ? objectToCamelCase(data) : null
+  } catch (error) {
+    console.error(`Error al obtener precio para producto ${productId}:`, error)
+    return null
+  }
+}
+
+export default async function ProductsPage() {
+  console.log("Renderizando página de productos...")
+  const products = await getProducts()
+  console.log(`Se obtuvieron ${products.length} productos`)
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -106,7 +179,7 @@ export default async function ProductsPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <ProductPriceDisplay productId={product.id} />
+                      <PriceDisplay productId={product.id} />
                     </TableCell>
                     <TableCell className="text-right">
                       <Link href={`/ventas/productos/${product.id}`}>
@@ -126,14 +199,8 @@ export default async function ProductsPage() {
   )
 }
 
-async function ProductPriceDisplay({ productId }: { productId: string }) {
-  try {
-    const prices = await salesService.getProductPrices(productId)
-    const localPrice = prices.find((price) => price.channel === "local")
-
-    return <span>{localPrice ? `$${localPrice.price.toFixed(2)}` : "-"}</span>
-  } catch (error) {
-    console.error(`Error al obtener precio para producto ${productId}:`, error);
-    return <span>-</span>
-  }
+// Componente para mostrar el precio (sin usar Server Actions)
+async function PriceDisplay({ productId }: { productId: string }) {
+  const price = await getProductPrice(productId)
+  return <span>{price ? `$${price.price.toFixed(2)}` : "-"}</span>
 }
