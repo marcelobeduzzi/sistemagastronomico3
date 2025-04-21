@@ -49,7 +49,7 @@ export interface InventoryMovement {
   productId: string
   product?: Product
   quantity: number
-  type: 'in' | 'out'
+  type: "in" | "out"
   reason: string
   createdBy: string
   createdAt: string
@@ -61,7 +61,7 @@ export interface StockAlert {
   product?: Product
   currentQuantity: number
   minQuantity: number
-  status: 'pending' | 'resolved'
+  status: "pending" | "resolved"
   createdAt: string
   resolvedAt?: string
 }
@@ -171,11 +171,7 @@ export class SalesService {
         return []
       }
 
-      const { data, error } = await supabase
-        .from("sales_products")
-        .select("*")
-        .is("is_variant", false)
-        .order("name")
+      const { data, error } = await supabase.from("sales_products").select("*").is("is_variant", false).order("name")
 
       if (error) throw error
 
@@ -266,12 +262,7 @@ export class SalesService {
         updated_at: now,
       })
 
-      const { data, error } = await supabase
-        .from("sales_products")
-        .update(productData)
-        .eq("id", id)
-        .select()
-        .single()
+      const { data, error } = await supabase.from("sales_products").update(productData).eq("id", id).select().single()
 
       if (error) throw error
 
@@ -322,25 +313,25 @@ export class SalesService {
 
       // Procesamos los productos principales
       const productsWithVariants = []
-      
+
       for (const product of mainProducts || []) {
         // Convertimos a camelCase
         const productData = objectToCamelCase(product)
-        
+
         // Obtenemos las variantes para este producto
         const { data: variants, error: variantsError } = await supabase
           .from("sales_products")
           .select("*")
           .eq("parent_id", product.id)
           .eq("is_variant", true)
-        
+
         if (variantsError) {
           console.error(`Error al obtener variantes para producto ${product.id}:`, variantsError)
           productData.variants = []
         } else {
-          productData.variants = (variants || []).map(variant => objectToCamelCase(variant))
+          productData.variants = (variants || []).map((variant) => objectToCamelCase(variant))
         }
-        
+
         // Obtenemos la categoría si existe
         if (product.category_id) {
           try {
@@ -349,7 +340,7 @@ export class SalesService {
               .select("*")
               .eq("id", product.category_id)
               .single()
-            
+
             if (!categoryError && category) {
               productData.category = objectToCamelCase(category)
             }
@@ -357,7 +348,7 @@ export class SalesService {
             console.error(`Error al obtener categoría para producto ${product.id}:`, error)
           }
         }
-        
+
         productsWithVariants.push(productData)
       }
 
@@ -501,7 +492,7 @@ export class SalesService {
   }
 
   // INVENTARIO
-    
+
   // Obtener inventario de todos los productos
   async getInventory() {
     try {
@@ -562,7 +553,7 @@ export class SalesService {
       if (inventoryItem.product) {
         inventoryItem.product = objectToCamelCase(inventoryItem.product)
       }
-      
+
       return inventoryItem
     } catch (error) {
       console.error(`Error al obtener inventario para producto ${productId}:`, error)
@@ -633,11 +624,11 @@ export class SalesService {
 
   // Registrar un movimiento de inventario (entrada o salida)
   async registerInventoryMovement(
-    productId: string, 
-    quantity: number, 
-    type: 'in' | 'out', 
-    reason: string, 
-    createdBy: string
+    productId: string,
+    quantity: number,
+    type: "in" | "out",
+    reason: string,
+    createdBy: string,
   ) {
     try {
       if (!supabase) {
@@ -676,16 +667,17 @@ export class SalesService {
       if (inventoryError) throw inventoryError
 
       let newQuantity = 0
-      
+
       if (currentInventory) {
         // Calcular nueva cantidad
-        newQuantity = type === 'in' 
-          ? currentInventory.quantity + Math.abs(quantity)
-          : currentInventory.quantity - Math.abs(quantity)
-        
+        newQuantity =
+          type === "in"
+            ? currentInventory.quantity + Math.abs(quantity)
+            : currentInventory.quantity - Math.abs(quantity)
+
         // Asegurar que no sea negativo
         newQuantity = Math.max(0, newQuantity)
-        
+
         // Actualizar inventario
         const { error: updateError } = await supabase
           .from("sales_inventory")
@@ -698,19 +690,17 @@ export class SalesService {
         if (updateError) throw updateError
       } else {
         // Si no existe inventario, crearlo
-        newQuantity = type === 'in' ? Math.abs(quantity) : 0
-        
-        const { error: createError } = await supabase
-          .from("sales_inventory")
-          .insert([
-            {
-              product_id: productId,
-              quantity: newQuantity,
-              min_quantity: 0, // Valor por defecto
-              created_at: now,
-              updated_at: now,
-            },
-          ])
+        newQuantity = type === "in" ? Math.abs(quantity) : 0
+
+        const { error: createError } = await supabase.from("sales_inventory").insert([
+          {
+            product_id: productId,
+            quantity: newQuantity,
+            min_quantity: 0, // Valor por defecto
+            created_at: now,
+            updated_at: now,
+          },
+        ])
 
         if (createError) throw createError
       }
@@ -906,19 +896,17 @@ export class SalesService {
       if (productsError) throw productsError
 
       // Obtener todos los productos que ya tienen inventario
-      const { data: inventory, error: inventoryError } = await supabase
-        .from("sales_inventory")
-        .select("product_id")
+      const { data: inventory, error: inventoryError } = await supabase.from("sales_inventory").select("product_id")
 
       if (inventoryError) throw inventoryError
 
       // Crear un conjunto de IDs de productos con inventario
-      const productsWithInventory = new Set(inventory?.map(item => item.product_id) || [])
+      const productsWithInventory = new Set(inventory?.map((item) => item.product_id) || [])
 
       // Filtrar productos sin inventario
-      const productsWithoutInventory = products?.filter(product => !productsWithInventory.has(product.id)) || []
+      const productsWithoutInventory = products?.filter((product) => !productsWithInventory.has(product.id)) || []
 
-      return productsWithoutInventory.map(product => objectToCamelCase(product))
+      return productsWithoutInventory.map((product) => objectToCamelCase(product))
     } catch (error) {
       console.error("Error al obtener productos sin inventario:", error)
       return []
@@ -937,7 +925,7 @@ export class SalesService {
 
       const insufficientStock: InsufficientStockItem[] = []
       let hasStock = true
-      
+
       for (const item of items) {
         // Obtener inventario actual del producto
         const { data: inventory, error } = await supabase
@@ -945,9 +933,9 @@ export class SalesService {
           .select("quantity")
           .eq("product_id", item.productId)
           .maybeSingle()
-        
+
         if (error) throw error
-        
+
         // Si no hay inventario o la cantidad es insuficiente
         if (!inventory || inventory.quantity < item.quantity) {
           // Obtener información del producto para mostrar mensaje de error
@@ -956,21 +944,21 @@ export class SalesService {
             .select("name, variant_name")
             .eq("id", item.productId)
             .single()
-          
+
           if (productError) throw productError
-          
+
           insufficientStock.push({
             productId: item.productId,
             name: product.name,
             variantName: product.variant_name,
             requested: item.quantity,
-            available: inventory ? inventory.quantity : 0
+            available: inventory ? inventory.quantity : 0,
           })
-          
+
           hasStock = false
         }
       }
-      
+
       return { hasStock, insufficientStock }
     } catch (error) {
       console.error("Error al verificar stock para venta:", error)
@@ -987,13 +975,13 @@ export class SalesService {
       }
 
       const now = new Date().toISOString()
-      
+
       // 1. Verificar stock disponible
       const stockCheck = await this.checkStockForSale(saleData.items)
       if (!stockCheck.hasStock) {
         throw new Error("No hay suficiente stock para completar la venta")
       }
-      
+
       // 2. Registrar la venta
       const { data: sale, error: saleError } = await supabase
         .from("sales_orders")
@@ -1001,17 +989,17 @@ export class SalesService {
           {
             ...objectToSnakeCase(saleData),
             created_at: now,
-            updated_at: now
-          }
+            updated_at: now,
+          },
         ])
         .select()
         .single()
-      
+
       if (saleError) throw saleError
-      
+
       // 3. Registrar los items de la venta
       const orderItems = []
-      
+
       for (const item of saleData.items) {
         const { data: orderItem, error: itemError } = await supabase
           .from("sales_order_items")
@@ -1021,33 +1009,91 @@ export class SalesService {
               product_id: item.productId,
               quantity: item.quantity,
               price: item.price,
-              created_at: now
-            }
+              subtotal: item.quantity * item.price,
+              created_at: now,
+            },
           ])
           .select()
           .single()
-        
+
         if (itemError) throw itemError
-        
+
         orderItems.push(orderItem)
-        
+
         // 4. Descontar del inventario
         await this.registerInventoryMovement(
           item.productId,
           item.quantity,
-          'out',
-          `Venta #${sale.id} - ${saleData.channel || 'Local'}`,
-          saleData.createdBy || 'sistema'
+          "out",
+          `Venta #${sale.id} - ${saleData.channel || "Local"}`,
+          saleData.createdBy || "sistema",
         )
       }
-      
+
       return {
         ...objectToCamelCase(sale),
-        items: orderItems.map(item => objectToCamelCase(item))
+        items: orderItems.map((item) => objectToCamelCase(item)),
       }
     } catch (error) {
       console.error("Error al registrar venta:", error)
       throw error
+    }
+  }
+
+  // Obtener una venta por su ID
+  async getSaleById(id: string) {
+    try {
+      if (!supabase) {
+        console.error("El cliente de Supabase no está disponible")
+        return null
+      }
+
+      // Obtener la venta
+      const { data: sale, error: saleError } = await supabase.from("sales_orders").select("*").eq("id", id).single()
+
+      if (saleError) {
+        console.error(`Error al obtener venta con ID ${id}:`, saleError)
+        return null
+      }
+
+      if (!sale) return null
+
+      // Convertir a camelCase
+      const saleData = objectToCamelCase(sale)
+
+      // Obtener los items de la venta
+      const { data: items, error: itemsError } = await supabase
+        .from("sales_order_items")
+        .select(`
+          *,
+          product:sales_products(*)
+        `)
+        .eq("order_id", id)
+
+      if (itemsError) {
+        console.error(`Error al obtener items para venta ${id}:`, itemsError)
+        saleData.items = []
+      } else {
+        // Añadir los items a la venta
+        saleData.items = (items || []).map((item) => {
+          const itemData = objectToCamelCase(item)
+          // Asegurarse de que subtotal esté definido
+          if (itemData.subtotal === undefined || itemData.subtotal === null) {
+            itemData.subtotal = itemData.quantity * itemData.price
+          }
+          // Incluir información del producto si está disponible
+          if (itemData.product) {
+            itemData.productName = itemData.product.name
+            itemData.product = objectToCamelCase(itemData.product)
+          }
+          return itemData
+        })
+      }
+
+      return saleData
+    } catch (error) {
+      console.error(`Error al obtener venta con ID ${id}:`, error)
+      return null
     }
   }
 }
