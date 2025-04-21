@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Tag, Boxes, ShoppingBag, AlertTriangle, Store, ChevronRight } from 'lucide-react'
+import { Tag, Boxes, ShoppingBag, AlertTriangle, Store, ChevronRight, Home, BarChart, PlusCircle } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { DashboardLayout } from "@/app/dashboard-layout"
@@ -19,6 +19,21 @@ export default function VentasLayout({ children }: { children: React.ReactNode }
   
   const sidebarItems: SidebarItem[] = [
     {
+      title: "Dashboard",
+      href: "/ventas",
+      icon: Home,
+    },
+    {
+      title: "Nueva Venta",
+      href: "/ventas/nueva",
+      icon: PlusCircle,
+    },
+    {
+      title: "Historial de Ventas",
+      href: "/ventas/historial",
+      icon: ShoppingBag,
+    },
+    {
       title: "Productos",
       href: "/ventas/productos",
       icon: Tag,
@@ -29,14 +44,14 @@ export default function VentasLayout({ children }: { children: React.ReactNode }
       icon: Boxes,
     },
     {
-      title: "Registro de Ventas",
-      href: "/ventas/registro",
-      icon: ShoppingBag,
-    },
-    {
       title: "Alertas de Stock",
       href: "/ventas/alertas",
       icon: AlertTriangle,
+    },
+    {
+      title: "Reportes",
+      href: "/ventas/reportes",
+      icon: BarChart,
     },
   ]
 
