@@ -893,7 +893,3 @@ export default function POSSystem() {
     </div>
   )
 }
-
-This generation may require the following integrations: 
-<AddIntegration names={["supabase"]} />
-
