@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { FacturaButton } from "@/components/factura-button"
-import { supabase } from "@/lib/supabase/client"
+import { supabase } from "@/lib/db"
 
 // Función para mostrar el método de pago en español
 const getPaymentMethodText = (method) => {
@@ -53,16 +53,18 @@ export default function DetalleVentaPage({ params }) {
   const [sale, setSale] = useState(null)
   const [loading, setLoading] = useState(true)
   const [facturaGenerada, setFacturaGenerada] = useState(false)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     const fetchSale = async () => {
       setLoading(true)
+      setError(null)
       try {
         const saleData = await salesService.getSaleById(id)
 
         if (!saleData) {
-          // Si no hay datos, redirigir a 404 o mostrar mensaje
           console.error("Venta no encontrada")
+          setError("Venta no encontrada")
           return
         }
 
@@ -74,46 +76,7 @@ export default function DetalleVentaPage({ params }) {
         }
       } catch (error) {
         console.error("Error al cargar venta:", error)
-        // Para desarrollo, usamos datos de ejemplo
-        setSale({
-          id: id,
-          createdAt: "2023-05-15T14:30:00Z",
-          customerName: "Juan Pérez",
-          customerPhone: "1123456789",
-          customerAddress: "Av. Corrientes 1234, CABA",
-          totalAmount: 1250.5,
-          paymentMethod: "cash",
-          paymentStatus: "completed",
-          channel: "local",
-          notes: "Cliente frecuente. Pidió factura A.",
-          createdBy: "Vendedor: María",
-          items: [
-            {
-              id: "1",
-              productId: "101",
-              productName: "Hamburguesa Completa",
-              quantity: 2,
-              price: 450.0,
-              subtotal: 900.0,
-            },
-            {
-              id: "2",
-              productId: "202",
-              productName: "Papas Fritas Grande",
-              quantity: 1,
-              price: 250.5,
-              subtotal: 250.5,
-            },
-            {
-              id: "3",
-              productId: "303",
-              productName: "Gaseosa 500ml",
-              quantity: 2,
-              price: 50.0,
-              subtotal: 100.0,
-            },
-          ],
-        })
+        setError(error.message || "Error al cargar los datos de la venta")
       } finally {
         setLoading(false)
       }
@@ -128,6 +91,10 @@ export default function DetalleVentaPage({ params }) {
     // Actualizar la venta con la información de la factura
     const updateVenta = async () => {
       try {
+        if (!supabase) {
+          throw new Error("El cliente de Supabase no está disponible")
+        }
+
         await supabase
           .from("sales_orders")
           .update({
@@ -171,12 +138,12 @@ export default function DetalleVentaPage({ params }) {
     )
   }
 
-  if (!sale) {
+  if (error || !sale) {
     return (
       <div className="container mx-auto py-6 space-y-6">
         <div className="bg-red-50 border border-red-200 rounded-md p-4">
-          <h2 className="text-red-800 font-medium">Venta no encontrada</h2>
-          <p className="text-red-700 mt-1">No se pudo encontrar la venta solicitada.</p>
+          <h2 className="text-red-800 font-medium">Error</h2>
+          <p className="text-red-700 mt-1">{error || "No se pudo encontrar la venta solicitada."}</p>
         </div>
         <Link href="/ventas/historial">
           <Button variant="outline">

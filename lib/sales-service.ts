@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/db"
+import { supabase, getSupabase } from "@/lib/db"
 
 export interface Category {
   id: string
@@ -1043,13 +1043,15 @@ export class SalesService {
   // Obtener una venta por su ID
   async getSaleById(id: string) {
     try {
-      if (!supabase) {
-        console.error("El cliente de Supabase no está disponible")
-        return null
-      }
+      // Usar getSupabase() en lugar de verificar si supabase existe
+      const supabaseClient = getSupabase()
 
       // Obtener la venta
-      const { data: sale, error: saleError } = await supabase.from("sales_orders").select("*").eq("id", id).single()
+      const { data: sale, error: saleError } = await supabaseClient
+        .from("sales_orders")
+        .select("*")
+        .eq("id", id)
+        .single()
 
       if (saleError) {
         console.error(`Error al obtener venta con ID ${id}:`, saleError)
@@ -1062,7 +1064,7 @@ export class SalesService {
       const saleData = objectToCamelCase(sale)
 
       // Obtener los items de la venta
-      const { data: items, error: itemsError } = await supabase
+      const { data: items, error: itemsError } = await supabaseClient
         .from("sales_order_items")
         .select(`
           *,

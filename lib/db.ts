@@ -1,3 +1,4 @@
+import { createClient } from "@supabase/supabase-js"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { objectToCamelCase, objectToSnakeCase } from "./utils" // Import utility functions
 import type { Employee, Attendance, Payroll, PayrollDetail, Audit, Billing, Balance, Order } from "@/types"
@@ -6,6 +7,20 @@ import type { Liquidation } from "@/types"
 interface AttendanceType {
   [key: string]: any // Define the Attendance interface
 }
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+// Verificar que las variables de entorno estén definidas
+if (!supabaseUrl || !supabaseKey) {
+  console.error("Error: Variables de entorno de Supabase no definidas", {
+    supabaseUrl: !!supabaseUrl,
+    supabaseKey: !!supabaseKey,
+  })
+}
+
+// Crear y exportar el cliente de Supabase
+export const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null
 
 // Clase principal que contiene toda la funcionalidad original
 class DatabaseService {
@@ -119,15 +134,15 @@ class DatabaseService {
 
       // Eliminar el id del objeto de datos para evitar conflictos
       if (updateData.id) {
-        delete updateData.id;
+        delete updateData.id
       }
 
-      console.log("Actualizando empleado con ID:", id, "Datos:", updateData);
+      console.log("Actualizando empleado con ID:", id, "Datos:", updateData)
 
       const { data, error } = await this.supabase
         .from("employees")
         .update(updateData)
-        .eq("id", id)  // Usar el ID como parámetro separado
+        .eq("id", id) // Usar el ID como parámetro separado
         .select()
         .single()
 
@@ -1563,9 +1578,14 @@ class DatabaseService {
       // Mock data for reports
       return [
         {
+          name: "  {
+    try {
+      // Mock data for reports
+      return [
+        {
           name: "Facturación por Local",
           data: {
-            labels: ["BR Cabildo", "BR Carranza", "BR Pacifico", "BR Lavalle", "BR Rivadavia"],
+            labels: ["BR Cabildo", "BR Carranza", "BR Pacifico", "BR Lavalle\", \"BR Rivadavia"],
             datasets: [
               {
                 label: "Ventas Mensuales",
@@ -1988,3 +2008,12 @@ export const db = {
 
 // Exportar también el servicio original para mantener compatibilidad
 export { dbService }
+
+// Exportar una función para obtener el cliente de Supabase
+export function getSupabase() {
+  const supabase = dbService.supabase
+  if (!supabase) {
+    throw new Error("Cliente de Supabase no inicializado. Verifica las variables de entorno.")
+  }
+  return supabase
+}
