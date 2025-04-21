@@ -24,6 +24,14 @@ export const supabase = supabaseUrl && supabaseKey
   ? createClient(supabaseUrl, supabaseKey) 
   : null;
 
+// Función auxiliar para obtener el cliente con verificación
+export function getSupabase() {
+  if (!supabase) {
+    throw new Error("Cliente de Supabase no inicializado. Verifica las variables de entorno.");
+  }
+  return supabase;
+}
+
 // Clase principal que contiene toda la funcionalidad original
 class DatabaseService {
   private supabase = createClientComponentClient();
@@ -1130,8 +1138,6 @@ class DatabaseService {
     }
   }
 
-  // Agregar esta nueva función después de generateLiquidations en la clase DatabaseService
-
   /**
    * Actualiza los días a pagar del último mes en las liquidaciones existentes
    * @returns Resultado de la operación
@@ -1534,6 +1540,7 @@ class DatabaseService {
       return [];
     }
   }
+  
   // UPDATED: Simplified getDashboardStats method to fix the error
   async getDashboardStats() {
     try {
@@ -2005,14 +2012,6 @@ export const db = {
 
 // Exportar también el servicio original para mantener compatibilidad
 export { dbService };
-
-// Exportar una función para obtener el cliente de Supabase
-export function getSupabase() {
-  if (!supabase) {
-    throw new Error("Cliente de Supabase no inicializado. Verifica las variables de entorno.");
-  }
-  return supabase;
-}
 
 This generation may require the following integrations: 
 <AddIntegration names={["supabase"]} />
