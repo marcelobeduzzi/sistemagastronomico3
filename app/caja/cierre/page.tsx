@@ -279,7 +279,7 @@ export default function CierreCajaPage() {
     }))
 
     // Si la diferencia es significativa, requerir supervisor
-    setNeedsSupervisor(porcentaje > 2)
+    setNeedsSupervisor(porcentaje > 10)
   }, [formData.actual_balance, formData.expected_balance])
 
   // Calcular diferencia de Posnet y porcentaje
@@ -292,7 +292,7 @@ export default function CierreCajaPage() {
     setPorcentajeDiferenciaPosnet(porcentajePosnet)
 
     // Si la diferencia de Posnet es significativa, también requerir supervisor
-    if (porcentajePosnet > 2) {
+    if (porcentajePosnet > 10) {
       setNeedsSupervisor(true)
     }
   }, [formData.posnet_impreso, formData.posnet_sales])
@@ -1476,15 +1476,3 @@ export default function CierreCajaPage() {
     </DashboardLayout>
   )
 }
-
-
-
-
-
-
-
-
-
-
-
-
