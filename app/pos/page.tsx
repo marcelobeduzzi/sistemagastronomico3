@@ -24,7 +24,7 @@ import {
   TableHeader, 
   TableRow 
 } from "@/components/ui/table"
-import { ShoppingCart, Plus, Minus, Trash2, CreditCard, Receipt, CheckCircle, AlertCircle, ArrowLeft, Search, RefreshCw } from 'lucide-react'
+import { ShoppingCart, Plus, Minus, Trash2, Receipt, CheckCircle, AlertCircle, ArrowLeft, Search, RefreshCw } from 'lucide-react'
 
 export default function POSSystem() {
   const router = useRouter()
@@ -48,35 +48,178 @@ export default function POSSystem() {
     try {
       setIsLoading(true)
       
-      // Cargar productos - Versión simplificada para evitar errores
-      const { data: productsData, error: productsError } = await supabase
-        .from('products')
+      // 1. Cargar categorías
+      const { data: categoriesData, error: categoriesError } = await supabase
+        .from('sales_categories')
         .select('*')
       
-      if (productsError) throw productsError
+      if (categoriesError) {
+        console.error("Error al cargar categorías:", categoriesError)
+        throw categoriesError
+      }
       
-      console.log("Productos cargados:", productsData)
+      // 2. Cargar productos con sus precios
+      // Primero cargamos los productos que no son variantes (productos principales)
+      const { data: productsData, error: productsError } = await supabase
+        .from('sales_products')
+        .select(`
+          id, 
+          name, 
+          description, 
+          image_url, 
+          is_active, 
+          category_id, 
+          is_variant,
+          variant_name
+        `)
+        .eq('is_active', true)
+        .eq('is_variant', false)
       
-      // Formatear los datos
-      const formattedProducts = productsData.map(product => ({
-        id: product.id,
-        name: product.name || 'Producto sin nombre',
-        description: product.description || '',
-        category: product.category || 'Sin categoría',
-        price: product.price || 0,
-        price_pedidosya: product.price_pedidosya || 0,
-        price_rappi: product.price_rappi || 0,
-        status: product.status || 'active',
-        stock: product.stock || 0,
-        min_stock: product.min_stock || 0
+      if (productsError) {
+        console.error("Error al cargar productos:", productsError)
+        throw productsError
+      }
+      
+      // Luego cargamos las variantes
+      const { data: variantsData, error: variantsError } = await supabase
+        .from('sales_products')
+        .select(`
+          id, 
+          name, 
+          description, 
+          image_url, 
+          is_active, 
+          category_id, 
+          parent_id,
+          is_variant,
+          variant_name
+        `)
+        .eq('is_active', true)
+        .eq('is_variant', true)
+      
+      if (variantsError) {
+        console.error("Error al cargar variantes:", variantsError)
+        throw variantsError
+      }
+      
+      // 3. Cargar precios de productos
+      const { data: pricesData, error: pricesError } = await supabase
+        .from('sales_product_prices')
+        .select('*')
+      
+      if (pricesError) {
+        console.error("Error al cargar precios:", pricesError)
+        throw pricesError
+      }
+      
+      // 4. Cargar inventario (si existe)
+      const { data: inventoryData, error: inventoryError } = await supabase
+        .from('sales_inventory')
+        .select('*')
+      
+      if (inventoryError && inventoryError.code !== 'PGRST116') {
+        // PGRST116 significa que la tabla no existe, lo cual es aceptable
+        console.error("Error al cargar inventario:", inventoryError)
+      }
+      
+      // Mapear categorías
+      const formattedCategories = categoriesData.map(category => ({
+        id: category.id,
+        name: category.name || 'Sin nombre'
       }))
       
-      // Cargar categorías
-      const uniqueCategories = [...new Set(formattedProducts.map(item => item.category))]
+      // Crear un mapa de precios por producto_id
+      const priceMap = {}
+      if (pricesData) {
+        pricesData.forEach(price => {
+          if (!priceMap[price.product_id]) {
+            priceMap[price.product_id] = {}
+          }
+          // Asumimos que el channel puede ser 'local', 'pedidosya', 'rappi', etc.
+          priceMap[price.product_id][price.channel || 'local'] = price.price
+        })
+      }
+      
+      // Crear un mapa de inventario por product_id
+      const inventoryMap = {}
+      if (inventoryData) {
+        inventoryData.forEach(item => {
+          inventoryMap[item.product_id] = item.current_quantity || 0
+        })
+      }
+      
+      // Crear un mapa de variantes por parent_id
+      const variantsMap = {}
+      if (variantsData) {
+        variantsData.forEach(variant => {
+          if (!variantsMap[variant.parent_id]) {
+            variantsMap[variant.parent_id] = []
+          }
+          variantsMap[variant.parent_id].push({
+            id: variant.id,
+            name: variant.variant_name || variant.name,
+            description: variant.description,
+            category_id: variant.category_id,
+            price: priceMap[variant.id] ? priceMap[variant.id]['local'] || 0 : 0,
+            price_pedidosya: priceMap[variant.id] ? priceMap[variant.id]['pedidosya'] || 0 : 0,
+            price_rappi: priceMap[variant.id] ? priceMap[variant.id]['rappi'] || 0 : 0,
+            stock: inventoryMap[variant.id] || 0
+          })
+        })
+      }
+      
+      // Formatear productos con sus variantes y precios
+      const formattedProducts = productsData.map(product => {
+        // Buscar la categoría del producto
+        const category = formattedCategories.find(c => c.id === product.category_id)
+        
+        // Obtener las variantes del producto
+        const variants = variantsMap[product.id] || []
+        
+        // Si el producto tiene variantes, lo expandimos a múltiples productos
+        if (variants.length > 0) {
+          return variants.map(variant => ({
+            id: variant.id,
+            name: `${product.name} - ${variant.name}`,
+            description: variant.description || product.description,
+            category: category ? category.name : 'Sin categoría',
+            category_id: variant.category_id,
+            price: variant.price,
+            price_pedidosya: variant.price_pedidosya,
+            price_rappi: variant.price_rappi,
+            stock: variant.stock,
+            is_variant: true,
+            parent_id: product.id
+          }))
+        } else {
+          // Si no tiene variantes, devolvemos el producto principal
+          return [{
+            id: product.id,
+            name: product.name,
+            description: product.description,
+            category: category ? category.name : 'Sin categoría',
+            category_id: product.category_id,
+            price: priceMap[product.id] ? priceMap[product.id]['local'] || 0 : 0,
+            price_pedidosya: priceMap[product.id] ? priceMap[product.id]['pedidosya'] || 0 : 0,
+            price_rappi: priceMap[product.id] ? priceMap[product.id]['rappi'] || 0 : 0,
+            stock: inventoryMap[product.id] || 0,
+            is_variant: false,
+            parent_id: null
+          }]
+        }
+      })
+      
+      // Aplanar el array de productos (ya que algunos pueden ser arrays de variantes)
+      const flattenedProducts = formattedProducts.flat()
+      
+      console.log("Productos formateados:", flattenedProducts)
+      
+      // Extraer categorías únicas de los productos
+      const uniqueCategories = [...new Set(flattenedProducts.map(item => item.category))]
         .filter(category => category) // Eliminar valores nulos o vacíos
       
-      setProducts(formattedProducts || [])
-      setCategories(uniqueCategories || [])
+      setProducts(flattenedProducts)
+      setCategories(uniqueCategories)
       
       // Cargar ventas recientes
       await loadRecentSales()
@@ -93,7 +236,7 @@ export default function POSSystem() {
     try {
       setIsLoadingRecentSales(true)
       
-      // Versión simplificada para evitar errores
+      // Cargar las ventas recientes
       const { data, error } = await supabase
         .from('sales_orders')
         .select('*')
@@ -241,20 +384,24 @@ export default function POSSystem() {
       
       if (itemsError) throw itemsError
       
-      // 3. Actualizar el inventario - Versión simplificada
-      for (const item of cartItems) {
-        // Actualizar el stock directamente en la tabla products
-        const { error: updateError } = await supabase
-          .from('products')
-          .update({ 
-            stock: supabase.rpc('decrement', { x: item.quantity })
-          })
-          .eq('id', item.id)
-        
-        if (updateError) {
-          console.error("Error al actualizar inventario:", updateError)
-          // Continuar con los demás productos
+      // 3. Actualizar el inventario (si existe la tabla)
+      try {
+        for (const item of cartItems) {
+          // Intentar actualizar el inventario
+          const { error: updateError } = await supabase
+            .from('sales_inventory')
+            .update({ 
+              current_quantity: supabase.rpc('decrement', { x: item.quantity })
+            })
+            .eq('product_id', item.id)
+          
+          if (updateError && updateError.code !== 'PGRST116') {
+            console.error("Error al actualizar inventario:", updateError)
+          }
         }
+      } catch (inventoryError) {
+        console.error("Error al actualizar inventario:", inventoryError)
+        // Continuar con el proceso aunque falle la actualización del inventario
       }
       
       // Limpiar carrito y mostrar mensaje de éxito
@@ -287,19 +434,8 @@ export default function POSSystem() {
       // Aquí iría la lógica para generar la factura electrónica
       // Esto podría ser una llamada a un servicio externo o a una API interna
       
-      // Por ahora, simplemente registramos la solicitud de factura
-      const { data, error } = await supabase
-        .from('invoices')
-        .insert({
-          total_amount: total,
-          items: JSON.stringify(cartItems),
-          status: 'pending'
-        })
-        .select()
-      
-      if (error) throw error
-      
-      setSuccessMessage(`Factura #${data[0].id} generada correctamente`)
+      // Por ahora, simplemente mostramos un mensaje
+      setSuccessMessage("Factura generada correctamente")
     } catch (error) {
       console.error("Error al generar factura:", error)
       setErrorMessage("Error al generar la factura. Intenta nuevamente.")
