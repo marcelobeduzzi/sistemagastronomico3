@@ -12,7 +12,7 @@ import { Users, ShoppingCart, DollarSign, Star, TrendingUp, TrendingDown, AlertC
 import { formatCurrency } from "@/lib/export-utils"
 import { BarChart, LineChart, PieChart } from "@/components/charts"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { supabase } from "@/lib/supabase/client"
+import { createClient } from '@supabase/supabase-js'
 
 // Tipos para los datos del dashboard
 interface DashboardStats {
@@ -62,6 +62,7 @@ export default function Dashboard() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [activeEmployeesCount, setActiveEmployeesCount] = useState<number | null>(null)
 
   // Función para obtener los datos del dashboard
   const fetchDashboardData = useCallback(async () => {
@@ -69,11 +70,44 @@ export default function Dashboard() {
     setError(null)
 
     try {
-      // Intentar obtener datos de la API
+      // Crear una nueva instancia de Supabase para evitar problemas de caché
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+      const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+        auth: { persistSession: false }
+      })
+
+      // Obtener empleados activos directamente
+      console.log("Consultando empleados activos directamente...")
+      
+      const { data: employees, error: employeesError, count } = await supabase
+        .from('employees')
+        .select('*', { count: 'exact' })
+        .eq('status', 'active')
+      
+      if (employeesError) {
+        console.error("Error al consultar empleados:", employeesError)
+        throw employeesError
+      }
+      
+      // Verificar los resultados
+      console.log("Resultado de la consulta de empleados:", { 
+        data: employees, 
+        count, 
+        length: employees?.length || 0 
+      })
+      
+      // Actualizar el estado con el número de empleados activos
+      const activeEmployees = employees?.length || 0
+      setActiveEmployeesCount(activeEmployees)
+      
+      // Intentar obtener datos de la API para el resto de estadísticas
       try {
         const response = await fetch("/api/dashboard")
         if (response.ok) {
           const data = await response.json()
+          // Reemplazar el número de empleados activos con el que acabamos de obtener
+          data.stats.activeEmployees = activeEmployees
           setDashboardData(data)
           return
         }
@@ -82,7 +116,7 @@ export default function Dashboard() {
       }
 
       // Si la API falla, obtener datos directamente de Supabase
-      const stats = await fetchRealTimeStats()
+      const stats = await fetchRealTimeStats(supabase, activeEmployees)
       
       // Datos de ejemplo para los gráficos
       const mockChartData = {
@@ -135,30 +169,8 @@ export default function Dashboard() {
   }, [])
 
   // Función para obtener estadísticas en tiempo real de Supabase
-  const fetchRealTimeStats = async () => {
+  const fetchRealTimeStats = async (supabase, activeEmployees) => {
     try {
-      // 1. Obtener empleados activos - CORREGIDO
-      console.log("Consultando empleados activos...")
-      
-      const { data: employees, error: employeesError, count } = await supabase
-        .from('employees')
-        .select('id', { count: 'exact' })
-        .eq('status', 'active')
-      
-      if (employeesError) {
-        console.error("Error al consultar empleados:", employeesError)
-        throw employeesError
-      }
-      
-      // Verificar los resultados
-      console.log("Resultado de la consulta de empleados:", { 
-        data: employees, 
-        count, 
-        length: employees?.length || 0 
-      })
-      
-      const activeEmployees = employees?.length || 0
-      
       // 2. Obtener ventas de la semana actual
       const today = new Date()
       const dayOfWeek = today.getDay() || 7 // 0 es domingo, convertimos a 7
@@ -236,7 +248,7 @@ export default function Dashboard() {
       
       // Datos de ejemplo para las métricas que no podemos obtener directamente
       return {
-        activeEmployees,
+        activeEmployees, // Usar el valor que pasamos como parámetro
         activeEmployeesChange: 5.2, // Ejemplo
         totalDeliveryOrders,
         deliveryOrdersChange: 12.5, // Ejemplo
@@ -252,9 +264,9 @@ export default function Dashboard() {
       }
     } catch (error) {
       console.error("Error al obtener estadísticas en tiempo real:", error)
-      // Devolver datos de ejemplo en caso de error
+      // Devolver datos de ejemplo en caso de error, pero mantener el número real de empleados
       return {
-        activeEmployees: 45,
+        activeEmployees, // Usar el valor que pasamos como parámetro
         activeEmployeesChange: 5.2,
         totalDeliveryOrders: 320,
         deliveryOrdersChange: 12.5,
@@ -275,8 +287,8 @@ export default function Dashboard() {
   useEffect(() => {
     fetchDashboardData()
     
-    // Actualizar datos cada 30 minutos
-    const interval = setInterval(fetchDashboardData, 30 * 60 * 1000)
+    // Actualizar datos cada 5 minutos (reducido de 30 minutos)
+    const interval = setInterval(fetchDashboardData, 5 * 60 * 1000)
     return () => clearInterval(interval)
   }, [fetchDashboardData])
 
@@ -289,7 +301,7 @@ export default function Dashboard() {
   const stats = useMemo(
     () =>
       dashboardData?.stats || {
-        activeEmployees: 0,
+        activeEmployees: activeEmployeesCount || 0, // Usar el valor del estado
         activeEmployeesChange: 0,
         totalDeliveryOrders: 0,
         deliveryOrdersChange: 0,
@@ -303,7 +315,7 @@ export default function Dashboard() {
         pendingPaymentsAmount: 0,
         pendingPaymentsUrgent: 0
       },
-    [dashboardData],
+    [dashboardData, activeEmployeesCount],
   )
 
   // Componente para mostrar tendencias
@@ -325,6 +337,11 @@ export default function Dashboard() {
     ? ((stats.weeklyRevenue - stats.previousWeekRevenue) / stats.previousWeekRevenue) * 100 
     : 0
 
+  // Función para forzar la actualización de los datos
+  const handleRefresh = () => {
+    fetchDashboardData()
+  }
+
   return (
     <DashboardLayout isLoading={isLoading}>
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
@@ -341,6 +358,9 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="flex items-center space-x-2">
+            <Button variant="outline" onClick={handleRefresh}>
+              Actualizar
+            </Button>
             <DateRangePicker dateRange={dateRange} onDateRangeChange={setDateRange} />
             <Button onClick={handleExport}>Exportar</Button>
           </div>
