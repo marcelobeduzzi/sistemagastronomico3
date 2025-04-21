@@ -1,36 +1,27 @@
+"use client"
+
 import Link from "next/link"
-import { notFound } from "next/navigation"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
-import { ArrowLeft, Download, Printer, User, Phone, MapPin, Calendar, CreditCard, Tag, ShoppingBag } from 'lucide-react'
+import { ArrowLeft, Download, Printer, User, Phone, MapPin, Calendar, CreditCard, Tag, ShoppingBag } from "lucide-react"
 import { salesService } from "@/lib/sales-service"
 import { Button } from "@/components/ui/button"
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardFooter, 
-  CardHeader, 
-  CardTitle 
-} from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { FacturaButton } from "@/components/factura-button"
+import { supabase } from "@/lib/supabase/client"
 
 // Función para mostrar el método de pago en español
 const getPaymentMethodText = (method) => {
   const methods = {
-    'cash': 'Efectivo',
-    'card': 'Tarjeta',
-    'transfer': 'Transferencia',
-    'mercadopago': 'MercadoPago'
+    cash: "Efectivo",
+    card: "Tarjeta",
+    transfer: "Transferencia",
+    mercadopago: "MercadoPago",
   }
   return methods[method] || method
 }
@@ -38,10 +29,10 @@ const getPaymentMethodText = (method) => {
 // Función para mostrar el canal en español
 const getChannelText = (channel) => {
   const channels = {
-    'local': 'Local',
-    'pedidosya': 'PedidosYa',
-    'rappi': 'Rappi',
-    'mercadopago': 'MercadoPago'
+    local: "Local",
+    pedidosya: "PedidosYa",
+    rappi: "Rappi",
+    mercadopago: "MercadoPago",
   }
   return channels[channel] || channel
 }
@@ -49,76 +40,157 @@ const getChannelText = (channel) => {
 // Función para mostrar el estado de pago en español
 const getPaymentStatusText = (status) => {
   const statuses = {
-    'completed': 'Completado',
-    'pending': 'Pendiente',
-    'cancelled': 'Cancelado'
+    completed: "Completado",
+    pending: "Pendiente",
+    cancelled: "Cancelado",
   }
   return statuses[status] || status
 }
 
-export async function generateMetadata({ params }) {
-  return {
-    title: `Venta #${params.id} - Sistema de Ventas`,
-  }
-}
-
-export default async function DetalleVentaPage({ params }) {
+export default function DetalleVentaPage({ params }) {
   const { id } = params
-  
-  let sale
-  try {
-    sale = await salesService.getSaleById(id)
-    
-    if (!sale) {
-      notFound()
-    }
-  } catch (error) {
-    console.error("Error al cargar venta:", error)
-    // Para desarrollo, usamos datos de ejemplo
-    sale = {
-      id: id,
-      createdAt: '2023-05-15T14:30:00Z',
-      customerName: 'Juan Pérez',
-      customerPhone: '1123456789',
-      customerAddress: 'Av. Corrientes 1234, CABA',
-      totalAmount: 1250.50,
-      paymentMethod: 'cash',
-      paymentStatus: 'completed',
-      channel: 'local',
-      notes: 'Cliente frecuente. Pidió factura A.',
-      createdBy: 'Vendedor: María',
-      items: [
-        {
-          id: '1',
-          productId: '101',
-          productName: 'Hamburguesa Completa',
-          quantity: 2,
-          price: 450.00,
-          subtotal: 900.00
-        },
-        {
-          id: '2',
-          productId: '202',
-          productName: 'Papas Fritas Grande',
-          quantity: 1,
-          price: 250.50,
-          subtotal: 250.50
-        },
-        {
-          id: '3',
-          productId: '303',
-          productName: 'Gaseosa 500ml',
-          quantity: 2,
-          price: 50.00,
-          subtotal: 100.00
+  const router = useRouter()
+  const [sale, setSale] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [facturaGenerada, setFacturaGenerada] = useState(false)
+
+  useEffect(() => {
+    const fetchSale = async () => {
+      setLoading(true)
+      try {
+        const saleData = await salesService.getSaleById(id)
+
+        if (!saleData) {
+          // Si no hay datos, redirigir a 404 o mostrar mensaje
+          console.error("Venta no encontrada")
+          return
         }
-      ]
+
+        setSale(saleData)
+
+        // Si ya tiene factura, marcar como generada
+        if (saleData.invoice_number) {
+          setFacturaGenerada(true)
+        }
+      } catch (error) {
+        console.error("Error al cargar venta:", error)
+        // Para desarrollo, usamos datos de ejemplo
+        setSale({
+          id: id,
+          createdAt: "2023-05-15T14:30:00Z",
+          customerName: "Juan Pérez",
+          customerPhone: "1123456789",
+          customerAddress: "Av. Corrientes 1234, CABA",
+          totalAmount: 1250.5,
+          paymentMethod: "cash",
+          paymentStatus: "completed",
+          channel: "local",
+          notes: "Cliente frecuente. Pidió factura A.",
+          createdBy: "Vendedor: María",
+          items: [
+            {
+              id: "1",
+              productId: "101",
+              productName: "Hamburguesa Completa",
+              quantity: 2,
+              price: 450.0,
+              subtotal: 900.0,
+            },
+            {
+              id: "2",
+              productId: "202",
+              productName: "Papas Fritas Grande",
+              quantity: 1,
+              price: 250.5,
+              subtotal: 250.5,
+            },
+            {
+              id: "3",
+              productId: "303",
+              productName: "Gaseosa 500ml",
+              quantity: 2,
+              price: 50.0,
+              subtotal: 100.0,
+            },
+          ],
+        })
+      } finally {
+        setLoading(false)
+      }
     }
+
+    fetchSale()
+  }, [id])
+
+  const handleFacturaSuccess = (facturaData) => {
+    setFacturaGenerada(true)
+
+    // Actualizar la venta con la información de la factura
+    const updateVenta = async () => {
+      try {
+        await supabase
+          .from("sales_orders")
+          .update({
+            invoice_number: facturaData.comprobante_nro,
+            invoice_cae: facturaData.cae,
+            invoice_cae_expiry: facturaData.vencimiento_cae,
+            invoice_date: new Date().toISOString(),
+            invoice_status: "completed",
+          })
+          .eq("id", id)
+
+        // Actualizar el estado local
+        setSale((prev) => ({
+          ...prev,
+          invoice_number: facturaData.comprobante_nro,
+          invoice_cae: facturaData.cae,
+          invoice_cae_expiry: facturaData.vencimiento_cae,
+          invoice_date: new Date().toISOString(),
+          invoice_status: "completed",
+        }))
+      } catch (error) {
+        console.error("Error al actualizar la venta con datos de factura:", error)
+      }
+    }
+
+    updateVenta()
+  }
+
+  const handlePrint = () => {
+    window.print()
+  }
+
+  if (loading) {
+    return (
+      <div className="container mx-auto py-6 space-y-6">
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-700"></div>
+          <span className="ml-2">Cargando detalles de la venta...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (!sale) {
+    return (
+      <div className="container mx-auto py-6 space-y-6">
+        <div className="bg-red-50 border border-red-200 rounded-md p-4">
+          <h2 className="text-red-800 font-medium">Venta no encontrada</h2>
+          <p className="text-red-700 mt-1">No se pudo encontrar la venta solicitada.</p>
+        </div>
+        <Link href="/ventas/historial">
+          <Button variant="outline">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Volver a Ventas
+          </Button>
+        </Link>
+      </div>
+    )
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div className="container mx-auto py-6 space-y-6 print:p-0">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
         <div className="flex items-center gap-2">
           <Link href="/ventas/historial">
             <Button variant="outline" size="icon">
@@ -129,23 +201,45 @@ export default async function DetalleVentaPage({ params }) {
           <div>
             <h1 className="text-3xl font-bold">Venta #{sale.id}</h1>
             <p className="text-muted-foreground">
-              {format(new Date(sale.createdAt), 'dd MMMM yyyy, HH:mm', { locale: es })}
+              {format(new Date(sale.createdAt), "dd MMMM yyyy, HH:mm", { locale: es })}
             </p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline">
+          <Button variant="outline" onClick={handlePrint}>
             <Printer className="mr-2 h-4 w-4" />
             Imprimir
           </Button>
-          <Button variant="outline">
-            <Download className="mr-2 h-4 w-4" />
-            Exportar
-          </Button>
+
+          {!facturaGenerada && !sale.invoice_number && (
+            <FacturaButton
+              venta={{
+                ...sale,
+                total: sale.totalAmount,
+                items: sale.items.map((item) => ({
+                  ...item,
+                  producto: {
+                    id: item.productId,
+                    name: item.productName,
+                  },
+                  cantidad: item.quantity,
+                  precio: item.price,
+                })),
+              }}
+              onSuccess={handleFacturaSuccess}
+            />
+          )}
+
+          {(facturaGenerada || sale.invoice_number) && (
+            <Button variant="outline">
+              <Download className="mr-2 h-4 w-4" />
+              Descargar Factura
+            </Button>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 print:grid-cols-3">
         {/* Información del Cliente */}
         <Card>
           <CardHeader>
@@ -161,7 +255,7 @@ export default async function DetalleVentaPage({ params }) {
                 <div>{sale.customerName}</div>
               </div>
             )}
-            
+
             {sale.customerPhone && (
               <div>
                 <div className="text-sm font-medium text-muted-foreground">Teléfono</div>
@@ -171,7 +265,7 @@ export default async function DetalleVentaPage({ params }) {
                 </div>
               </div>
             )}
-            
+
             {sale.customerAddress && (
               <div>
                 <div className="text-sm font-medium text-muted-foreground">Dirección</div>
@@ -181,11 +275,9 @@ export default async function DetalleVentaPage({ params }) {
                 </div>
               </div>
             )}
-            
+
             {!sale.customerName && !sale.customerPhone && !sale.customerAddress && (
-              <div className="text-muted-foreground italic">
-                No se registraron datos del cliente
-              </div>
+              <div className="text-muted-foreground italic">No se registraron datos del cliente</div>
             )}
           </CardContent>
         </Card>
@@ -203,17 +295,17 @@ export default async function DetalleVentaPage({ params }) {
               <div className="text-sm font-medium text-muted-foreground">Fecha y Hora</div>
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
-                {format(new Date(sale.createdAt), 'dd MMMM yyyy, HH:mm', { locale: es })}
+                {format(new Date(sale.createdAt), "dd MMMM yyyy, HH:mm", { locale: es })}
               </div>
             </div>
-            
+
             <div>
               <div className="text-sm font-medium text-muted-foreground">Canal</div>
               <div>
                 <Badge variant="outline">{getChannelText(sale.channel)}</Badge>
               </div>
             </div>
-            
+
             <div>
               <div className="text-sm font-medium text-muted-foreground">Método de Pago</div>
               <div className="flex items-center gap-2">
@@ -221,24 +313,46 @@ export default async function DetalleVentaPage({ params }) {
                 {getPaymentMethodText(sale.paymentMethod)}
               </div>
             </div>
-            
+
             <div>
               <div className="text-sm font-medium text-muted-foreground">Estado</div>
               <div>
-                <Badge 
-                  variant={sale.paymentStatus === 'completed' ? 'default' : 
-                          sale.paymentStatus === 'pending' ? 'outline' : 'destructive'}
+                <Badge
+                  variant={
+                    sale.paymentStatus === "completed"
+                      ? "default"
+                      : sale.paymentStatus === "pending"
+                        ? "outline"
+                        : "destructive"
+                  }
                 >
                   {getPaymentStatusText(sale.paymentStatus)}
                 </Badge>
               </div>
             </div>
-            
+
             {sale.createdBy && (
               <div>
                 <div className="text-sm font-medium text-muted-foreground">Registrado por</div>
                 <div>{sale.createdBy}</div>
               </div>
+            )}
+
+            {/* Información de factura si existe */}
+            {(sale.invoice_number || facturaGenerada) && (
+              <>
+                <Separator />
+                <div>
+                  <div className="text-sm font-medium text-muted-foreground">Factura #</div>
+                  <div>{sale.invoice_number || "Pendiente"}</div>
+                </div>
+                {sale.invoice_cae && (
+                  <div>
+                    <div className="text-sm font-medium text-muted-foreground">CAE</div>
+                    <div>{sale.invoice_cae}</div>
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
@@ -256,19 +370,19 @@ export default async function DetalleVentaPage({ params }) {
               <div className="text-sm font-medium text-muted-foreground">Subtotal</div>
               <div>${sale.totalAmount.toFixed(2)}</div>
             </div>
-            
+
             <div className="flex justify-between">
               <div className="text-sm font-medium text-muted-foreground">Impuestos</div>
               <div>Incluidos</div>
             </div>
-            
+
             <div className="flex justify-between">
               <div className="text-sm font-medium text-muted-foreground">Descuentos</div>
               <div>$0.00</div>
             </div>
-            
+
             <Separator />
-            
+
             <div className="flex justify-between font-bold">
               <div>Total</div>
               <div className="text-xl">${sale.totalAmount.toFixed(2)}</div>
@@ -281,9 +395,7 @@ export default async function DetalleVentaPage({ params }) {
       <Card>
         <CardHeader>
           <CardTitle>Productos</CardTitle>
-          <CardDescription>
-            Detalle de los productos incluidos en la venta
-          </CardDescription>
+          <CardDescription>Detalle de los productos incluidos en la venta</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -311,9 +423,7 @@ export default async function DetalleVentaPage({ params }) {
           <div className="text-sm text-muted-foreground">
             Total de productos: {sale.items.reduce((sum, item) => sum + item.quantity, 0)}
           </div>
-          <div className="font-bold">
-            Total: ${sale.totalAmount.toFixed(2)}
-          </div>
+          <div className="font-bold">Total: ${sale.totalAmount.toFixed(2)}</div>
         </CardFooter>
       </Card>
 
