@@ -25,6 +25,8 @@ import {
   TableRow 
 } from "@/components/ui/table"
 import { ShoppingCart, Plus, Minus, Trash2, Receipt, CheckCircle, AlertCircle, ArrowLeft, Search, RefreshCw } from 'lucide-react'
+import { tusFacturasService } from "@/lib/tusfacturas-service" // Importar el servicio de facturación
+import { FacturaButton } from "@/components/factura-button" // Importar el componente FacturaButton
 
 export default function POSSystem() {
   const router = useRouter()
@@ -42,6 +44,7 @@ export default function POSSystem() {
   const [errorMessage, setErrorMessage] = useState("")
   const [recentSales, setRecentSales] = useState([])
   const [isLoadingRecentSales, setIsLoadingRecentSales] = useState(false)
+  const [showFacturaDialog, setShowFacturaDialog] = useState(false) // Estado para controlar el diálogo de factura
 
   // Cargar productos y categorías
   const loadData = useCallback(async () => {
@@ -421,28 +424,70 @@ export default function POSSystem() {
     }
   }
 
-  // Generar factura
+  // Generar factura - FUNCIÓN ACTUALIZADA
   const generateInvoice = async () => {
+    console.log("Iniciando generación de factura");
+    
     if (!cartItems.length) {
-      setErrorMessage("No hay productos para facturar")
-      return
+      setErrorMessage("No hay productos para facturar");
+      return;
     }
     
-    setIsSaving(true)
+    // Verificar si las credenciales están configuradas
+    if (!tusFacturasService.hasCredentials()) {
+      console.error("No hay credenciales configuradas para TusFacturasAPP");
+      setErrorMessage("No se han configurado las credenciales para TusFacturasAPP. Vaya a Configuración > Facturación.");
+      return;
+    }
+    
+    setIsSaving(true);
     
     try {
-      // Aquí iría la lógica para generar la factura electrónica
-      // Esto podría ser una llamada a un servicio externo o a una API interna
+      // Preparar los datos de la venta para la factura
+      const ventaData = {
+        customerName: "Consumidor Final", // Puedes agregar un campo para capturar esto
+        customerDocument: "0", // Puedes agregar un campo para capturar esto
+        totalAmount: total,
+        items: cartItems.map(item => ({
+          productId: item.id,
+          productName: item.name,
+          quantity: item.quantity,
+          price: item.price
+        })),
+        channel: orderChannel,
+        paymentMethod: paymentMethod
+      };
       
-      // Por ahora, simplemente mostramos un mensaje
-      setSuccessMessage("Factura generada correctamente")
+      console.log("Datos de venta para facturación:", ventaData);
+      
+      // Convertir la venta al formato de TusFacturas
+      const { cliente, comprobante } = tusFacturasService.convertirVentaAFactura(ventaData);
+      
+      console.log("Datos convertidos para TusFacturas:", { cliente, comprobante });
+      
+      // Generar la factura
+      const response = await tusFacturasService.generarFactura(cliente, comprobante);
+      
+      console.log("Respuesta de TusFacturas:", response);
+      
+      if (response.error) {
+        setErrorMessage(`Error al generar factura: ${response.errores?.join(", ") || "Error desconocido"}`);
+      } else {
+        setSuccessMessage(`Factura generada correctamente. ${response.cae ? `CAE: ${response.cae}` : "Comprobante de prueba generado con éxito"}`);
+      }
     } catch (error) {
-      console.error("Error al generar factura:", error)
-      setErrorMessage("Error al generar la factura. Intenta nuevamente.")
+      console.error("Error al generar factura:", error);
+      setErrorMessage(`Error al generar la factura: ${error.message || "Error desconocido"}`);
     } finally {
-      setIsSaving(false)
+      setIsSaving(false);
     }
-  }
+  };
+
+  // Manejar el éxito de la facturación
+  const handleFacturaSuccess = (facturaData) => {
+    console.log("Factura generada con éxito:", facturaData);
+    setSuccessMessage(`Factura generada correctamente. ${facturaData.cae ? `CAE: ${facturaData.cae}` : "Comprobante de prueba generado con éxito"}`);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -453,9 +498,6 @@ export default function POSSystem() {
             <Button 
               variant="secondary" 
               size="icon" 
-              className="mr-2"
-              onClick={() => router.push('/ventas')}
-            >
               className="mr-2"
               onClick={() => router.push('/ventas')}
             >
@@ -732,15 +774,26 @@ export default function POSSystem() {
                     >
                       {isSaving ? "Procesando..." : "Finalizar Venta"}
                     </Button>
-                    <Button 
-                      variant="outline" 
+                    
+                    {/* CAMBIO IMPORTANTE: Reemplazar el botón de facturar con el componente FacturaButton */}
+                    <FacturaButton 
+                      venta={{
+                        customerName: "Consumidor Final",
+                        customerDocument: "0",
+                        total: total,
+                        items: cartItems.map(item => ({
+                          productId: item.id,
+                          productName: item.name,
+                          quantity: item.quantity,
+                          price: item.price
+                        })),
+                        channel: orderChannel,
+                        paymentMethod: paymentMethod
+                      }}
+                      onSuccess={handleFacturaSuccess}
+                      variant="outline"
                       className="w-full"
-                      disabled={cartItems.length === 0 || isSaving}
-                      onClick={generateInvoice}
-                    >
-                      <Receipt className="mr-2 h-4 w-4" />
-                      Facturar
-                    </Button>
+                    />
                   </div>
                 </div>
               </CardContent>
@@ -840,3 +893,7 @@ export default function POSSystem() {
     </div>
   )
 }
+
+This generation may require the following integrations: 
+<AddIntegration names={["supabase"]} />
+
