@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Tag, Boxes, ShoppingBag, AlertTriangle, Store, ChevronRight, Home, BarChart, PlusCircle } from 'lucide-react'
+import { Tag, Boxes, ShoppingBag, AlertTriangle, Store, ChevronRight, Home, BarChart, PlusCircle, ShoppingCart, Truck } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { DashboardLayout } from "@/app/dashboard-layout"
@@ -19,9 +19,19 @@ export default function VentasLayout({ children }: { children: React.ReactNode }
   
   const sidebarItems: SidebarItem[] = [
     {
-      title: "Dashboard",
+      title: "Control de Ventas",
       href: "/ventas",
       icon: Home,
+    },
+    {
+      title: "Punto de Venta",
+      href: "/pos",
+      icon: ShoppingCart,
+    },
+    {
+      title: "Pedidos Delivery",
+      href: "/ventas/delivery",
+      icon: Truck,
     },
     {
       title: "Nueva Venta",
