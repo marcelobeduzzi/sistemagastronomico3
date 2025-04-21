@@ -137,13 +137,26 @@ export default function Dashboard() {
   // Función para obtener estadísticas en tiempo real de Supabase
   const fetchRealTimeStats = async () => {
     try {
-      // 1. Obtener empleados activos
-      const { data: employees, error: employeesError } = await supabase
+      // 1. Obtener empleados activos - CORREGIDO
+      console.log("Consultando empleados activos...")
+      
+      const { data: employees, error: employeesError, count } = await supabase
         .from('employees')
-        .select('id')
+        .select('id', { count: 'exact' })
         .eq('status', 'active')
       
-      if (employeesError) throw employeesError
+      if (employeesError) {
+        console.error("Error al consultar empleados:", employeesError)
+        throw employeesError
+      }
+      
+      // Verificar los resultados
+      console.log("Resultado de la consulta de empleados:", { 
+        data: employees, 
+        count, 
+        length: employees?.length || 0 
+      })
+      
       const activeEmployees = employees?.length || 0
       
       // 2. Obtener ventas de la semana actual
@@ -572,14 +585,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
-
-        {/* Se eliminó el calendario descuadrado que estaba aquí */}
       </div>
     </DashboardLayout>
   )
 }
-
-
-
-
-
