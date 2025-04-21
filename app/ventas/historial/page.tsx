@@ -1,390 +1,447 @@
-import { Suspense } from "react"
+"use client"
+
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { format } from "date-fns"
-import { es } from "date-fns/locale"
-import { Calendar, Search, Download, Eye, Filter, ArrowUpDown } from 'lucide-react'
-import { salesService } from "@/lib/sales-service"
+import { supabase } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardHeader, 
-  CardTitle 
-} from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
 } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
+import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from "@/components/ui/table"
+import { ArrowLeft, Search, RefreshCw, Calendar } from 'lucide-react'
 
-// Componente para mostrar la tabla de ventas
-async function SalesTable({ 
-  page = 1, 
-  perPage = 10, 
-  searchQuery = "", 
-  dateFrom = "", 
-  dateTo = "", 
-  paymentMethod = "", 
-  channel = "" 
-}) {
-  let sales = []
-  let totalSales = 0
-  
-  try {
-    // En un sistema real, estos parámetros se pasarían a la API
-    const result = await salesService.getSales({
-      page,
-      perPage,
-      searchQuery,
-      dateFrom,
-      dateTo,
-      paymentMethod,
-      channel
-    })
-    
-    sales = result.data || []
-    totalSales = result.total || 0
-  } catch (error) {
-    console.error("Error al cargar ventas:", error)
-    // Para desarrollo, usamos datos de ejemplo
-    sales = [
-      { 
-        id: '1', 
-        createdAt: '2023-05-15T14:30:00Z', 
-        customerName: 'Juan Pérez', 
-        totalAmount: 1250.50, 
-        paymentMethod: 'cash', 
-        paymentStatus: 'completed',
-        channel: 'local'
-      },
-      { 
-        id: '2', 
-        createdAt: '2023-05-14T10:15:00Z', 
-        customerName: 'María López', 
-        totalAmount: 850.75, 
-        paymentMethod: 'card', 
-        paymentStatus: 'completed',
-        channel: 'local'
-      },
-      { 
-        id: '3', 
-        createdAt: '2023-05-13T18:45:00Z', 
-        customerName: 'Carlos Gómez', 
-        totalAmount: 1500.00, 
-        paymentMethod: 'transfer', 
-        paymentStatus: 'pending',
-        channel: 'pedidosya'
-      },
-      { 
-        id: '4', 
-        createdAt: '2023-05-12T12:20:00Z', 
-        customerName: 'Ana Rodríguez', 
-        totalAmount: 750.25, 
-        paymentMethod: 'mercadopago', 
-        paymentStatus: 'completed',
-        channel: 'rappi'
-      },
-      { 
-        id: '5', 
-        createdAt: '2023-05-11T09:10:00Z', 
-        customerName: 'Pedro Sánchez', 
-        totalAmount: 1100.00, 
-        paymentMethod: 'cash', 
-        paymentStatus: 'completed',
-        channel: 'local'
-      },
-    ]
-    totalSales = sales.length
+export default function SalesHistory() {
+  const router = useRouter()
+  const [sales, setSales] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [dateFilter, setDateFilter] = useState("all")
+  const [paymentFilter, setPaymentFilter] = useState("all")
+  const [channelFilter, setChannelFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [startDate, setStartDate] = useState("")
+  const [endDate, setEndDate] = useState("")
+  const [totalSales, setTotalSales] = useState(0)
+  const [totalAmount, setTotalAmount] = useState(0)
+
+  // Cargar ventas
+  const loadSales = async () => {
+    try {
+      setIsLoading(true)
+      
+      // Construir la consulta base
+      let query = supabase
+        .from('sales_orders')
+        .select('*')
+        .order('created_at', { ascending: false })
+      
+      // Aplicar filtros
+      if (dateFilter === "today") {
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        query = query.gte('created_at', today.toISOString())
+      } else if (dateFilter === "yesterday") {
+        const yesterday = new Date()
+        yesterday.setDate(yesterday.getDate() - 1)
+        yesterday.setHours(0, 0, 0, 0)
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        query = query.gte('created_at', yesterday.toISOString()).lt('created_at', today.toISOString())
+      } else if (dateFilter === "week") {
+        const weekAgo = new Date()
+        weekAgo.setDate(weekAgo.getDate() - 7)
+        query = query.gte('created_at', weekAgo.toISOString())
+      } else if (dateFilter === "month") {
+        const monthAgo = new Date()
+        monthAgo.setMonth(monthAgo.getMonth() - 1)
+        query = query.gte('created_at', monthAgo.toISOString())
+      } else if (dateFilter === "custom" && startDate && endDate) {
+        const start = new Date(startDate)
+        start.setHours(0, 0, 0, 0)
+        const end = new Date(endDate)
+        end.setHours(23, 59, 59, 999)
+        query = query.gte('created_at', start.toISOString()).lte('created_at', end.toISOString())
+      }
+      
+      if (paymentFilter !== "all") {
+        query = query.eq('payment_method', paymentFilter)
+      }
+      
+      if (channelFilter !== "all") {
+        query = query.eq('channel', channelFilter)
+      }
+      
+      if (statusFilter !== "all") {
+        query = query.eq('payment_status', statusFilter)
+      }
+      
+      // Ejecutar la consulta
+      const { data, error } = await query
+      
+      if (error) {
+        console.error("Error al cargar ventas:", error)
+        throw error
+      }
+      
+      // Filtrar por búsqueda (ID)
+      let filteredData = data || []
+      if (searchQuery) {
+        filteredData = filteredData.filter(sale => 
+          sale.id.toString().includes(searchQuery)
+        )
+      }
+      
+      console.log("Ventas cargadas:", filteredData)
+      
+      // Calcular totales
+      setTotalSales(filteredData.length)
+      setTotalAmount(filteredData.reduce((sum, sale) => sum + (sale.total_amount || 0), 0))
+      
+      // Formatear los datos
+      const formattedSales = filteredData.map(sale => ({
+        id: sale.id,
+        date: sale.created_at,
+        total: sale.total_amount || 0,
+        paymentMethod: sale.payment_method || 'Desconocido',
+        status: sale.payment_status || 'pending',
+        channel: sale.channel || 'local',
+        createdBy: sale.created_by || 'Sistema'
+      }))
+      
+      setSales(formattedSales)
+    } catch (error) {
+      console.error("Error al cargar ventas:", error)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  // Función para mostrar el método de pago en español
-  const getPaymentMethodText = (method) => {
-    const methods = {
-      'cash': 'Efectivo',
-      'card': 'Tarjeta',
-      'transfer': 'Transferencia',
-      'mercadopago': 'MercadoPago'
-    }
-    return methods[method] || method
-  }
+  // Cargar ventas al montar el componente y cuando cambien los filtros
+  useEffect(() => {
+    loadSales()
+  }, [dateFilter, paymentFilter, channelFilter, statusFilter])
 
-  // Función para mostrar el canal en español
-  const getChannelText = (channel) => {
-    const channels = {
-      'local': 'Local',
-      'pedidosya': 'PedidosYa',
-      'rappi': 'Rappi',
-      'mercadopago': 'MercadoPago'
+  // Aplicar filtros personalizados
+  const applyCustomFilters = () => {
+    if (dateFilter === "custom" && startDate && endDate) {
+      loadSales()
     }
-    return channels[channel] || channel
-  }
-
-  // Función para mostrar el estado de pago en español
-  const getPaymentStatusText = (status) => {
-    const statuses = {
-      'completed': 'Completado',
-      'pending': 'Pendiente',
-      'cancelled': 'Cancelado'
-    }
-    return statuses[status] || status
   }
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[100px]">ID</TableHead>
-              <TableHead>Fecha</TableHead>
-              <TableHead>Cliente</TableHead>
-              <TableHead>Canal</TableHead>
-              <TableHead>Método de Pago</TableHead>
-              <TableHead>Estado</TableHead>
-              <TableHead className="text-right">Total</TableHead>
-              <TableHead className="text-center">Acciones</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sales.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center">
-                  No se encontraron ventas con los filtros seleccionados.
-                </TableCell>
-              </TableRow>
-            ) : (
-              sales.map((sale) => (
-                <TableRow key={sale.id}>
-                  <TableCell className="font-medium">{sale.id}</TableCell>
-                  <TableCell>
-                    {format(new Date(sale.createdAt), 'dd/MM/yyyy HH:mm', { locale: es })}
-                  </TableCell>
-                  <TableCell>{sale.customerName || 'Cliente no registrado'}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{getChannelText(sale.channel)}</Badge>
-                  </TableCell>
-                  <TableCell>{getPaymentMethodText(sale.paymentMethod)}</TableCell>
-                  <TableCell>
-                    <Badge 
-                      variant={sale.paymentStatus === 'completed' ? 'default' : 
-                              sale.paymentStatus === 'pending' ? 'outline' : 'destructive'}
-                    >
-                      {getPaymentStatusText(sale.paymentStatus)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-medium">
-                    ${sale.totalAmount.toFixed(2)}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Link href={`/ventas/detalle/${sale.id}`}>
-                      <Button variant="ghost" size="icon">
-                        <Eye className="h-4 w-4" />
-                        <span className="sr-only">Ver detalles</span>
-                      </Button>
-                    </Link>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
-
-      {/* Paginación */}
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          Mostrando <span className="font-medium">{sales.length}</span> de{" "}
-          <span className="font-medium">{totalSales}</span> ventas
-        </div>
-        <div className="flex items-center space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page === 1}
-          >
-            Anterior
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={sales.length < perPage}
-          >
-            Siguiente
-          </Button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export const metadata = {
-  title: "Historial de Ventas - Sistema de Ventas",
-}
-
-export default function HistorialVentasPage() {
-  return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">Historial de Ventas</h1>
-          <p className="text-muted-foreground">
-            Consulta y filtra el historial completo de ventas
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline">
-            <Download className="mr-2 h-4 w-4" />
-            Exportar
-          </Button>
-          <Link href="/ventas/nueva">
-            <Button>
-              Nueva Venta
+    <div className="min-h-screen bg-background">
+      {/* Encabezado */}
+      <header className="bg-primary text-primary-foreground p-4">
+        <div className="container mx-auto flex justify-between items-center">
+          <div className="flex items-center">
+            <Button 
+              variant="secondary" 
+              size="icon" 
+              className="mr-2"
+              onClick={() => router.push('/ventas')}
+            >
+              <ArrowLeft className="h-5 w-5" />
             </Button>
-          </Link>
-        </div>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Filtros de Búsqueda</CardTitle>
-          <CardDescription>
-            Filtra las ventas por diferentes criterios
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Buscar</label>
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="search"
-                  placeholder="Cliente, ID, etc."
-                  className="pl-8"
-                />
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Desde</label>
-              <div className="relative">
-                <Calendar className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="date"
-                  className="pl-8"
-                />
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Hasta</label>
-              <div className="relative">
-                <Calendar className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="date"
-                  className="pl-8"
-                />
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Método de Pago</label>
-              <Select>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="cash">Efectivo</SelectItem>
-                  <SelectItem value="card">Tarjeta</SelectItem>
-                  <SelectItem value="transfer">Transferencia</SelectItem>
-                  <SelectItem value="mercadopago">MercadoPago</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Canal</label>
-              <Select>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="local">Local</SelectItem>
-                  <SelectItem value="pedidosya">PedidosYa</SelectItem>
-                  <SelectItem value="rappi">Rappi</SelectItem>
-                  <SelectItem value="mercadopago">MercadoPago</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Estado</label>
-              <Select>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="completed">Completado</SelectItem>
-                  <SelectItem value="pending">Pendiente</SelectItem>
-                  <SelectItem value="cancelled">Cancelado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Ordenar por</label>
-              <Select defaultValue="date-desc">
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="date-desc">Fecha (más reciente)</SelectItem>
-                  <SelectItem value="date-asc">Fecha (más antigua)</SelectItem>
-                  <SelectItem value="total-desc">Total (mayor)</SelectItem>
-                  <SelectItem value="total-asc">Total (menor)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="flex items-end">
-              <Button className="w-full">
-                <Filter className="mr-2 h-4 w-4" />
-                Aplicar Filtros
-              </Button>
-            </div>
+            <h1 className="text-2xl font-bold">Historial de Ventas</h1>
           </div>
-        </CardContent>
-      </Card>
+          <div className="flex items-center space-x-2">
+            <Button 
+              variant="secondary" 
+              size="sm"
+              onClick={loadSales}
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Actualizar
+            </Button>
+            <Button 
+              variant="secondary" 
+              size="sm"
+              onClick={() => router.push('/pos')}
+            >
+              Punto de Venta
+            </Button>
+          </div>
+        </div>
+      </header>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Resultados</CardTitle>
-          <CardDescription>
-            Listado de ventas según los filtros aplicados
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Suspense fallback={<div className="text-center py-8">Cargando ventas...</div>}>
-            <SalesTable />
-          </Suspense>
-        </CardContent>
-      </Card>
+      {/* Contenido principal */}
+      <main className="container mx-auto p-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          {/* Tarjeta de resumen */}
+          <Card className="md:col-span-4">
+            <CardHeader className="pb-2">
+              <CardTitle>Resumen</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <div className="text-sm font-medium text-muted-foreground">
+                    Total de Ventas
+                  </div>
+                  <div className="text-2xl font-bold">
+                    {totalSales}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-muted-foreground">
+                    Monto Total
+                  </div>
+                  <div className="text-2xl font-bold">
+                    ${totalAmount.toFixed(2)}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          {/* Filtros */}
+          <Card className="md:col-span-4">
+            <CardContent className="p-4">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                {/* Búsqueda por ID */}
+                <div>
+                  <Label htmlFor="search">Buscar por ID</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="search"
+                      placeholder="ID de venta..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-10"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          loadSales()
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+                
+                {/* Filtro por fecha */}
+                <div>
+                  <Label htmlFor="date-filter">Período</Label>
+                  <Select 
+                    value={dateFilter} 
+                    onValueChange={setDateFilter}
+                  >
+                    <SelectTrigger id="date-filter">
+                      <SelectValue placeholder="Seleccionar período" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="today">Hoy</SelectItem>
+                      <SelectItem value="yesterday">Ayer</SelectItem>
+                      <SelectItem value="week">Última semana</SelectItem>
+                      <SelectItem value="month">Último mes</SelectItem>
+                      <SelectItem value="custom">Personalizado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                {/* Filtro por método de pago */}
+                <div>
+                  <Label htmlFor="payment-filter">Método de Pago</Label>
+                  <Select 
+                    value={paymentFilter} 
+                    onValueChange={setPaymentFilter}
+                  >
+                    <SelectTrigger id="payment-filter">
+                      <SelectValue placeholder="Seleccionar método" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="cash">Efectivo</SelectItem>
+                      <SelectItem value="card">Tarjeta</SelectItem>
+                      <SelectItem value="transfer">Transferencia</SelectItem>
+                      <SelectItem value="mercadopago">MercadoPago</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                {/* Filtro por canal */}
+                <div>
+                  <Label htmlFor="channel-filter">Canal</Label>
+                  <Select 
+                    value={channelFilter} 
+                    onValueChange={setChannelFilter}
+                  >
+                    <SelectTrigger id="channel-filter">
+                      <SelectValue placeholder="Seleccionar canal" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="local">Local</SelectItem>
+                      <SelectItem value="pedidosya">PedidosYa</SelectItem>
+                      <SelectItem value="rappi">Rappi</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                {/* Filtro por estado */}
+                <div>
+                  <Label htmlFor="status-filter">Estado</Label>
+                  <Select 
+                    value={statusFilter} 
+                    onValueChange={setStatusFilter}
+                  >
+                    <SelectTrigger id="status-filter">
+                      <SelectValue placeholder="Seleccionar estado" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="completed">Pagado</SelectItem>
+                      <SelectItem value="pending">Pendiente</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              {/* Filtros de fecha personalizados */}
+              {dateFilter === "custom" && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                  <div>
+                    <Label htmlFor="start-date">Fecha Inicio</Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="start-date"
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="end-date">Fecha Fin</Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="end-date"
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-end">
+                    <Button 
+                      onClick={applyCustomFilters}
+                      disabled={!startDate || !endDate}
+                      className="w-full"
+                    >
+                      Aplicar Filtros
+                    </Button>
+                  </div>
+                </div>
+              )}
+              
+              {/* Botón de búsqueda para ID */}
+              {searchQuery && (
+                <div className="mt-4">
+                  <Button onClick={loadSales}>
+                    <Search className="h-4 w-4 mr-2" />
+                    Buscar
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+        
+        {/* Tabla de ventas */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead>Canal</TableHead>
+                    <TableHead>Método de Pago</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead>Vendedor</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                    <TableHead className="text-center">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-4">
+                        Cargando ventas...
+                      </TableCell>
+                    </TableRow>
+                  ) : sales.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-4">
+                        No se encontraron ventas
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    sales.map((sale) => (
+                      <TableRow key={sale.id}>
+                        <TableCell>{sale.id}</TableCell>
+                        <TableCell>{new Date(sale.date).toLocaleString()}</TableCell>
+                        <TableCell>
+                          <span className={`px-2 py-1 rounded text-xs ${
+                            sale.channel === "local" 
+                              ? "bg-blue-100 text-blue-800" 
+                              : sale.channel === "pedidosya"
+                                ? "bg-[#FF5A5F]/20 text-[#FF5A5F]"
+                                : "bg-[#FF9500]/20 text-[#FF9500]"
+                          }`}>
+                            {sale.channel}
+                          </span>
+                        </TableCell>
+                        <TableCell>{sale.paymentMethod}</TableCell>
+                        <TableCell>
+                          <span className={`px-2 py-1 rounded text-xs ${
+                            sale.status === "completed" 
+                              ? "bg-green-100 text-green-800" 
+                              : "bg-yellow-100 text-yellow-800"
+                          }`}>
+                            {sale.status === "completed" ? "Pagado" : "Pendiente"}
+                          </span>
+                        </TableCell>
+                        <TableCell>{sale.createdBy}</TableCell>
+                        <TableCell className="text-right font-medium">
+                          ${sale.total.toFixed(2)}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Link href={`/ventas/detalle/${sale.id}`}>
+                            <Button variant="ghost" size="sm">
+                              Ver
+                            </Button>
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      </main>
     </div>
   )
 }

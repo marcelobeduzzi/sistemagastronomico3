@@ -456,6 +456,9 @@ export default function POSSystem() {
               className="mr-2"
               onClick={() => router.push('/ventas')}
             >
+              className="mr-2"
+              onClick={() => router.push('/ventas')}
+            >
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <h1 className="text-2xl font-bold">Punto de Venta</h1>
