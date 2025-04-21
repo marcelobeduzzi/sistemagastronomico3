@@ -268,8 +268,6 @@ export default function POSSystem() {
       
     } catch (error) {
       console.error("Error al procesar venta:", error)
-      setErrorMessage("Error al procesar  {
-      console.error("Error al procesar venta:", error)
       setErrorMessage("Error al procesar la venta. Intenta nuevamente.")
     } finally {
       setIsSaving(false)
