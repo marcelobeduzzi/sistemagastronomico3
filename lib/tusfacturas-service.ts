@@ -92,7 +92,8 @@ class TusFacturasService {
     usertoken: "3835ddfd15adf0df7b4af6153400613a40ca1091e0c7059166672395afbf2884",
   }
 
-  private apiUrl = "https://www.tusfacturas.app/app/api/v2/facturacion/nuevo"
+  // Cambiamos la URL de la API para usar nuestro proxy
+  private apiUrl = "/api/facturacion"
   private puntoVenta = 1 // Será formateado como "00001"
 
   constructor() {
@@ -216,6 +217,7 @@ class TusFacturasService {
     console.log("Datos de la solicitud:", JSON.stringify(requestData, null, 2))
 
     try {
+      // Usar nuestro endpoint de proxy en lugar de llamar directamente a TusFacturas
       const response = await fetch(this.apiUrl, {
         method: "POST",
         headers: {
