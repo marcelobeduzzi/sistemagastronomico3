@@ -62,7 +62,7 @@ export interface TusFacturasComprobante {
   total: number
   cotizacion: number
   moneda: string // "PES" para pesos argentinos
-  punto_venta: number
+  punto_venta: string // IMPORTANTE: Debe ser string, no number
   tributos: TusFacturasTributo[]
 }
 
@@ -185,14 +185,35 @@ class TusFacturasService {
       throw new Error("No se han configurado las credenciales para TusFacturasAPP")
     }
 
-    // Asegurarse de que el punto de venta esté correctamente configurado
-    comprobante.punto_venta = this.puntoVenta
+    // Asegurarse de que el punto de venta esté correctamente configurado como string
+    comprobante.punto_venta = this.getPuntoVentaFormateado()
+
+    // Asegurarse de que los campos obligatorios estén presentes
+    if (!cliente.documento_nro) cliente.documento_nro = "0"
+    if (!cliente.razon_social) cliente.razon_social = "Consumidor Final"
+    if (!cliente.condicion_iva) cliente.condicion_iva = "CF"
+    if (!cliente.documento_tipo) cliente.documento_tipo = "DNI"
+    if (!cliente.domicilio) cliente.domicilio = "Sin dirección"
+    if (!cliente.provincia) cliente.provincia = "2" // Buenos Aires por defecto
+    if (!cliente.condicion_pago) cliente.condicion_pago = "201" // Contado
+
+    // Asegurarse de que los detalles tengan todos los campos necesarios
+    comprobante.detalle = comprobante.detalle.map((detalle) => {
+      if (!detalle.producto.codigo) detalle.producto.codigo = "0"
+      if (!detalle.producto.lista_precios) detalle.producto.lista_precios = "standard"
+      if (!detalle.producto.unidad_bulto) detalle.producto.unidad_bulto = 1
+      if (!detalle.producto.alicuota) detalle.producto.alicuota = 21
+      return detalle
+    })
 
     const requestData: TusFacturasRequest = {
       ...this.credentials,
       cliente,
       comprobante,
     }
+
+    console.log("URL de la API:", this.apiUrl)
+    console.log("Datos de la solicitud:", JSON.stringify(requestData, null, 2))
 
     try {
       const response = await fetch(this.apiUrl, {
@@ -203,11 +224,32 @@ class TusFacturasService {
         body: JSON.stringify(requestData),
       })
 
-      if (!response.ok) {
-        throw new Error(`Error en la solicitud: ${response.status} ${response.statusText}`)
+      console.log("Estado de la respuesta HTTP:", response.status, response.statusText)
+
+      // Obtener el texto de la respuesta para depuración
+      const responseText = await response.text()
+      console.log("Respuesta en texto plano:", responseText)
+
+      // Intentar parsear la respuesta como JSON
+      let data: TusFacturasResponse
+      try {
+        data = JSON.parse(responseText)
+      } catch (parseError) {
+        console.error("Error al parsear la respuesta JSON:", parseError)
+        return {
+          error: true,
+          errores: ["Error al parsear la respuesta del servidor: " + responseText],
+        }
       }
 
-      const data: TusFacturasResponse = await response.json()
+      if (!response.ok) {
+        return {
+          error: true,
+          errores: [`Error en la solicitud: ${response.status} ${response.statusText}`],
+        }
+      }
+
+      console.log("Datos de la respuesta:", data)
       return data
     } catch (error) {
       console.error("Error al generar factura:", error)
@@ -222,6 +264,8 @@ class TusFacturasService {
    * Convierte una venta del sistema a formato TusFacturas
    */
   convertirVentaAFactura(venta: any): { cliente: TusFacturasCliente; comprobante: TusFacturasComprobante } {
+    console.log("Datos de venta recibidos:", venta)
+
     // Obtener la fecha actual en formato DD/MM/YYYY
     const hoy = new Date()
     const fechaFormateada = `${String(hoy.getDate()).padStart(2, "0")}/${String(hoy.getMonth() + 1).padStart(2, "0")}/${hoy.getFullYear()}`
@@ -231,38 +275,84 @@ class TusFacturasService {
     vencimiento.setDate(vencimiento.getDate() + 30)
     const vencimientoFormateado = `${String(vencimiento.getDate()).padStart(2, "0")}/${String(vencimiento.getMonth() + 1).padStart(2, "0")}/${vencimiento.getFullYear()}`
 
+    // Extraer información del cliente
+    const customerName = venta.customerName || venta.cliente?.nombre || "Consumidor Final"
+    const customerDocument = venta.customerDocument || venta.cliente?.documento || "0"
+    const customerAddress = venta.customerAddress || venta.cliente?.direccion || "Sin dirección"
+    const customerEmail = venta.customerEmail || venta.cliente?.email || ""
+
     // Datos del cliente (por defecto consumidor final)
     const cliente: TusFacturasCliente = {
       documento_tipo: "DNI",
       condicion_iva: "CF", // Consumidor Final
-      domicilio: venta.cliente?.direccion || "Sin dirección",
+      domicilio: customerAddress,
       condicion_pago: "201", // Contado
-      documento_nro: venta.cliente?.documento || "0",
-      razon_social: venta.cliente?.nombre || "Consumidor Final",
+      documento_nro: customerDocument,
+      razon_social: customerName,
       provincia: "2", // Buenos Aires por defecto
-      email: venta.cliente?.email || "",
+      email: customerEmail,
       envia_por_mail: "N",
       rg5329: "N",
     }
 
+    // Extraer información de los items
+    const items = venta.items || []
+    console.log("Items de la venta:", items)
+
     // Detalles de los productos
-    const detalle: TusFacturasDetalle[] = venta.items.map((item: any) => ({
-      cantidad: item.quantity || item.cantidad,
-      afecta_stock: "S",
-      actualiza_precio: "N",
-      bonificacion_porcentaje: 0,
-      producto: {
-        descripcion: item.producto?.name || item.producto?.nombre || "Producto sin nombre",
-        codigo: item.producto?.id || item.product_id || "0",
-        lista_precios: "standard",
-        leyenda: "",
-        unidad_bulto: 1,
-        alicuota: 21, // IVA 21% por defecto
+    const detalle: TusFacturasDetalle[] = items.map((item: any) => {
+      // Extraer información del producto
+      const quantity = item.quantity || item.cantidad || 1
+      const price = item.price || item.precio || 0
+      const productName = item.productName || item.producto?.name || item.producto?.nombre || "Producto sin nombre"
+      const productId = item.productId || item.producto?.id || item.product_id || "0"
+
+      // Calcular precio sin IVA (dividir por 1.21 para IVA del 21%)
+      const precioSinIva = Number.parseFloat((price / 1.21).toFixed(2))
+
+      return {
+        cantidad: quantity,
+        afecta_stock: "S",
         actualiza_precio: "N",
-        rg5329: "N",
-        precio_unitario_sin_iva: Number.parseFloat(((item.price || item.precio) / 1.21).toFixed(2)), // Precio sin IVA
-      },
-    }))
+        bonificacion_porcentaje: 0,
+        producto: {
+          descripcion: productName,
+          codigo: productId,
+          lista_precios: "standard",
+          leyenda: "",
+          unidad_bulto: 1,
+          alicuota: 21, // IVA 21% por defecto
+          actualiza_precio: "N",
+          rg5329: "N",
+          precio_unitario_sin_iva: precioSinIva,
+        },
+      }
+    })
+
+    // Si no hay items, agregar uno genérico
+    if (detalle.length === 0) {
+      const totalAmount = venta.totalAmount || venta.total || 0
+      detalle.push({
+        cantidad: 1,
+        afecta_stock: "S",
+        actualiza_precio: "N",
+        bonificacion_porcentaje: 0,
+        producto: {
+          descripcion: "Venta general",
+          codigo: "0",
+          lista_precios: "standard",
+          leyenda: "",
+          unidad_bulto: 1,
+          alicuota: 21,
+          actualiza_precio: "N",
+          rg5329: "N",
+          precio_unitario_sin_iva: Number.parseFloat((totalAmount / 1.21).toFixed(2)),
+        },
+      })
+    }
+
+    // Calcular el total
+    const total = venta.totalAmount || venta.total || 0
 
     // Datos del comprobante
     const comprobante: TusFacturasComprobante = {
@@ -274,10 +364,10 @@ class TusFacturasService {
       fecha: fechaFormateada,
       vencimiento: vencimientoFormateado,
       rubro_grupo_contable: "Gastronomía",
-      total: venta.total_amount || venta.total,
+      total,
       cotizacion: 1,
       moneda: "PES", // Pesos argentinos
-      punto_venta: this.puntoVenta, // Usar el punto de venta configurado
+      punto_venta: this.getPuntoVentaFormateado(), // Usar el punto de venta formateado como string
       tributos: [], // Sin tributos adicionales
     }
 

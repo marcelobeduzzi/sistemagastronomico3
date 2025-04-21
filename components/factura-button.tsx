@@ -51,13 +51,25 @@ export function FacturaButton({ venta, onSuccess, className, variant = "outline"
       // Convertir la venta al formato de TusFacturas
       const { cliente, comprobante } = tusFacturasService.convertirVentaAFactura(venta)
 
+      // Mostrar los datos que se enviarán
+      console.log("Datos que se enviarán a TusFacturasAPP:", { cliente, comprobante })
+
       // Generar la factura
       const response = await tusFacturasService.generarFactura(cliente, comprobante)
+
+      // Mostrar la respuesta completa
+      console.log("Respuesta completa de TusFacturasAPP:", response)
 
       if (response.error) {
         setResult({
           success: false,
           message: `Error al generar factura: ${response.errores?.join(", ") || "Error desconocido"}`,
+        })
+
+        toast({
+          title: "Error al generar factura",
+          description: response.errores?.join(", ") || "Error desconocido",
+          variant: "destructive",
         })
       } else {
         setResult({
@@ -66,6 +78,11 @@ export function FacturaButton({ venta, onSuccess, className, variant = "outline"
             response.cae ? `CAE: ${response.cae}` : "Comprobante de prueba (sin CAE)"
           }`,
           data: response,
+        })
+
+        toast({
+          title: "Factura generada correctamente",
+          description: response.cae ? `CAE: ${response.cae}` : "Comprobante de prueba generado con éxito",
         })
 
         // Llamar al callback de éxito si existe
@@ -78,6 +95,12 @@ export function FacturaButton({ venta, onSuccess, className, variant = "outline"
       setResult({
         success: false,
         message: `Error: ${error instanceof Error ? error.message : "Error desconocido"}`,
+      })
+
+      toast({
+        title: "Error",
+        description: `Error al generar factura: ${error instanceof Error ? error.message : "Error desconocido"}`,
+        variant: "destructive",
       })
     } finally {
       setIsGenerating(false)
@@ -107,12 +130,13 @@ export function FacturaButton({ venta, onSuccess, className, variant = "outline"
                 <div>
                   <p className="text-sm font-medium">Cliente</p>
                   <p className="text-sm">
-                    {venta.cliente?.nombre || "Consumidor Final"} - {venta.cliente?.documento || ""}
+                    {venta.customerName || venta.cliente?.nombre || "Consumidor Final"} -{" "}
+                    {venta.customerDocument || venta.cliente?.documento || ""}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm font-medium">Total</p>
-                  <p className="text-sm font-bold">${(venta.total_amount || venta.total).toFixed(2)}</p>
+                  <p className="text-sm font-bold">${(venta.totalAmount || venta.total || 0).toFixed(2)}</p>
                 </div>
               </div>
 
