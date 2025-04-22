@@ -85,14 +85,14 @@ export interface TusFacturasResponse {
 }
 
 class TusFacturasService {
-  // Credenciales precargadas con los datos proporcionados
+  // Credenciales por defecto (se deben reemplazar con las reales)
   private credentials: TusFacturasCredentials = {
-    apitoken: "915b4a37bf2f23d66a28f90b04f695c0",
-    apikey: "67223",
-    usertoken: "3835ddfd15adf0df7b4af6153400613a40ca1091e0c7059166672395afbf2884",
+    apitoken: "",
+    apikey: "",
+    usertoken: "",
   }
 
-  // Cambiamos la URL de la API para usar nuestro proxy
+  // URL del proxy para evitar problemas de CORS
   private apiUrl = "/api/facturacion"
   private puntoVenta = 1 // Será formateado como "00001"
 
@@ -140,7 +140,7 @@ class TusFacturasService {
         }
       }
 
-      // Cargar credenciales (solo si no están ya configuradas)
+      // Cargar credenciales
       const savedCredentials = localStorage.getItem("tusfacturas_credentials")
       if (savedCredentials) {
         try {
@@ -190,7 +190,15 @@ class TusFacturasService {
     comprobante.punto_venta = this.getPuntoVentaFormateado()
 
     // Asegurarse de que los campos obligatorios estén presentes
-    if (!cliente.documento_nro) cliente.documento_nro = "0"
+    if (!cliente.documento_nro || cliente.documento_nro === "0") {
+      // Si es DNI, asegurarse de que sea un número válido
+      if (cliente.documento_tipo === "DNI") {
+        throw new Error("Para DNI, el número de documento debe ser mayor a cero")
+      }
+      // Si no es DNI, usar un valor por defecto
+      cliente.documento_nro = "0"
+    }
+
     if (!cliente.razon_social) cliente.razon_social = "Consumidor Final"
     if (!cliente.condicion_iva) cliente.condicion_iva = "CF"
     if (!cliente.documento_tipo) cliente.documento_tipo = "DNI"
@@ -263,6 +271,71 @@ class TusFacturasService {
   }
 
   /**
+   * Genera una factura de prueba para verificar la conexión
+   */
+  async generarFacturaPrueba(): Promise<TusFacturasResponse> {
+    // Cliente de prueba
+    const cliente: TusFacturasCliente = {
+      documento_tipo: "DNI",
+      condicion_iva: "CF", // Consumidor Final
+      domicilio: "Av. Test 123",
+      condicion_pago: "201", // Contado
+      documento_nro: "11111111", // Número válido para DNI
+      razon_social: "Cliente de Prueba",
+      provincia: "2", // Buenos Aires
+      email: "test@example.com",
+      envia_por_mail: "N",
+      rg5329: "N",
+    }
+
+    // Fecha actual en formato DD/MM/YYYY
+    const hoy = new Date()
+    const fechaFormateada = `${String(hoy.getDate()).padStart(2, "0")}/${String(hoy.getMonth() + 1).padStart(2, "0")}/${hoy.getFullYear()}`
+
+    // Fecha de vencimiento (30 días después)
+    const vencimiento = new Date(hoy)
+    vencimiento.setDate(vencimiento.getDate() + 30)
+    const vencimientoFormateado = `${String(vencimiento.getDate()).padStart(2, "0")}/${String(vencimiento.getMonth() + 1).padStart(2, "0")}/${vencimiento.getFullYear()}`
+
+    // Comprobante de prueba
+    const comprobante: TusFacturasComprobante = {
+      rubro: "Gastronomía",
+      tipo: "FACTURA B", // Por defecto Factura B
+      numero: 0, // El número lo asigna TusFacturas
+      operacion: "V", // Venta
+      detalle: [
+        {
+          cantidad: 1,
+          afecta_stock: "S",
+          actualiza_precio: "N",
+          bonificacion_porcentaje: 0,
+          producto: {
+            descripcion: "Producto de prueba",
+            codigo: "1",
+            lista_precios: "standard",
+            leyenda: "",
+            unidad_bulto: 1,
+            alicuota: 21, // IVA 21%
+            actualiza_precio: "N",
+            rg5329: "N",
+            precio_unitario_sin_iva: 100, // Precio sin IVA
+          },
+        },
+      ],
+      fecha: fechaFormateada,
+      vencimiento: vencimientoFormateado,
+      rubro_grupo_contable: "Gastronomía",
+      total: 121, // Precio con IVA
+      cotizacion: 1,
+      moneda: "PES", // Pesos argentinos
+      punto_venta: this.getPuntoVentaFormateado(),
+      tributos: [], // Sin tributos adicionales
+    }
+
+    return this.generarFactura(cliente, comprobante)
+  }
+
+  /**
    * Convierte una venta del sistema a formato TusFacturas
    */
   convertirVentaAFactura(venta: any): { cliente: TusFacturasCliente; comprobante: TusFacturasComprobante } {
@@ -279,7 +352,7 @@ class TusFacturasService {
 
     // Extraer información del cliente
     const customerName = venta.customerName || venta.cliente?.nombre || "Consumidor Final"
-    const customerDocument = venta.customerDocument || venta.cliente?.documento || "0"
+    const customerDocument = venta.customerDocument || venta.cliente?.documento || "11111111" // Valor por defecto válido
     const customerAddress = venta.customerAddress || venta.cliente?.direccion || "Sin dirección"
     const customerEmail = venta.customerEmail || venta.cliente?.email || ""
 
