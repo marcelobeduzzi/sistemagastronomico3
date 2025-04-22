@@ -1,13 +1,12 @@
-import { supabase } from "@/lib/db"
+import { getSupabase } from "@/lib/supabase"
 import type { Balance } from "@/types/balance"
 import { objectToCamelCase, objectToSnakeCase } from "@/lib/utils"
-import { getSupabase } from "@/lib/supabase"
 
 export class BalanceService {
   // Obtener balances con filtros
   async getBalances(filters: { year?: number; month?: number; local?: string } = {}) {
     try {
-      // Usar getSupabase() en lugar de verificar si supabase existe
+      // Usar getSupabase() para obtener el cliente inicializado
       const supabaseClient = getSupabase()
 
       let query = supabaseClient.from("balances").select("*")
@@ -42,7 +41,7 @@ export class BalanceService {
   // Obtener un balance por ID
   async getBalanceById(id: string) {
     try {
-      // Usar getSupabase() en lugar de verificar si supabase existe
+      // Usar getSupabase() para obtener el cliente inicializado
       const supabaseClient = getSupabase()
 
       const { data, error } = await supabaseClient.from("balances").select("*").eq("id", id).single()
@@ -80,7 +79,7 @@ export class BalanceService {
     serviciosData: any,
   ) {
     try {
-      // Usar getSupabase() en lugar de verificar si supabase existe
+      // Usar getSupabase() para obtener el cliente inicializado
       const supabaseClient = getSupabase()
 
       const now = new Date().toISOString()
@@ -177,10 +176,8 @@ export class BalanceService {
   // Actualizar un balance existente
   async updateBalance(id: string, balanceData: Partial<Balance>, serviciosData?: Partial<any>) {
     try {
-      if (!supabase) {
-        console.error("El cliente de Supabase no está disponible")
-        throw new Error("No se puede conectar a la base de datos")
-      }
+      // Usar getSupabase() para obtener el cliente inicializado
+      const supabaseClient = getSupabase()
 
       const now = new Date().toISOString()
 
@@ -191,7 +188,7 @@ export class BalanceService {
       }
 
       // Obtener los servicios actuales
-      const { data: currentServicios, error: serviciosError } = await supabase
+      const { data: currentServicios, error: serviciosError } = await supabaseClient
         .from("balance_servicios")
         .select("*")
         .eq("balance_id", id)
@@ -268,7 +265,7 @@ export class BalanceService {
       }
 
       // Actualizar balance
-      const { data: balanceActualizado, error: balanceError } = await supabase
+      const { data: balanceActualizado, error: balanceError } = await supabaseClient
         .from("balances")
         .update(completeBalanceData)
         .eq("id", id)
@@ -287,7 +284,7 @@ export class BalanceService {
 
         if (currentServicios) {
           // Actualizar servicios existentes
-          const { error: updateServiciosError } = await supabase
+          const { error: updateServiciosError } = await supabaseClient
             .from("balance_servicios")
             .update(completeServiciosData)
             .eq("id", currentServicios.id)
@@ -295,7 +292,7 @@ export class BalanceService {
           if (updateServiciosError) throw updateServiciosError
         } else {
           // Crear nuevo registro de servicios
-          const { error: createServiciosError } = await supabase.from("balance_servicios").insert([
+          const { error: createServiciosError } = await supabaseClient.from("balance_servicios").insert([
             {
               ...completeServiciosData,
               balance_id: id,
@@ -317,18 +314,16 @@ export class BalanceService {
   // Eliminar un balance
   async deleteBalance(id: string) {
     try {
-      if (!supabase) {
-        console.error("El cliente de Supabase no está disponible")
-        throw new Error("No se puede conectar a la base de datos")
-      }
+      // Usar getSupabase() para obtener el cliente inicializado
+      const supabaseClient = getSupabase()
 
       // Primero eliminar los servicios asociados
-      const { error: serviciosError } = await supabase.from("balance_servicios").delete().eq("balance_id", id)
+      const { error: serviciosError } = await supabaseClient.from("balance_servicios").delete().eq("balance_id", id)
 
       if (serviciosError) throw serviciosError
 
       // Luego eliminar el balance
-      const { error: balanceError } = await supabase.from("balances").delete().eq("id", id)
+      const { error: balanceError } = await supabaseClient.from("balances").delete().eq("id", id)
 
       if (balanceError) throw balanceError
 
@@ -342,7 +337,7 @@ export class BalanceService {
   // Obtener servicios de un balance
   async getBalanceServices(balanceId: string) {
     try {
-      // Usar getSupabase() en lugar de verificar si supabase existe
+      // Usar getSupabase() para obtener el cliente inicializado
       const supabaseClient = getSupabase()
 
       const { data, error } = await supabaseClient
