@@ -1,4 +1,4 @@
-import { getSupabase } from "@/lib/supabase"
+import { getSupabase } from "@/lib/db" // Cambiado de "@/lib/supabase" a "@/lib/db"
 import type { Balance } from "@/types/balance"
 import { objectToCamelCase, objectToSnakeCase } from "@/lib/utils"
 
