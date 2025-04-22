@@ -12,7 +12,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { CheckCircle, AlertCircle } from "lucide-react"
@@ -43,12 +42,19 @@ export function FacturaButton({ venta, onSuccess, className, variant = "outline"
   const [clienteData, setClienteData] = useState({
     documento_tipo: "DNI",
     condicion_iva: "CF", // Consumidor Final por defecto
-    documento_nro: venta.customerDocument || venta.cliente?.documento || "0",
+    documento_nro: venta.customerDocument || venta.cliente?.documento || "11111111",
     razon_social: venta.customerName || venta.cliente?.nombre || "Consumidor Final",
   })
 
   // Nuevo estado para el tipo de comprobante
   const [tipoComprobante, setTipoComprobante] = useState("FACTURA B")
+
+  // Función para abrir el diálogo
+  const handleOpenDialog = () => {
+    console.log("Abriendo diálogo de factura")
+    setDialogOpen(true)
+    setResult(null)
+  }
 
   const handleGenerarFactura = async () => {
     if (!tusFacturasService.hasCredentials()) {
@@ -144,13 +150,12 @@ export function FacturaButton({ venta, onSuccess, className, variant = "outline"
 
   return (
     <>
+      <Button variant={variant} className={className} onClick={handleOpenDialog}>
+        <Receipt className="mr-2 h-4 w-4" />
+        Generar Factura
+      </Button>
+
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogTrigger asChild>
-          <Button variant={variant} className={className} onClick={() => setResult(null)}>
-            <Receipt className="mr-2 h-4 w-4" />
-            Generar Factura
-          </Button>
-        </DialogTrigger>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Generar Factura Electrónica</DialogTitle>
