@@ -156,6 +156,7 @@ class TusFacturasService {
    * Verifica si las credenciales están configuradas
    */
   hasCredentials(): boolean {
+    console.log("Verificando credenciales:", this.credentials)
     return (
       this.credentials !== null &&
       this.credentials.apitoken !== "" &&
@@ -182,7 +183,9 @@ class TusFacturasService {
    * Genera una factura electrónica
    */
   async generarFactura(cliente: TusFacturasCliente, comprobante: TusFacturasComprobante): Promise<TusFacturasResponse> {
+    console.log("generarFactura - Inicio")
     if (!this.hasCredentials()) {
+      console.error("No se han configurado las credenciales para TusFacturasAPP")
       throw new Error("No se han configurado las credenciales para TusFacturasAPP")
     }
 
@@ -193,6 +196,7 @@ class TusFacturasService {
     if (!cliente.documento_nro || cliente.documento_nro === "0") {
       // Si es DNI, asegurarse de que sea un número válido
       if (cliente.documento_tipo === "DNI") {
+        console.error("Para DNI, el número de documento debe ser mayor a cero")
         throw new Error("Para DNI, el número de documento debe ser mayor a cero")
       }
       // Si no es DNI, usar un valor por defecto
@@ -225,6 +229,7 @@ class TusFacturasService {
     console.log("Datos de la solicitud:", JSON.stringify(requestData, null, 2))
 
     try {
+      console.log("Enviando solicitud a la API...")
       // Usar nuestro endpoint de proxy en lugar de llamar directamente a TusFacturas
       const response = await fetch(this.apiUrl, {
         method: "POST",
@@ -253,6 +258,7 @@ class TusFacturasService {
       }
 
       if (!response.ok) {
+        console.error("Respuesta no OK:", response.status, response.statusText)
         return {
           error: true,
           errores: [`Error en la solicitud: ${response.status} ${response.statusText}`],
@@ -339,6 +345,7 @@ class TusFacturasService {
    * Convierte una venta del sistema a formato TusFacturas
    */
   convertirVentaAFactura(venta: any): { cliente: TusFacturasCliente; comprobante: TusFacturasComprobante } {
+    console.log("convertirVentaAFactura - Inicio")
     console.log("Datos de venta recibidos:", venta)
 
     // Obtener la fecha actual en formato DD/MM/YYYY
@@ -446,6 +453,7 @@ class TusFacturasService {
       tributos: [], // Sin tributos adicionales
     }
 
+    console.log("convertirVentaAFactura - Fin")
     return { cliente, comprobante }
   }
 }

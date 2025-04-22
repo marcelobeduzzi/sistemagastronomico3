@@ -51,79 +51,97 @@ export function FacturaButton({ venta, onSuccess, className, variant = "outline"
 
   const handleGenerarFactura = async () => {
     console.log("Iniciando generación de factura")
-    if (!tusFacturasService.hasCredentials()) {
-      toast({
-        title: "Error",
-        description: "No se han configurado las credenciales para TusFacturasAPP. Vaya a Configuración > Facturación.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    // Validar que el número de documento sea válido cuando es DNI
-    if (clienteData.documento_tipo === "DNI" && (clienteData.documento_nro === "0" || !clienteData.documento_nro)) {
-      toast({
-        title: "Error de validación",
-        description: "Para DNI, el número de documento debe ser mayor a cero",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setIsGenerating(true)
-    setResult(null)
 
     try {
-      // Convertir la venta al formato de TusFacturas
-      const { cliente, comprobante } = tusFacturasService.convertirVentaAFactura(venta)
-
-      // Sobrescribir con los datos actualizados del cliente
-      cliente.documento_tipo = clienteData.documento_tipo
-      cliente.condicion_iva = clienteData.condicion_iva
-      cliente.documento_nro = clienteData.documento_nro
-      cliente.razon_social = clienteData.razon_social
-
-      // Sobrescribir el tipo de comprobante
-      comprobante.tipo = tipoComprobante
-
-      // Mostrar los datos que se enviarán
-      console.log("Datos que se enviarán a TusFacturasAPP:", { cliente, comprobante })
-
-      // Generar la factura
-      const response = await tusFacturasService.generarFactura(cliente, comprobante)
-
-      // Mostrar la respuesta completa
-      console.log("Respuesta completa de TusFacturasAPP:", response)
-
-      if (response.error) {
-        setResult({
-          success: false,
-          message: `Error al generar factura: ${response.errores?.join(", ") || "Error desconocido"}`,
-        })
-
+      console.log("Verificando credenciales...")
+      if (!tusFacturasService.hasCredentials()) {
+        console.error("No hay credenciales configuradas")
         toast({
-          title: "Error al generar factura",
-          description: response.errores?.join(", ") || "Error desconocido",
+          title: "Error",
+          description:
+            "No se han configurado las credenciales para TusFacturasAPP. Vaya a Configuración > Facturación.",
           variant: "destructive",
         })
-      } else {
-        setResult({
-          success: true,
-          message: `Factura generada correctamente. ${
-            response.cae ? `CAE: ${response.cae}` : "Comprobante de prueba (sin CAE)"
-          }`,
-          data: response,
-        })
+        return
+      }
 
+      // Validar que el número de documento sea válido cuando es DNI
+      console.log("Validando documento:", clienteData)
+      if (clienteData.documento_tipo === "DNI" && (clienteData.documento_nro === "0" || !clienteData.documento_nro)) {
+        console.error("Documento inválido para DNI")
         toast({
-          title: "Factura generada correctamente",
-          description: response.cae ? `CAE: ${response.cae}` : "Comprobante de prueba generado con éxito",
+          title: "Error de validación",
+          description: "Para DNI, el número de documento debe ser mayor a cero",
+          variant: "destructive",
         })
+        return
+      }
 
-        // Llamar al callback de éxito si existe
-        if (onSuccess) {
-          onSuccess(response)
+      setIsGenerating(true)
+      setResult(null)
+
+      console.log("Convirtiendo venta a formato TusFacturas...")
+      console.log("Datos de venta:", venta)
+
+      try {
+        // Convertir la venta al formato de TusFacturas
+        const { cliente, comprobante } = tusFacturasService.convertirVentaAFactura(venta)
+
+        // Sobrescribir con los datos actualizados del cliente
+        cliente.documento_tipo = clienteData.documento_tipo
+        cliente.condicion_iva = clienteData.condicion_iva
+        cliente.documento_nro = clienteData.documento_nro
+        cliente.razon_social = clienteData.razon_social
+
+        // Sobrescribir el tipo de comprobante
+        comprobante.tipo = tipoComprobante
+
+        // Mostrar los datos que se enviarán
+        console.log("Datos que se enviarán a TusFacturasAPP:", { cliente, comprobante })
+
+        console.log("Enviando solicitud a TusFacturasAPP...")
+        // Generar la factura
+        const response = await tusFacturasService.generarFactura(cliente, comprobante)
+
+        // Mostrar la respuesta completa
+        console.log("Respuesta completa de TusFacturasAPP:", response)
+
+        if (response.error) {
+          console.error("Error en la respuesta:", response.errores)
+          setResult({
+            success: false,
+            message: `Error al generar factura: ${response.errores?.join(", ") || "Error desconocido"}`,
+          })
+
+          toast({
+            title: "Error al generar factura",
+            description: response.errores?.join(", ") || "Error desconocido",
+            variant: "destructive",
+          })
+        } else {
+          console.log("Factura generada correctamente:", response)
+          setResult({
+            success: true,
+            message: `Factura generada correctamente. ${
+              response.cae ? `CAE: ${response.cae}` : "Comprobante de prueba (sin CAE)"
+            }`,
+            data: response,
+          })
+
+          toast({
+            title: "Factura generada correctamente",
+            description: response.cae ? `CAE: ${response.cae}` : "Comprobante de prueba generado con éxito",
+          })
+
+          // Llamar al callback de éxito si existe
+          if (onSuccess) {
+            console.log("Llamando al callback de éxito")
+            onSuccess(response)
+          }
         }
+      } catch (conversionError) {
+        console.error("Error al convertir venta:", conversionError)
+        throw conversionError
       }
     } catch (error) {
       console.error("Error al generar factura:", error)
@@ -138,6 +156,7 @@ export function FacturaButton({ venta, onSuccess, className, variant = "outline"
         variant: "destructive",
       })
     } finally {
+      console.log("Finalizando generación de factura")
       setIsGenerating(false)
     }
   }
