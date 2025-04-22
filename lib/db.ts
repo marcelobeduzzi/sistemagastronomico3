@@ -11,6 +11,11 @@ interface AttendanceType {
 class DatabaseService {
   private supabase = createClientComponentClient()
 
+  // Método para obtener el cliente de Supabase (AÑADIDO)
+  getSupabase() {
+    return this.supabase
+  }
+
   // User methods
   async getUserByEmail(email: string) {
     const { data, error } = await this.supabase.from("users").select("*").eq("email", email).single()
@@ -119,15 +124,15 @@ class DatabaseService {
 
       // Eliminar el id del objeto de datos para evitar conflictos
       if (updateData.id) {
-        delete updateData.id;
+        delete updateData.id
       }
 
-      console.log("Actualizando empleado con ID:", id, "Datos:", updateData);
+      console.log("Actualizando empleado con ID:", id, "Datos:", updateData)
 
       const { data, error } = await this.supabase
         .from("employees")
         .update(updateData)
-        .eq("id", id)  // Usar el ID como parámetro separado
+        .eq("id", id) // Usar el ID como parámetro separado
         .select()
         .single()
 
@@ -1566,6 +1571,7 @@ class DatabaseService {
           name: "Facturación por Local",
           data: {
             labels: ["BR Cabildo", "BR Carranza", "BR Pacifico", "BR Lavalle", "BR Rivadavia"],
+            datasets: ["BR Carranza", "BR Pacifico", "BR Lavalle", "BR Rivadavia"],
             datasets: [
               {
                 label: "Ventas Mensuales",
@@ -1908,6 +1914,9 @@ function calculateExpectedWorkday(expectedCheckIn: string, expectedCheckOut: str
 
 // Crear una instancia del servicio
 const dbService = new DatabaseService()
+
+// Exportar la función getSupabase (AÑADIDO)
+export const getSupabase = () => dbService.getSupabase()
 
 // Crear un objeto que imita la estructura de Prisma pero usa dbService internamente
 export const db = {
