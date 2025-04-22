@@ -87,14 +87,15 @@ export interface TusFacturasResponse {
 class TusFacturasService {
   // Credenciales por defecto (se deben reemplazar con las reales)
   private credentials: TusFacturasCredentials = {
-    apitoken: "",
-    apikey: "",
-    usertoken: "",
+    apitoken: "915b4a37bf2f23d66a28f90b04f695c0",
+    apikey: "67223",
+    usertoken: "3835ddfd15adf0df7b4af6153400613a40ca1091e0c7059166672395afbf2884",
   }
 
   // URL del proxy para evitar problemas de CORS
   private apiUrl = "/api/facturacion"
   private puntoVenta = 1 // Será formateado como "00001"
+  private webhookToken = "f4d4396fc72399554b81235603acb2fa595cb9dea8a357b4d7fffce6263d3012"
 
   constructor() {
     // Intentar cargar credenciales desde localStorage al inicializar

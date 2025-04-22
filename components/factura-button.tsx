@@ -41,6 +41,9 @@ export function FacturaButton({ venta, onSuccess, className, variant = "outline"
   } | null>(null)
   const [showCredentialsError, setShowCredentialsError] = useState(false)
 
+  // Verificar credenciales al cargar el componente
+  console.log("FacturaButton - Credenciales actuales:", tusFacturasService.getCredentials())
+
   // Nuevos estados para los datos del cliente
   const [clienteData, setClienteData] = useState({
     documento_tipo: "DNI",
