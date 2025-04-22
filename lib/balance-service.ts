@@ -1,17 +1,16 @@
 import { supabase } from "@/lib/db"
 import type { Balance } from "@/types/balance"
 import { objectToCamelCase, objectToSnakeCase } from "@/lib/utils"
+import { getSupabase } from "@/lib/supabase"
 
 export class BalanceService {
   // Obtener balances con filtros
   async getBalances(filters: { year?: number; month?: number; local?: string } = {}) {
     try {
-      if (!supabase) {
-        console.error("El cliente de Supabase no está disponible")
-        return []
-      }
+      // Usar getSupabase() en lugar de verificar si supabase existe
+      const supabaseClient = getSupabase()
 
-      let query = supabase.from("balances").select("*")
+      let query = supabaseClient.from("balances").select("*")
 
       // Aplicar filtros
       if (filters.year) {
@@ -43,17 +42,15 @@ export class BalanceService {
   // Obtener un balance por ID
   async getBalanceById(id: string) {
     try {
-      if (!supabase) {
-        console.error("El cliente de Supabase no está disponible")
-        return null
-      }
+      // Usar getSupabase() en lugar de verificar si supabase existe
+      const supabaseClient = getSupabase()
 
-      const { data, error } = await supabase.from("balances").select("*").eq("id", id).single()
+      const { data, error } = await supabaseClient.from("balances").select("*").eq("id", id).single()
 
       if (error) throw error
 
       // Obtener los servicios asociados a este balance
-      const { data: serviciosData, error: serviciosError } = await supabase
+      const { data: serviciosData, error: serviciosError } = await supabaseClient
         .from("balance_servicios")
         .select("*")
         .eq("balance_id", id)
@@ -83,10 +80,8 @@ export class BalanceService {
     serviciosData: any,
   ) {
     try {
-      if (!supabase) {
-        console.error("El cliente de Supabase no está disponible")
-        throw new Error("No se puede conectar a la base de datos")
-      }
+      // Usar getSupabase() en lugar de verificar si supabase existe
+      const supabaseClient = getSupabase()
 
       const now = new Date().toISOString()
 
@@ -148,7 +143,7 @@ export class BalanceService {
       }
 
       // Insertar balance
-      const { data: balanceInsertado, error: balanceError } = await supabase
+      const { data: balanceInsertado, error: balanceError } = await supabaseClient
         .from("balances")
         .insert([objectToSnakeCase(completeBalanceData)])
         .select()
@@ -166,7 +161,7 @@ export class BalanceService {
       }
 
       // Insertar servicios
-      const { error: serviciosError } = await supabase
+      const { error: serviciosError } = await supabaseClient
         .from("balance_servicios")
         .insert([objectToSnakeCase(completeServiciosData)])
 
@@ -347,12 +342,14 @@ export class BalanceService {
   // Obtener servicios de un balance
   async getBalanceServices(balanceId: string) {
     try {
-      if (!supabase) {
-        console.error("El cliente de Supabase no está disponible")
-        return null
-      }
+      // Usar getSupabase() en lugar de verificar si supabase existe
+      const supabaseClient = getSupabase()
 
-      const { data, error } = await supabase.from("balance_servicios").select("*").eq("balance_id", balanceId).single()
+      const { data, error } = await supabaseClient
+        .from("balance_servicios")
+        .select("*")
+        .eq("balance_id", balanceId)
+        .single()
 
       if (error) {
         if (error.code === "PGRST116") {

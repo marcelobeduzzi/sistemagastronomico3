@@ -308,66 +308,71 @@ export default function BalancesPage() {
       setIsSaving(true)
 
       // Crear nuevo balance
-      const createdBalance = await balanceService.createBalance(newBalance, newServices)
+      try {
+        const createdBalance = await balanceService.createBalance(newBalance, newServices)
 
-      // Actualizar la lista de balances
-      setBalances((prev) => [...prev, createdBalance])
+        // Actualizar la lista de balances
+        setBalances((prev) => [...prev, createdBalance])
 
-      // Mostrar mensaje de éxito
-      toast({
-        title: "Balance creado",
-        description: "El balance ha sido registrado correctamente",
-      })
+        // Mostrar mensaje de éxito
+        toast({
+          title: "Balance creado",
+          description: "El balance ha sido registrado correctamente",
+        })
 
-      // Cerrar el diálogo y resetear el formulario
-      setIsDialogOpen(false)
-      setNewBalance({
-        localId: "",
-        local: "BR Cabildo",
-        month: new Date().getMonth() + 1,
-        year: new Date().getFullYear(),
-        ventasRappi: 0,
-        ventasPedidosYa: 0,
-        ventasDebitoCreditoQR: 0,
-        ventasEfectivo: 0,
-        cmv: 0,
-        desperdicio: 0,
-        consumos: 0,
-        contribucionMarginal: 0,
-        fee: 0,
-        alquiler: 0,
-        sueldos: 0,
-        gastos: 0,
-        ebit: 0,
-        iva: 0,
-        iibb: 0,
-        ccss: 0,
-        tarjeta: 0,
-      })
+        // Cerrar el diálogo y resetear el formulario
+        setIsDialogOpen(false)
+        setNewBalance({
+          localId: "",
+          local: "BR Cabildo",
+          month: new Date().getMonth() + 1,
+          year: new Date().getFullYear(),
+          ventasRappi: 0,
+          ventasPedidosYa: 0,
+          ventasDebitoCreditoQR: 0,
+          ventasEfectivo: 0,
+          cmv: 0,
+          desperdicio: 0,
+          consumos: 0,
+          contribucionMarginal: 0,
+          fee: 0,
+          alquiler: 0,
+          sueldos: 0,
+          gastos: 0,
+          ebit: 0,
+          iva: 0,
+          iibb: 0,
+          ccss: 0,
+          tarjeta: 0,
+        })
 
-      setNewServices({
-        prosegur: 0,
-        internet: 0,
-        seguro: 0,
-        desinfectacion: 0,
-        edenor: 0,
-        metrogas: 0,
-        abl: 0,
-        expensas: 0,
-        autonomo: 0,
-        abogado: 0,
-        contador: 0,
-        datalive: 0,
-        payway: 0,
-        personal: 0,
-      })
-    } catch (error) {
-      console.error("Error al crear balance:", error)
-      toast({
-        title: "Error",
-        description: "No se pudo registrar el balance. Por favor, intente nuevamente.",
-        variant: "destructive",
-      })
+        setNewServices({
+          prosegur: 0,
+          internet: 0,
+          seguro: 0,
+          desinfectacion: 0,
+          edenor: 0,
+          metrogas: 0,
+          abl: 0,
+          expensas: 0,
+          autonomo: 0,
+          abogado: 0,
+          contador: 0,
+          datalive: 0,
+          payway: 0,
+          personal: 0,
+        })
+      } catch (error) {
+        console.error("Error al crear balance:", error)
+        toast({
+          title: "Error",
+          description:
+            error instanceof Error
+              ? `Error al registrar el balance: ${error.message}`
+              : "No se pudo registrar el balance. Por favor, intente nuevamente.",
+          variant: "destructive",
+        })
+      }
     } finally {
       setIsSaving(false)
     }
