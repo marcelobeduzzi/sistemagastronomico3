@@ -1,4 +1,4 @@
-export interface BalanceService {
+export interface BalanceServicios {
   id?: string
   balanceId: string
   prosegur: number
@@ -30,7 +30,7 @@ export interface Balance {
   // Ingresos
   ventasRappi: number
   ventasPedidosYa: number
-  ventasDebitoCreditoQR: number
+  ventasDebitoCreditoQR: number // Con QR en mayúsculas
   ventasEfectivo: number
 
   // Costos y gastos

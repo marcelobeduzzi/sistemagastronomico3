@@ -88,7 +88,7 @@ export class BalanceService {
       const totalIngresos =
         balanceData.ventasRappi +
         balanceData.ventasPedidosYa +
-        balanceData.ventasDebitoCreditoQR +
+        balanceData.ventasDebitoCreditoQR + // Corregido: ventasDebitoCreditoQR con QR en mayúsculas
         balanceData.ventasEfectivo
 
       // Calcular porcentajes
@@ -208,7 +208,7 @@ export class BalanceService {
       const totalIngresos =
         updatedBalance.ventasRappi +
         updatedBalance.ventasPedidosYa +
-        updatedBalance.ventasDebitoCreditoQR +
+        updatedBalance.ventasDebitoCreditoQR + // Corregido: ventasDebitoCreditoQR con QR en mayúsculas
         updatedBalance.ventasEfectivo
 
       // Calcular porcentajes

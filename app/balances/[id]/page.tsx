@@ -7,16 +7,16 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { balanceService } from "@/lib/balance-service"
-import type { Balance, BalanceService } from "@/types/balance"
+import type { Balance, BalanceServicios } from "@/types/balance"
 import { ArrowLeft, Download, Printer, TrendingUp, TrendingDown } from "lucide-react"
-import { useToast } from "@/components/ui/use-toast"
+import { useToast } from "@/hooks/use-toast"
 
 export default function BalanceDetailPage({ params }: { params: { id: string } }) {
   const { id } = params
   const router = useRouter()
   const { toast } = useToast()
   const [balance, setBalance] = useState<Balance | null>(null)
-  const [services, setServices] = useState<BalanceService | null>(null)
+  const [services, setServices] = useState<BalanceServicios | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
