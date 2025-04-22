@@ -31,7 +31,7 @@ interface FacturaButtonProps {
 export function FacturaButton({ venta, onSuccess, className, variant = "outline" }: FacturaButtonProps) {
   const { toast } = useToast()
   const [isGenerating, setIsGenerating] = useState(false)
-  const [dialogOpen, setDialogOpen] = useState(false)
+  const [open, setOpen] = useState(false)
   const [result, setResult] = useState<{
     success: boolean
     message: string
@@ -49,14 +49,8 @@ export function FacturaButton({ venta, onSuccess, className, variant = "outline"
   // Nuevo estado para el tipo de comprobante
   const [tipoComprobante, setTipoComprobante] = useState("FACTURA B")
 
-  // Función para abrir el diálogo
-  const handleOpenDialog = () => {
-    console.log("Abriendo diálogo de factura")
-    setDialogOpen(true)
-    setResult(null)
-  }
-
   const handleGenerarFactura = async () => {
+    console.log("Iniciando generación de factura")
     if (!tusFacturasService.hasCredentials()) {
       toast({
         title: "Error",
@@ -150,12 +144,22 @@ export function FacturaButton({ venta, onSuccess, className, variant = "outline"
 
   return (
     <>
-      <Button variant={variant} className={className} onClick={handleOpenDialog}>
+      {/* Botón simple que abre el diálogo */}
+      <Button
+        variant={variant}
+        className={className}
+        onClick={() => {
+          console.log("Botón Generar Factura clickeado")
+          setOpen(true)
+          setResult(null)
+        }}
+      >
         <Receipt className="mr-2 h-4 w-4" />
         Generar Factura
       </Button>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {/* Diálogo separado */}
+      <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Generar Factura Electrónica</DialogTitle>
@@ -279,7 +283,7 @@ export function FacturaButton({ venta, onSuccess, className, variant = "outline"
           </div>
 
           <DialogFooter className="flex justify-between">
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setOpen(false)}>
               Cerrar
             </Button>
             {!result?.success ? (
