@@ -1,33 +1,41 @@
+// lib/supabase.ts
 import { createClient } from "@supabase/supabase-js"
+import { supabaseConfig } from "./supabase-config"
 
-// Make sure these environment variables are properly set
+// Ensure environment variables are properly set
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-if (!supabaseUrl || !supabaseKey) {
-  console.error("Missing Supabase environment variables")
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error("Missing Supabase environment variables")
 }
 
-export const supabase = createClient(supabaseUrl!, supabaseKey!, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-  },
+// Create a Supabase client with the anonymous key for client-side operations
+// Aplicamos la configuración centralizada
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: supabaseConfig.auth,
+  global: supabaseConfig.global
 })
 
-// Test function to verify connection
-export async function testConnection() {
-  try {
-    const { data, error } = await supabase.from("users").select("count").single()
-    if (error) {
-      console.error("Connection error:", error.message)
-      return false
-    }
-    console.log("Successfully connected to Supabase!")
-    return true
-  } catch (err) {
-    console.error("Error testing connection:", err)
-    return false
-  }
-}
+// Create a Supabase admin client with the service role key for server-side operations
+export const supabaseAdmin = supabaseServiceKey
+  ? createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    })
+  : supabase
 
+// Helper function to get the Supabase client
+export const getSupabase = () => supabase
+
+// Inicializar listener para debugging de eventos de autenticación (solo en cliente)
+if (typeof window !== 'undefined') {
+  supabase.auth.onAuthStateChange((event, session) => {
+    console.log(`Auth event: ${event}`, session ? 
+      `User: ${session.user?.email}, Expires: ${new Date(session.expires_at! * 1000).toLocaleString()}` : 
+      'No session')
+  })
+}
