@@ -13,6 +13,7 @@ class SessionManager {
   private refreshAttempts: number = 0
   private currentSession: Session | null = null
   private initialized: boolean = false
+  private userMetadata: any = null
   
   private constructor() {
     // Inicializar solo en el cliente
@@ -30,6 +31,7 @@ class SessionManager {
           this.currentSession = session
           this.refreshAttempts = 0
           this.scheduleTokenRefresh(session)
+          this.loadUserMetadata(session.user.id)
         } else if (event === 'TOKEN_REFRESHED') {
           console.log('Session refreshed successfully')
           this.currentSession = session
@@ -38,6 +40,7 @@ class SessionManager {
         } else if (event === 'SIGNED_OUT') {
           console.log('Usuario ha cerrado sesión')
           this.currentSession = null
+          this.userMetadata = null
           this.clearRefreshTimeout()
         }
       })
@@ -62,6 +65,7 @@ class SessionManager {
       if (data.session) {
         console.log(`Sesión existente encontrada para ${data.session.user.email}`)
         this.scheduleTokenRefresh(data.session)
+        await this.loadUserMetadata(data.session.user.id)
       } else {
         console.log('No hay sesión activa')
       }
@@ -69,6 +73,31 @@ class SessionManager {
       this.initialized = true
     } catch (error) {
       console.error('Error al inicializar sesión:', error)
+    }
+  }
+  
+  private async loadUserMetadata(userId: string) {
+    try {
+      console.log(`Cargando metadatos para usuario ${userId}`)
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single()
+      
+      if (error) {
+        console.error('Error al cargar metadatos de usuario:', error)
+        return
+      }
+      
+      if (data) {
+        console.log('Metadatos de usuario cargados:', data)
+        this.userMetadata = data
+      } else {
+        console.log('No se encontraron metadatos para el usuario')
+      }
+    } catch (error) {
+      console.error('Error al cargar metadatos de usuario:', error)
     }
   }
   
@@ -170,6 +199,7 @@ class SessionManager {
       
       if (this.currentSession) {
         this.scheduleTokenRefresh(this.currentSession)
+        await this.loadUserMetadata(this.currentSession.user.id)
       }
     }
     
@@ -179,6 +209,23 @@ class SessionManager {
   public async getUser(): Promise<User | null> {
     const session = await this.getSession()
     return session?.user || null
+  }
+  
+  public async getUserWithMetadata(): Promise<any> {
+    const user = await this.getUser()
+    
+    if (!user) return null
+    
+    // Si no tenemos metadatos, intentar cargarlos
+    if (!this.userMetadata) {
+      await this.loadUserMetadata(user.id)
+    }
+    
+    // Combinar usuario con metadatos
+    return {
+      ...user,
+      ...this.userMetadata
+    }
   }
   
   public async login(email: string, password: string) {
@@ -198,6 +245,7 @@ class SessionManager {
       this.currentSession = data.session
       this.refreshAttempts = 0
       this.scheduleTokenRefresh(data.session)
+      await this.loadUserMetadata(data.user.id)
       
       return { success: true, data }
     } catch (error: any) {
@@ -211,6 +259,7 @@ class SessionManager {
     try {
       await supabase.auth.signOut()
       this.currentSession = null
+      this.userMetadata = null
       console.log('Logout exitoso')
       return { success: true }
     } catch (error: any) {
@@ -221,6 +270,10 @@ class SessionManager {
   
   public isAuthenticated(): boolean {
     return !!this.currentSession
+  }
+  
+  public getUserMetadata(): any {
+    return this.userMetadata
   }
 }
 

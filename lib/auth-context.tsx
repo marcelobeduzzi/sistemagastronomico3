@@ -1,3 +1,4 @@
+// lib/auth-context.tsx
 "use client"
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
@@ -5,6 +6,7 @@ import { useRouter, usePathname } from "next/navigation"
 import { supabase } from "./supabase/client"
 import { supervisorService, type SupervisorWithPin } from "./supervisor-service"
 import type { User } from "@/types/auth"
+import { sessionManager } from "./session-manager"
 
 // Extender el tipo AuthContextType para incluir las nuevas funciones
 type AuthContextType = {
@@ -40,6 +42,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Función para refrescar la sesión
   const refreshSession = async () => {
     try {
+      // Primero intentar con el sessionManager
+      const sessionResult = await sessionManager.refreshSession()
+      
+      if (sessionResult.success) {
+        console.log("Session refreshed successfully with sessionManager")
+        return true
+      }
+      
+      // Si falla o no está disponible, usar el método original
       const { data, error } = await supabase.auth.refreshSession()
       if (error) {
         console.error("Error refreshing session:", error)
@@ -47,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (data.session) {
-        console.log("Session refreshed successfully")
+        console.log("Session refreshed successfully with Supabase")
         return true
       } else {
         console.log("No session to refresh")
@@ -81,26 +92,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const checkSession = async () => {
       try {
-        // Obtener sesión actual
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-
-        if (session?.user) {
-          console.log("Sesión encontrada:", session.user.email)
-
-          // Simplificamos para reducir la seguridad - creamos un usuario básico
-          const userData = {
-            id: session.user.id,
-            email: session.user.email || "",
-            name: session.user.email?.split("@")[0] || "Usuario",
-            role: "admin", // Asignamos rol admin por defecto
+        // Intentar obtener la sesión con el sessionManager primero
+        const sessionResult = await sessionManager.getSession()
+        
+        if (sessionResult.session) {
+          console.log("Sesión encontrada con sessionManager:", sessionResult.session.user?.email)
+          
+          // Obtener el usuario con metadatos
+          const userData = await sessionManager.getUserWithMetadata()
+          
+          if (userData) {
+            setUser(userData as User)
+          } else {
+            // Fallback a la creación básica de usuario
+            const basicUserData = {
+              id: sessionResult.session.user?.id || "",
+              email: sessionResult.session.user?.email || "",
+              name: sessionResult.session.user?.email?.split("@")[0] || "Usuario",
+              role: "admin", // Asignamos rol admin por defecto
+            }
+            
+            setUser(basicUserData as User)
           }
-
-          setUser(userData as User)
         } else {
-          console.log("No hay sesión activa")
-          setUser(null)
+          // Fallback al método original con Supabase
+          const {
+            data: { session },
+          } = await supabase.auth.getSession()
+
+          if (session?.user) {
+            console.log("Sesión encontrada con Supabase:", session.user.email)
+
+            // Simplificamos para reducir la seguridad - creamos un usuario básico
+            const userData = {
+              id: session.user.id,
+              email: session.user.email || "",
+              name: session.user.email?.split("@")[0] || "Usuario",
+              role: "admin", // Asignamos rol admin por defecto
+            }
+
+            setUser(userData as User)
+          } else {
+            console.log("No hay sesión activa")
+            setUser(null)
+          }
         }
       } catch (err: any) {
         console.error("Session check error:", err)
@@ -167,7 +202,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user])
 
-  // Función de login simplificada
+  // Función de login
   const login = async (email: string, password: string) => {
     try {
       setIsLoading(true)
@@ -175,31 +210,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       console.log("Intentando iniciar sesión con:", email)
 
-      // Iniciar sesión con Supabase
+      // Primero intentar con el sessionManager
+      const loginResult = await sessionManager.login(email, password)
+      
+      if (!loginResult.success) {
+        console.error("Error de inicio de sesión con sessionManager:", loginResult.error)
+        throw new Error(loginResult.error || "Error al iniciar sesión")
+      }
+      
+      console.log("Login exitoso con sessionManager")
+      
+      // También iniciar sesión con Supabase para mantener compatibilidad
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
       if (signInError) {
-        console.error("Error de inicio de sesión:", signInError)
-        throw signInError
+        console.error("Error de inicio de sesión con Supabase:", signInError)
+        // No lanzamos error aquí porque ya tenemos una sesión con sessionManager
       }
 
-      console.log("Login exitoso:", data)
-
-      if (data.user) {
-        // Simplificamos para reducir la seguridad
-        const userData = {
+      // Obtener el usuario con metadatos del sessionManager
+      const userData = await sessionManager.getUserWithMetadata()
+      
+      if (userData) {
+        setUser(userData as User)
+      } else if (data?.user) {
+        // Fallback a la creación básica de usuario con datos de Supabase
+        const basicUserData = {
           id: data.user.id,
           email: data.user.email || "",
           name: data.user.email?.split("@")[0] || "Usuario",
           role: "admin", // Asignamos rol admin por defecto
         }
-
-        setUser(userData as User)
-        router.push("/")
+        
+        setUser(basicUserData as User)
       }
+      
+      router.push("/")
     } catch (err: any) {
       console.error("Login error:", err)
       setError(err.message || "Error al iniciar sesión")
@@ -213,7 +262,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     try {
       setIsLoading(true)
+      
+      // Primero intentar con el sessionManager
+      await sessionManager.logout()
+      
+      // También cerrar sesión con Supabase para mantener compatibilidad
       await supabase.auth.signOut()
+      
       setUser(null)
       router.push("/login")
     } catch (err: any) {
@@ -324,9 +379,3 @@ export function useAuth() {
 
 // Importar mockUsers para poder agregar nuevos supervisores
 import { mockUsers } from "@/lib/mock-data"
-
-
-
-
-
-

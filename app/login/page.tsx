@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Eye, EyeOff, AlertCircle } from 'lucide-react'
+import { sessionManager } from "@/lib/session-manager"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -27,7 +28,18 @@ export default function LoginPage() {
     try {
       setIsSubmitting(true)
       console.log("Intentando iniciar sesión usando el contexto")
+      
+      // Usar el sessionManager para iniciar sesión
+      const result = await sessionManager.login(email, password)
+      
+      if (!result.success) {
+        setError(result.error || "Error al iniciar sesión")
+        return
+      }
+      
+      // También llamar al login del contexto para mantener compatibilidad
       await login(email, password)
+      
       // No es necesario redirigir aquí, el contexto lo hará
     } catch (err: any) {
       console.error("Error en el componente de login:", err)

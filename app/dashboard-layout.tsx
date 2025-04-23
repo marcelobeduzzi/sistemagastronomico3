@@ -12,6 +12,7 @@ import { useAuth } from "@/lib/auth-context"
 import { Header } from "@/components/header"
 import { LoadingSpinner } from "@/components/loading-spinner"
 import { SessionRefreshHandler } from "@/components/session-refresh-handler"
+import { sessionManager } from "@/lib/session-manager"
 
 interface NavItem {
   title: string
@@ -132,8 +133,14 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
   useEffect(() => {
     const loadUserData = async () => {
       try {
-        await refreshSession()
+        // Usar el sessionManager para refrescar la sesión
+        await sessionManager.getSession()
         console.log("Session refreshed")
+        
+        // También llamar al refreshSession del contexto para mantener compatibilidad
+        if (refreshSession) {
+          await refreshSession()
+        }
       } catch (error) {
         console.error("Error refreshing session:", error)
       }
@@ -377,8 +384,12 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
     setOpenSubmenu((prev) => (prev === title ? null : title))
   }, [])
 
-  const handleLogout = useCallback(() => {
+  const handleLogout = useCallback(async () => {
     try {
+      // Usar el sessionManager para cerrar sesión
+      await sessionManager.logout()
+      
+      // También llamar al logout del contexto para mantener compatibilidad
       logout()
     } catch (error) {
       console.error("Error during logout:", error)
