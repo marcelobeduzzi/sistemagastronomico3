@@ -1,10 +1,9 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { useAuth } from "@/lib/auth-context"
+import { supabase } from "@/lib/supabase/client"
 
 export function SessionRefreshHandler() {
-  const { refreshSession } = useAuth()
   const lastRefreshTime = useRef<number>(Date.now())
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -17,9 +16,14 @@ export function SessionRefreshHandler() {
       // Solo refrescar si han pasado al menos 10 minutos desde el último refresco
       if (timeSinceLastRefresh >= 10 * 60 * 1000) {
         try {
-          await refreshSession()
-          console.log("Session refreshed successfully")
-          lastRefreshTime.current = Date.now()
+          const { data, error } = await supabase.auth.refreshSession()
+          
+          if (error) {
+            console.error("Error refreshing session:", error)
+          } else {
+            console.log("Session refreshed successfully")
+            lastRefreshTime.current = Date.now()
+          }
         } catch (error) {
           console.error("Error refreshing session:", error)
         }
@@ -47,7 +51,7 @@ export function SessionRefreshHandler() {
         clearTimeout(refreshTimeoutRef.current)
       }
     }
-  }, [refreshSession])
+  }, [])
 
   return null
 }

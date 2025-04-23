@@ -1,5 +1,5 @@
 // lib/session-manager.ts
-import { supabase } from './supabase'
+import { supabase } from './supabase/client'
 import { supabaseConfig } from './supabase-config'
 import { Session, User } from '@supabase/supabase-js'
 
@@ -79,25 +79,51 @@ class SessionManager {
   private async loadUserMetadata(userId: string) {
     try {
       console.log(`Cargando metadatos para usuario ${userId}`)
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single()
       
-      if (error) {
+      // Primero intentamos obtener los metadatos de la tabla users
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', userId)
+          .single()
+        
+        if (error) {
+          console.error('Error al cargar metadatos de usuario:', error)
+          // Si hay error, creamos metadatos básicos con rol admin
+          this.userMetadata = {
+            id: userId,
+            role: 'admin' // Asignar rol admin por defecto
+          }
+          return
+        }
+        
+        if (data) {
+          console.log('Metadatos de usuario cargados:', data)
+          this.userMetadata = data
+        } else {
+          console.log('No se encontraron metadatos para el usuario')
+          // Si no hay datos, creamos metadatos básicos con rol admin
+          this.userMetadata = {
+            id: userId,
+            role: 'admin' // Asignar rol admin por defecto
+          }
+        }
+      } catch (error) {
         console.error('Error al cargar metadatos de usuario:', error)
-        return
-      }
-      
-      if (data) {
-        console.log('Metadatos de usuario cargados:', data)
-        this.userMetadata = data
-      } else {
-        console.log('No se encontraron metadatos para el usuario')
+        // Si hay excepción, creamos metadatos básicos con rol admin
+        this.userMetadata = {
+          id: userId,
+          role: 'admin' // Asignar rol admin por defecto
+        }
       }
     } catch (error) {
       console.error('Error al cargar metadatos de usuario:', error)
+      // Si hay excepción general, creamos metadatos básicos con rol admin
+      this.userMetadata = {
+        id: userId,
+        role: 'admin' // Asignar rol admin por defecto
+      }
     }
   }
   
@@ -187,28 +213,60 @@ class SessionManager {
   }
   
   // Métodos públicos
-  public async getSession(): Promise<Session | null> {
-    if (!this.initialized) {
-      await this.initSession()
+  public async getSession(): Promise<{ success: boolean, session: Session | null, error?: string }> {
+    try {
+      if (!this.initialized) {
+        await this.initSession()
+      }
+      
+      if (!this.currentSession) {
+        // Intentar obtener la sesión actual de Supabase
+        const { data, error } = await supabase.auth.getSession()
+        
+        if (error) {
+          return { success: false, session: null, error: error.message }
+        }
+        
+        this.currentSession = data.session
+        
+        if (this.currentSession) {
+          this.scheduleTokenRefresh(this.currentSession)
+          await this.loadUserMetadata(this.currentSession.user.id)
+        }
+      }
+      
+      return { success: true, session: this.currentSession }
+    } catch (error: any) {
+      console.error('Error al obtener sesión:', error)
+      return { success: false, session: null, error: error.message }
     }
-    
-    if (!this.currentSession) {
-      // Intentar obtener la sesión actual de Supabase
-      const { data } = await supabase.auth.getSession()
+  }
+  
+  public async refreshSession(): Promise<{ success: boolean, error?: string }> {
+    try {
+      const { data, error } = await supabase.auth.refreshSession()
+      
+      if (error) {
+        console.error('Error al refrescar sesión:', error)
+        return { success: false, error: error.message }
+      }
+      
       this.currentSession = data.session
       
       if (this.currentSession) {
         this.scheduleTokenRefresh(this.currentSession)
-        await this.loadUserMetadata(this.currentSession.user.id)
       }
+      
+      return { success: true }
+    } catch (error: any) {
+      console.error('Error al refrescar sesión:', error)
+      return { success: false, error: error.message }
     }
-    
-    return this.currentSession
   }
   
   public async getUser(): Promise<User | null> {
-    const session = await this.getSession()
-    return session?.user || null
+    const sessionResult = await this.getSession()
+    return sessionResult.session?.user || null
   }
   
   public async getUserWithMetadata(): Promise<any> {
@@ -221,14 +279,18 @@ class SessionManager {
       await this.loadUserMetadata(user.id)
     }
     
+    // Asegurarnos de que el usuario tenga un rol (admin por defecto)
+    const metadata = this.userMetadata || { role: 'admin' }
+    
     // Combinar usuario con metadatos
     return {
       ...user,
-      ...this.userMetadata
+      ...metadata,
+      role: metadata.role || 'admin' // Asegurar que siempre haya un rol
     }
   }
   
-  public async login(email: string, password: string) {
+  public async login(email: string, password: string): Promise<{ success: boolean, user?: User, error?: string }> {
     try {
       console.log(`Intentando iniciar sesión con: ${email}`)
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -247,17 +309,23 @@ class SessionManager {
       this.scheduleTokenRefresh(data.session)
       await this.loadUserMetadata(data.user.id)
       
-      return { success: true, data }
+      return { success: true, user: data.user }
     } catch (error: any) {
       console.error('Excepción durante el login:', error)
       return { success: false, error: error.message }
     }
   }
   
-  public async logout() {
+  public async logout(): Promise<{ success: boolean, error?: string }> {
     this.clearRefreshTimeout()
     try {
-      await supabase.auth.signOut()
+      const { error } = await supabase.auth.signOut()
+      
+      if (error) {
+        console.error('Error durante el logout:', error)
+        return { success: false, error: error.message }
+      }
+      
       this.currentSession = null
       this.userMetadata = null
       console.log('Logout exitoso')
@@ -273,7 +341,7 @@ class SessionManager {
   }
   
   public getUserMetadata(): any {
-    return this.userMetadata
+    return this.userMetadata || { role: 'admin' }
   }
 }
 
