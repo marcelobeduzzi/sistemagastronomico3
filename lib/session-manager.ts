@@ -80,13 +80,10 @@ class SessionManager {
     try {
       console.log(`Cargando metadatos para usuario ${userId}`)
       
-      // Primero intentamos obtener los metadatos de la tabla users
+      // Usar la función RPC segura en lugar de consultar directamente la tabla users
       try {
         const { data, error } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', userId)
-          .single()
+          .rpc('get_user_metadata_safe', { user_id: userId });
         
         if (error) {
           console.error('Error al cargar metadatos de usuario:', error)
@@ -111,7 +108,28 @@ class SessionManager {
         }
       } catch (error) {
         console.error('Error al cargar metadatos de usuario:', error)
-        // Si hay excepción, creamos metadatos básicos con rol admin
+        
+        // Intento alternativo: cargar desde employees
+        try {
+          const { data: employeeData, error: employeeError } = await supabase
+            .from('employees')
+            .select('id, first_name, last_name, email, local, position, role')
+            .eq('id', userId)
+            .single();
+            
+          if (!employeeError && employeeData) {
+            console.log("Metadatos cargados desde tabla employees");
+            this.userMetadata = {
+              id: userId,
+              ...employeeData
+            };
+            return;
+          }
+        } catch (err) {
+          console.error("Error al cargar desde employees:", err);
+        }
+        
+        // Si todo falla, creamos metadatos básicos con rol admin
         this.userMetadata = {
           id: userId,
           role: 'admin' // Asignar rol admin por defecto
