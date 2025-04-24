@@ -11,21 +11,31 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "@/components/ui/use-toast"
-import { createClient } from "@/lib/supabase/client"
-import { ArrowLeft, Plus, Eye, FileSpreadsheet } from "lucide-react"
+import { ArrowLeft, Plus, Eye, FileSpreadsheet, Loader2 } from 'lucide-react'
 import { Badge } from "@/components/ui/badge"
+import { supabase } from "@/lib/supabase/client"
 
 type StockSheet = {
   id: number
   date: string
   location_id: number
   location_name: string
-  manager_id: number
+  manager_id: string // Cambiado a string para UUID
   manager_name: string
   shift: string
   status: string
   created_at: string
 }
+
+// Lista fija de locales
+const FIXED_LOCATIONS = [
+  { id: 1, name: "BR Cabildo" },
+  { id: 2, name: "BR Carranza" },
+  { id: 3, name: "BR Pacífico" },
+  { id: 4, name: "BR Lavalle" },
+  { id: 5, name: "BR Rivadavia" },
+  { id: 6, name: "BR Aguero" },
+]
 
 export default function StockMatrixListPage() {
   const router = useRouter()
@@ -35,44 +45,31 @@ export default function StockMatrixListPage() {
   const [filterLocation, setFilterLocation] = useState<string>("all")
   const [filterDate, setFilterDate] = useState<string>("")
   const [filterStatus, setFilterStatus] = useState<string>("all")
-  const [locations, setLocations] = useState<{ id: number; name: string }[]>([])
+  const [locations, setLocations] = useState<{ id: number; name: string }[]>(FIXED_LOCATIONS)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     async function fetchData() {
       try {
         setIsLoading(true)
-        const supabase = createClient()
+        setError(null)
+        console.log("Cargando planillas de stock...")
 
-        // Fetch locations for filter
-        const { data: locationsData, error: locationsError } = await supabase
-          .from("locations")
-          .select("id, name")
-          .eq("active", true)
-          .order("name")
-
-        if (locationsError) {
-          console.error("Error al cargar locales:", locationsError)
-          toast({
-            title: "Error",
-            description: "No se pudieron cargar los locales para el filtro",
-            variant: "destructive",
-          })
-        } else {
-          setLocations(locationsData || [])
-        }
+        // Usar los locales fijos en lugar de cargarlos desde la base de datos
+        setLocations(FIXED_LOCATIONS)
 
         // Fetch stock sheets
         const { data: sheetsData, error: sheetsError } = await supabase
           .from("stock_matrix_sheets")
           .select(`
-    id,
-    date,
-    location_id,
-    manager_id,
-    shift,
-    status,
-    created_at
-  `)
+            id,
+            date,
+            location_id,
+            manager_id,
+            shift,
+            status,
+            created_at
+          `)
           .order("date", { ascending: false })
 
         if (sheetsError) {
@@ -84,7 +81,33 @@ export default function StockMatrixListPage() {
           })
           setStockSheets([])
           setFilteredSheets([])
+          setError("Error al cargar las planillas. Por favor, intente nuevamente.")
         } else {
+          console.log("Planillas cargadas:", sheetsData)
+          
+          // Cargar información de encargados
+          const managerIds = [...new Set((sheetsData || []).map(sheet => sheet.manager_id))].filter(Boolean)
+          let managerNames: Record<string, string> = {}
+          
+          try {
+            if (managerIds.length > 0) {
+              const { data: employeesData, error: employeesError } = await supabase
+                .from("employees")
+                .select("id, first_name, last_name")
+                .in("id", managerIds)
+              
+              if (!employeesError && employeesData) {
+                managerNames = employeesData.reduce((acc, emp) => {
+                  acc[emp.id] = `${emp.first_name} ${emp.last_name}`
+                  return acc
+                }, {} as Record<string, string>)
+              }
+            }
+          } catch (err) {
+            console.error("Error al cargar datos de encargados:", err)
+            // No interrumpir el flujo principal si falla la carga de encargados
+          }
+
           // Transformar los datos para que tengan el formato correcto
           const formattedSheets: StockSheet[] = (sheetsData || []).map((sheet) => {
             // Buscar el nombre del local basado en el ID
@@ -96,7 +119,7 @@ export default function StockMatrixListPage() {
               location_id: sheet.location_id,
               location_name: location?.name || "Desconocido",
               manager_id: sheet.manager_id,
-              manager_name: "Encargado", // Valor por defecto, luego podemos mejorarlo
+              manager_name: managerNames[sheet.manager_id] || "Encargado", // Usar el nombre del encargado si está disponible
               shift: sheet.shift,
               status: sheet.status,
               created_at: sheet.created_at,
@@ -115,6 +138,7 @@ export default function StockMatrixListPage() {
         })
         setStockSheets([])
         setFilteredSheets([])
+        setError("Error al cargar los datos. Por favor, intente nuevamente.")
       } finally {
         setIsLoading(false)
       }
@@ -146,7 +170,7 @@ export default function StockMatrixListPage() {
   }, [filterLocation, filterDate, filterStatus, stockSheets])
 
   const handleViewSheet = (id: number) => {
-    router.push(`/stock-matrix/${id}`)
+    router.push(`/stock-matrix?id=${id}`)
   }
 
   const handleCreateNew = () => {
@@ -172,6 +196,30 @@ export default function StockMatrixListPage() {
       default:
         return <Badge variant="outline">{status}</Badge>
     }
+  }
+
+  // Si hay un error crítico, mostrar mensaje de error
+  if (error) {
+    return (
+      <DashboardLayout>
+        <div className="container mx-auto py-6">
+          <Card className="border-red-300">
+            <CardHeader>
+              <CardTitle className="text-red-600">Error</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p>{error}</p>
+              <div className="mt-4">
+                <Button onClick={() => router.push("/stock-check")}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Volver
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    )
   }
 
   return (
@@ -253,9 +301,12 @@ export default function StockMatrixListPage() {
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <div className="text-center py-4">Cargando planillas...</div>
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                <p>Cargando planillas...</p>
+              </div>
             ) : filteredSheets.length === 0 ? (
-              <div className="text-center py-4">
+              <div className="text-center py-8">
                 {stockSheets.length === 0
                   ? "No hay planillas registradas en el sistema"
                   : "No se encontraron planillas con los filtros seleccionados"}
@@ -315,4 +366,3 @@ export default function StockMatrixListPage() {
     </DashboardLayout>
   )
 }
-
