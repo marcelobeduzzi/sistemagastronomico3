@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "@/components/ui/use-toast"
-import { ArrowLeft, Save, Plus, Check, AlertTriangle, Lock, Download, List, Loader2 } from "lucide-react"
+import { ArrowLeft, Save, Plus, Check, AlertTriangle, Lock, Download, List, Loader2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -21,7 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-import { createClient } from "@/lib/supabase/client"
+import { supabase } from "@/lib/supabase/client"
 
 // Tipos
 type Location = {
@@ -131,8 +131,6 @@ export default function StockMatrixPageContent() {
       setIsLoading(true)
       setError(null)
       console.log("Cargando datos...")
-
-      const supabase = createClient()
 
       // Fetch encargados desde la tabla de empleados
       try {
@@ -484,7 +482,6 @@ export default function StockMatrixPageContent() {
     try {
       setIsLoading(true)
       console.log("Iniciando guardado de planilla...")
-      const supabase = createClient()
 
       // Verificar si las tablas existen
       try {
@@ -643,7 +640,6 @@ export default function StockMatrixPageContent() {
     try {
       setIsLoading(true)
       console.log("Iniciando finalización de planilla...")
-      const supabase = createClient()
 
       // Actualizar todas las diferencias antes de finalizar
       updateAllDifferences()
@@ -829,7 +825,6 @@ export default function StockMatrixPageContent() {
   const loadExistingSheet = async (sheetId: number) => {
     try {
       setIsLoading(true)
-      const supabase = createClient()
 
       // Cargar datos de la planilla
       const { data: sheetData, error: sheetError } = await supabase
@@ -1449,6 +1444,3 @@ export default function StockMatrixPageContent() {
     </DashboardLayout>
   )
 }
-
-
-
