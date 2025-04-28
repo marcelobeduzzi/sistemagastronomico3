@@ -8,7 +8,7 @@ import { DashboardLayout } from "@/app/dashboard-layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Eye, AlertTriangle, DollarSign, PlusCircle } from "lucide-react"
+import { Eye, AlertTriangle, DollarSign, PlusCircle, History } from "lucide-react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import Link from "next/link"
 
@@ -302,6 +302,14 @@ export default function CajaPage() {
                 <AlertTriangle className="h-6 w-6" />
                 <span>Ver Alertas</span>
               </Button>
+              <Button
+                variant="outline"
+                className="h-auto py-4 flex flex-col items-center justify-center gap-2"
+                onClick={() => router.push("/caja/historial")}
+              >
+                <History className="h-6 w-6" />
+                <span>Ver Historial</span>
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -378,16 +386,3 @@ export default function CajaPage() {
     </DashboardLayout>
   )
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
