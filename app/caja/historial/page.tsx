@@ -544,7 +544,6 @@ export default function HistorialCompletoPage() {
           </TabsContent>
 
           <TabsContent value="aperturas" className="space-y-6">
-            {/* Contenido similar al de "todos" pero filtrado para aperturas */}
             <Card className="mb-6">
               <CardHeader>
                 <CardTitle className="flex items-center">
@@ -553,8 +552,76 @@ export default function HistorialCompletoPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {/* Mismos filtros que en la pestaña "todos" */}
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">{/* Filtros... */}</div>
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="local_id">Local</Label>
+                    <Select value={filtros.local_id} onValueChange={(value) => handleSelectChange("local_id", value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos los locales" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos los locales</SelectItem>
+                        {locales.map((local) => (
+                          <SelectItem key={local.id} value={local.id}>
+                            {local.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="fecha_desde">Desde</Label>
+                    <Input
+                      id="fecha_desde"
+                      name="fecha_desde"
+                      type="date"
+                      value={filtros.fecha_desde}
+                      onChange={handleFiltroChange}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="fecha_hasta">Hasta</Label>
+                    <Input
+                      id="fecha_hasta"
+                      name="fecha_hasta"
+                      type="date"
+                      value={filtros.fecha_hasta}
+                      onChange={handleFiltroChange}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="turno">Turno</Label>
+                    <Select value={filtros.turno} onValueChange={(value) => handleSelectChange("turno", value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos los turnos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos los turnos</SelectItem>
+                        <SelectItem value="mañana">Mañana</SelectItem>
+                        <SelectItem value="tarde">Tarde</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="estado">Estado</Label>
+                    <Select value={filtros.estado} onValueChange={(value) => handleSelectChange("estado", value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos los estados" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos los estados</SelectItem>
+                        <SelectItem value="aprobado">Aprobado</SelectItem>
+                        <SelectItem value="pendiente">Pendiente</SelectItem>
+                        <SelectItem value="rechazado">Rechazado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
                 <div className="flex justify-end gap-2 mt-4">
                   <Button variant="outline" onClick={resetearFiltros}>
                     Resetear
@@ -576,13 +643,119 @@ export default function HistorialCompletoPage() {
                 </Button>
               </CardHeader>
               <CardContent>
-                {/* Tabla similar a la de "todos" pero con columnas específicas para aperturas */}
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Fecha</TableHead>
+                        <TableHead>Local</TableHead>
+                        <TableHead>Turno</TableHead>
+                        <TableHead>Responsable</TableHead>
+                        <TableHead className="text-right">Monto Inicial</TableHead>
+                        <TableHead>Estado</TableHead>
+                        <TableHead>Cierre</TableHead>
+                        <TableHead className="text-right">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {operaciones.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="text-center py-4">
+                            No se encontraron registros
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        operaciones
+                          .filter((op) => op.tipo === "apertura")
+                          .map((operacion) => {
+                            const apertura = operacion as AperturaCaja & { tipo: "apertura" }
+                            return (
+                              <TableRow key={`${operacion.tipo}-${operacion.id}`}>
+                                <TableCell>{apertura.date}</TableCell>
+                                <TableCell>{apertura.local_name}</TableCell>
+                                <TableCell>
+                                  {apertura.shift === "mañana"
+                                    ? "Mañana"
+                                    : apertura.shift === "tarde"
+                                      ? "Tarde"
+                                      : apertura.shift}
+                                </TableCell>
+                                <TableCell>{apertura.responsible}</TableCell>
+                                <TableCell className="text-right">
+                                  ${apertura.initial_amount.toLocaleString()}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge className={getStatusColor(apertura.status)}>
+                                    {apertura.status === "aprobado"
+                                      ? "Aprobado"
+                                      : apertura.status === "pendiente"
+                                        ? "Pendiente"
+                                        : apertura.status === "rechazado"
+                                          ? "Rechazado"
+                                          : apertura.status}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant="outline"
+                                    className={
+                                      apertura.has_closing
+                                        ? "bg-green-50 text-green-700"
+                                        : "bg-yellow-50 text-yellow-700"
+                                    }
+                                  >
+                                    {apertura.has_closing ? "Cerrado" : "Pendiente"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => verDetalle(apertura.id, "apertura")}
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {totalPages > 1 && (
+                  <Pagination className="mt-4">
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious
+                          onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                          className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                        />
+                      </PaginationItem>
+
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                        <PaginationItem key={page}>
+                          <PaginationLink onClick={() => setCurrentPage(page)} isActive={currentPage === page}>
+                            {page}
+                          </PaginationLink>
+                        </PaginationItem>
+                      ))}
+
+                      <PaginationItem>
+                        <PaginationNext
+                          onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                          className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
 
           <TabsContent value="cierres" className="space-y-6">
-            {/* Contenido similar al de "todos" pero filtrado para cierres */}
             <Card className="mb-6">
               <CardHeader>
                 <CardTitle className="flex items-center">
@@ -591,8 +764,76 @@ export default function HistorialCompletoPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {/* Mismos filtros que en la pestaña "todos" */}
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">{/* Filtros... */}</div>
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="local_id">Local</Label>
+                    <Select value={filtros.local_id} onValueChange={(value) => handleSelectChange("local_id", value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos los locales" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos los locales</SelectItem>
+                        {locales.map((local) => (
+                          <SelectItem key={local.id} value={local.id}>
+                            {local.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="fecha_desde">Desde</Label>
+                    <Input
+                      id="fecha_desde"
+                      name="fecha_desde"
+                      type="date"
+                      value={filtros.fecha_desde}
+                      onChange={handleFiltroChange}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="fecha_hasta">Hasta</Label>
+                    <Input
+                      id="fecha_hasta"
+                      name="fecha_hasta"
+                      type="date"
+                      value={filtros.fecha_hasta}
+                      onChange={handleFiltroChange}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="turno">Turno</Label>
+                    <Select value={filtros.turno} onValueChange={(value) => handleSelectChange("turno", value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos los turnos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos los turnos</SelectItem>
+                        <SelectItem value="mañana">Mañana</SelectItem>
+                        <SelectItem value="tarde">Tarde</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="estado">Estado</Label>
+                    <Select value={filtros.estado} onValueChange={(value) => handleSelectChange("estado", value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos los estados" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos los estados</SelectItem>
+                        <SelectItem value="aprobado">Aprobado</SelectItem>
+                        <SelectItem value="pendiente">Pendiente</SelectItem>
+                        <SelectItem value="rechazado">Rechazado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
                 <div className="flex justify-end gap-2 mt-4">
                   <Button variant="outline" onClick={resetearFiltros}>
                     Resetear
@@ -614,7 +855,110 @@ export default function HistorialCompletoPage() {
                 </Button>
               </CardHeader>
               <CardContent>
-                {/* Tabla similar a la de "todos" pero con columnas específicas para cierres */}
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Fecha</TableHead>
+                        <TableHead>Local</TableHead>
+                        <TableHead>Turno</TableHead>
+                        <TableHead>Responsable</TableHead>
+                        <TableHead className="text-right">Ventas Totales</TableHead>
+                        <TableHead className="text-right">Diferencia</TableHead>
+                        <TableHead>Estado</TableHead>
+                        <TableHead className="text-right">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {operaciones.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="text-center py-4">
+                            No se encontraron registros
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        operaciones
+                          .filter((op) => op.tipo === "cierre")
+                          .map((operacion) => {
+                            const cierre = operacion as CierreCaja & { tipo: "cierre" }
+                            return (
+                              <TableRow key={`${operacion.tipo}-${operacion.id}`}>
+                                <TableCell>{cierre.date}</TableCell>
+                                <TableCell>{cierre.local_name}</TableCell>
+                                <TableCell>
+                                  {cierre.shift === "mañana"
+                                    ? "Mañana"
+                                    : cierre.shift === "tarde"
+                                      ? "Tarde"
+                                      : cierre.shift}
+                                </TableCell>
+                                <TableCell>{cierre.responsible}</TableCell>
+                                <TableCell className="text-right">${cierre.total_sales.toLocaleString()}</TableCell>
+                                <TableCell className="text-right">
+                                  <span
+                                    className={
+                                      cierre.difference !== 0
+                                        ? cierre.difference > 0
+                                          ? "text-green-600"
+                                          : "text-red-600"
+                                        : ""
+                                    }
+                                  >
+                                    ${cierre.difference.toLocaleString()}
+                                  </span>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge className={getStatusColor(cierre.status)}>
+                                    {cierre.status === "aprobado"
+                                      ? "Aprobado"
+                                      : cierre.status === "pendiente"
+                                        ? "Pendiente"
+                                        : cierre.status === "rechazado"
+                                          ? "Rechazado"
+                                          : cierre.status}
+                                  </Badge>
+                                  {cierre.has_alert && <Badge className="ml-2 bg-red-100 text-red-800">Alerta</Badge>}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button variant="ghost" size="icon" onClick={() => verDetalle(cierre.id, "cierre")}>
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {totalPages > 1 && (
+                  <Pagination className="mt-4">
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious
+                          onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                          className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                        />
+                      </PaginationItem>
+
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                        <PaginationItem key={page}>
+                          <PaginationLink onClick={() => setCurrentPage(page)} isActive={currentPage === page}>
+                            {page}
+                          </PaginationLink>
+                        </PaginationItem>
+                      ))}
+
+                      <PaginationItem>
+                        <PaginationNext
+                          onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                          className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
