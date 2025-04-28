@@ -8,33 +8,38 @@ export function SessionRefreshHandler() {
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
-    // Función para refrescar la sesión con límite de frecuencia
+    // Función para refrescar la sesión con verificación previa
     const handleRefresh = async () => {
-      const now = Date.now()
-      const timeSinceLastRefresh = now - lastRefreshTime.current
+      try {
+        const now = Date.now()
+        const timeSinceLastRefresh = now - lastRefreshTime.current
 
-      // Solo refrescar si han pasado al menos 10 minutos desde el último refresco
-      if (timeSinceLastRefresh >= 10 * 60 * 1000) {
-        try {
-          const { data, error } = await supabase.auth.refreshSession()
+        // Solo refrescar si han pasado al menos 10 minutos desde el último refresco
+        if (timeSinceLastRefresh >= 10 * 60 * 1000) {
+          // Verificar primero si hay una sesión activa
+          const { data: sessionData } = await supabase.auth.getSession()
           
-          if (error) {
-            console.error("Error refreshing session:", error)
-          } else {
-            console.log("Session refreshed successfully")
-            lastRefreshTime.current = Date.now()
+          // Solo intentar refrescar si hay una sesión activa
+          if (sessionData?.session) {
+            const { data, error } = await supabase.auth.refreshSession()
+
+            if (error) {
+              console.error("Error al refrescar sesión:", error)
+            } else {
+              console.log("Sesión refrescada correctamente")
+              lastRefreshTime.current = Date.now()
+            }
           }
-        } catch (error) {
-          console.error("Error refreshing session:", error)
         }
+      } catch (error) {
+        console.error("Error al verificar/refrescar sesión:", error)
       }
     }
 
     // Configurar un intervalo para verificar si es necesario refrescar
-    // Verificamos cada 5 minutos, pero solo refrescamos si han pasado 10 minutos
     const intervalId = setInterval(handleRefresh, 5 * 60 * 1000)
 
-    // Refrescar cuando la ventana recupera el foco, pero respetando el límite de tiempo
+    // Refrescar cuando la ventana recupera el foco
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         handleRefresh()
