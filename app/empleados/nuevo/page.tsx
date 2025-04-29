@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Checkbox } from "@/components/ui/checkbox"
 import { dbService } from "@/lib/db-service"
 import type { Employee, Local, WorkShift, EmployeeStatus, UserRole } from "@/types"
 import { ArrowLeft, Save } from "lucide-react"
@@ -39,6 +40,14 @@ export default function NuevoEmpleadoPage() {
     totalSalary: 0,
     status: "active",
     role: "employee",
+    attendanceBonus: false, // Inicializar el bono de presentismo como falso
+  })
+
+  // Estado para horario personalizado
+  const [useCustomSchedule, setUseCustomSchedule] = useState(false)
+  const [customSchedule, setCustomSchedule] = useState({
+    expectedCheckIn: "09:00",
+    expectedCheckOut: "17:00",
   })
 
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -67,6 +76,21 @@ export default function NuevoEmpleadoPage() {
 
   const handleSelectChange = (name: string, value: string) => {
     setFormData((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const handleCustomScheduleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target
+    setCustomSchedule((prev) => ({
+      ...prev,
+      [name]: value,
+    }))
+  }
+
+  const handleAttendanceBonusChange = (checked: boolean) => {
+    setFormData((prev) => ({
+      ...prev,
+      attendanceBonus: checked,
+    }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -110,6 +134,11 @@ export default function NuevoEmpleadoPage() {
         hireDate: hireDateISO,
       }
 
+      // Agregar horario personalizado si está habilitado
+      if (useCustomSchedule) {
+        employeeData.customSchedule = customSchedule
+      }
+
       console.log("Datos a enviar:", employeeData)
       const newEmployee = await dbService.createEmployee(employeeData)
 
@@ -132,6 +161,18 @@ export default function NuevoEmpleadoPage() {
     }
   }
 
+  // Función para obtener el texto del horario según el valor
+  const getWorkShiftText = (shift: string) => {
+    const shiftMap: Record<string, string> = {
+      morning: "Mañana (8:00 - 16:00)",
+      afternoon: "Tarde (16:00 - 00:00)",
+      night: "Noche (00:00 - 8:00)",
+      full_time: "Tiempo Completo",
+      part_time: "Tiempo Parcial",
+    }
+    return shiftMap[shift] || shift
+  }
+
   return (
     <DashboardLayout>
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
@@ -152,6 +193,7 @@ export default function NuevoEmpleadoPage() {
             <TabsList>
               <TabsTrigger value="personal">Información Personal</TabsTrigger>
               <TabsTrigger value="laboral">Información Laboral</TabsTrigger>
+              <TabsTrigger value="horario">Horario</TabsTrigger>
             </TabsList>
 
             <TabsContent value="personal">
@@ -411,6 +453,84 @@ export default function NuevoEmpleadoPage() {
                         className="bg-muted"
                       />
                     </div>
+                    <div className="space-y-2 col-span-2">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="attendanceBonus"
+                          checked={formData.attendanceBonus}
+                          onCheckedChange={handleAttendanceBonusChange}
+                        />
+                        <Label htmlFor="attendanceBonus" className="font-medium">
+                          Aplicar bono de presentismo ($50,000)
+                        </Label>
+                      </div>
+                      <p className="text-xs text-muted-foreground ml-6">
+                        Este bono se aplicará mensualmente si el empleado cumple con los requisitos de asistencia.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="horario">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Configuración de Horario</CardTitle>
+                  <CardDescription>Configura el horario personalizado del empleado</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="useCustomSchedule"
+                        checked={useCustomSchedule}
+                        onCheckedChange={(checked) => setUseCustomSchedule(checked === true)}
+                      />
+                      <Label htmlFor="useCustomSchedule" className="font-medium">
+                        Usar horario personalizado
+                      </Label>
+                    </div>
+
+                    {useCustomSchedule && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 p-4 border rounded-md">
+                        <div className="space-y-2">
+                          <Label htmlFor="expectedCheckIn">Hora de entrada</Label>
+                          <Input
+                            id="expectedCheckIn"
+                            name="expectedCheckIn"
+                            type="time"
+                            value={customSchedule.expectedCheckIn}
+                            onChange={handleCustomScheduleChange}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="expectedCheckOut">Hora de salida</Label>
+                          <Input
+                            id="expectedCheckOut"
+                            name="expectedCheckOut"
+                            type="time"
+                            value={customSchedule.expectedCheckOut}
+                            onChange={handleCustomScheduleChange}
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <p className="text-sm text-muted-foreground">
+                            Este horario personalizado se utilizará para calcular las horas trabajadas, llegadas tarde y
+                            salidas anticipadas.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {!useCustomSchedule && (
+                      <div className="p-4 border rounded-md bg-muted/50">
+                        <h3 className="font-medium mb-2">Horario actual: {getWorkShiftText(formData.workShift)}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Se utilizará el horario estándar definido en la configuración del sistema para este turno.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
                 <CardFooter className="flex justify-end space-x-2">
@@ -430,5 +550,3 @@ export default function NuevoEmpleadoPage() {
     </DashboardLayout>
   )
 }
-
-
