@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/use-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowLeft, Save, AlertTriangle, Plus, Trash2, CheckCircle, XCircle } from "lucide-react"
+import { ArrowLeft, Save, AlertTriangle, Plus, Trash2, CheckCircle, XCircle, Info } from "lucide-react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -96,6 +96,9 @@ export default function CierreCajaPage() {
     monto: 0,
     autorizadoPor: "",
   })
+
+  // Nuevo estado para mostrar el desglose del cálculo
+  const [showCalculationDetails, setShowCalculationDetails] = useState(false)
 
   // Estado para los datos de cierre
   const [formData, setFormData] = useState({
@@ -222,19 +225,28 @@ export default function CierreCajaPage() {
     formData.bills_10,
   ])
 
-  // Calcular totales de gastos y retiros
+  // Calcular totales de gastos y retiros - MODIFICADO para asegurar valores numéricos
   useEffect(() => {
+    // Asegurarse de que todos los montos sean números válidos
     const totalGastos = gastos.reduce((sum, gasto) => {
-      const monto = typeof gasto.monto === "number" ? gasto.monto : 0
-      return sum + monto
+      // Convertir explícitamente a número y verificar que sea válido
+      const monto = Number(gasto.monto)
+      return sum + (isNaN(monto) ? 0 : monto)
     }, 0)
 
     const totalRetiros = retiros.reduce((sum, retiro) => {
-      const monto = typeof retiro.monto === "number" ? retiro.monto : 0
-      return sum + monto
+      // Convertir explícitamente a número y verificar que sea válido
+      const monto = Number(retiro.monto)
+      return sum + (isNaN(monto) ? 0 : monto)
     }, 0)
 
-    console.log("Totales calculados:", { totalGastos, totalRetiros })
+    // Log detallado para depuración
+    console.log("Cálculo de gastos y retiros:", {
+      gastos: gastos.map((g) => ({ concepto: g.concepto, monto: g.monto })),
+      totalGastos,
+      retiros: retiros.map((r) => ({ concepto: r.concepto, monto: r.monto })),
+      totalRetiros,
+    })
 
     setFormData((prev) => ({
       ...prev,
@@ -243,21 +255,28 @@ export default function CierreCajaPage() {
     }))
   }, [gastos, retiros])
 
-  // Calcular saldo esperado
+  // Calcular saldo esperado - COMPLETAMENTE REESCRITO
   useEffect(() => {
-    // El saldo esperado es: Saldo Inicial + Ventas en Efectivo - Total Gastos - Total Retiros
-    const saldoEsperado =
-      formData.initial_balance + formData.cash_sales - formData.total_expenses - formData.total_withdrawals
+    // Asegurarse de que todos los valores sean números válidos
+    const initialBalance = Number(formData.initial_balance) || 0
+    const cashSales = Number(formData.cash_sales) || 0
+    const totalExpenses = Number(formData.total_expenses) || 0
+    const totalWithdrawals = Number(formData.total_withdrawals) || 0
 
-    // Verificar que los valores sean números válidos
-    console.log("Cálculo de saldo esperado:", {
-      initial_balance: formData.initial_balance,
-      cash_sales: formData.cash_sales,
-      total_expenses: formData.total_expenses,
-      total_withdrawals: formData.total_withdrawals,
+    // El saldo esperado es: Saldo Inicial + Ventas en Efectivo - Total Gastos - Total Retiros
+    const saldoEsperado = initialBalance + cashSales - totalExpenses - totalWithdrawals
+
+    // Log detallado para depuración
+    console.log("Cálculo detallado del saldo esperado:", {
+      initialBalance,
+      cashSales,
+      totalExpenses,
+      totalWithdrawals,
+      formula: `${initialBalance} + ${cashSales} - ${totalExpenses} - ${totalWithdrawals} = ${saldoEsperado}`,
       resultado: saldoEsperado,
     })
 
+    // Actualizar el estado con el nuevo saldo esperado
     setFormData((prev) => ({
       ...prev,
       expected_balance: saldoEsperado,
@@ -266,8 +285,12 @@ export default function CierreCajaPage() {
 
   // Calcular diferencia y porcentaje
   useEffect(() => {
-    const diferencia = formData.actual_balance - formData.expected_balance
-    const porcentaje = formData.expected_balance !== 0 ? Math.abs((diferencia / formData.expected_balance) * 100) : 0
+    // Asegurarse de que los valores sean números válidos
+    const actualBalance = Number(formData.actual_balance) || 0
+    const expectedBalance = Number(formData.expected_balance) || 0
+
+    const diferencia = actualBalance - expectedBalance
+    const porcentaje = expectedBalance !== 0 ? Math.abs((diferencia / expectedBalance) * 100) : 0
 
     setDiferencia(diferencia)
     setPorcentajeDiferencia(porcentaje)
@@ -280,6 +303,15 @@ export default function CierreCajaPage() {
 
     // Si la diferencia es significativa, requerir supervisor
     setNeedsSupervisor(porcentaje > 10)
+
+    // Log para depuración
+    console.log("Cálculo de diferencia:", {
+      actualBalance,
+      expectedBalance,
+      diferencia,
+      porcentaje: porcentaje.toFixed(2) + "%",
+      needsSupervisor: porcentaje > 10,
+    })
   }, [formData.actual_balance, formData.expected_balance])
 
   // Calcular diferencia de Posnet y porcentaje
@@ -409,11 +441,26 @@ export default function CierreCajaPage() {
       monto: 0,
       tieneComprobante: false,
     })
+
+    // Mostrar confirmación
+    toast({
+      title: "Gasto agregado",
+      description: `Se agregó el gasto "${gastoConId.concepto}" por $${gastoConId.monto}`,
+    })
   }
 
   // Eliminar un gasto
   const eliminarGasto = (id: string) => {
+    const gastoAEliminar = gastos.find((g) => g.id === id)
     setGastos(gastos.filter((gasto) => gasto.id !== id))
+
+    // Mostrar confirmación
+    if (gastoAEliminar) {
+      toast({
+        title: "Gasto eliminado",
+        description: `Se eliminó el gasto "${gastoAEliminar.concepto}" por $${gastoAEliminar.monto}`,
+      })
+    }
   }
 
   // Agregar un nuevo retiro
@@ -439,11 +486,26 @@ export default function CierreCajaPage() {
       monto: 0,
       autorizadoPor: "",
     })
+
+    // Mostrar confirmación
+    toast({
+      title: "Retiro agregado",
+      description: `Se agregó el retiro "${retiroConId.concepto}" por $${retiroConId.monto}`,
+    })
   }
 
   // Eliminar un retiro
   const eliminarRetiro = (id: string) => {
+    const retiroAEliminar = retiros.find((r) => r.id === id)
     setRetiros(retiros.filter((retiro) => retiro.id !== id))
+
+    // Mostrar confirmación
+    if (retiroAEliminar) {
+      toast({
+        title: "Retiro eliminado",
+        description: `Se eliminó el retiro "${retiroAEliminar.concepto}" por $${retiroAEliminar.monto}`,
+      })
+    }
   }
 
   // Modificar la función validateForm para agregar más logs de depuración
@@ -1291,7 +1353,36 @@ export default function CierreCajaPage() {
 
                   {/* Sección de Efectivo */}
                   <div className="mt-4 p-4 border rounded-md">
-                    <h3 className="text-lg font-medium mb-3">Balance de Efectivo</h3>
+                    <div className="flex justify-between items-center mb-3">
+                      <h3 className="text-lg font-medium">Balance de Efectivo</h3>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowCalculationDetails(!showCalculationDetails)}
+                        className="flex items-center gap-1 text-xs"
+                      >
+                        <Info className="h-4 w-4" />
+                        {showCalculationDetails ? "Ocultar detalles" : "Ver detalles del cálculo"}
+                      </Button>
+                    </div>
+
+                    {showCalculationDetails && (
+                      <div className="mb-4 p-3 bg-muted/30 rounded-md text-sm">
+                        <p className="font-medium mb-2">Cálculo del saldo esperado:</p>
+                        <div className="space-y-1">
+                          <p>Saldo Inicial: ${formData.initial_balance.toLocaleString()}</p>
+                          <p>+ Ventas en Efectivo: ${formData.cash_sales.toLocaleString()}</p>
+                          <p>- Total Gastos: ${formData.total_expenses.toLocaleString()}</p>
+                          <p>- Total Retiros: ${formData.total_withdrawals.toLocaleString()}</p>
+                          <div className="border-t pt-1 mt-1">
+                            <p className="font-medium">
+                              = Saldo Esperado: ${formData.expected_balance.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <Label>Saldo Esperado (Efectivo):</Label>
