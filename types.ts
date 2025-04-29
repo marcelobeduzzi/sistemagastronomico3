@@ -31,6 +31,8 @@ export type Payroll = {
   details?: PayrollDetail[]
   createdAt: string
   updatedAt: string
+  attendanceBonus?: boolean // Nuevo campo para el bono de presentismo
+  attendanceBonusAmount?: number // Monto del bono de presentismo
 }
 
 export type PayrollDetail = {
@@ -149,6 +151,77 @@ export type OrderItem = {
   price: number
 }
 
+// Actualización del tipo WorkShift para incluir más opciones de turnos
+export type WorkShift =
+  | "morning"
+  | "afternoon"
+  | "night"
+  | "full_time"
+  | "part_time"
+  | "morning_cabildo"
+  | "afternoon_cabildo"
+  | "morning_carranza"
+  | "afternoon_carranza"
+  | "morning_pacifico"
+  | "afternoon_pacifico"
+  | "morning_lavalle"
+  | "afternoon_lavalle"
+  | "morning_rivadavia"
+  | "afternoon_rivadavia"
+  | "morning_aguero"
+  | "afternoon_aguero"
+  | "morning_dorrego"
+  | "afternoon_dorrego"
+  | "morning_dean"
+  | "afternoon_dean"
 
+// Actualización del tipo Local para incluir "Capacitación"
+export type Local =
+  | "BR Cabildo"
+  | "BR Carranza"
+  | "BR Pacifico"
+  | "BR Lavalle"
+  | "BR Rivadavia"
+  | "BR Aguero"
+  | "BR Dorrego"
+  | "Dean & Dennys"
+  | "Administración"
+  | "Capacitación"
 
+export type EmployeeStatus = "active" | "inactive" | "on_leave" | "vacation"
 
+export type UserRole = "admin" | "manager" | "supervisor" | "employee" | "cashier" | "waiter" | "kitchen"
+
+// Actualización de la interfaz Employee para incluir el campo de presentismo
+export interface EmployeeDetails {
+  id: string
+  firstName: string
+  lastName: string
+  documentType: string
+  documentId: string
+  phone: string
+  email: string
+  address: string
+  birthDate: string
+  hireDate: string
+  terminationDate?: string | null
+  position: string
+  local: Local
+  workShift: WorkShift
+  baseSalary: number
+  bankSalary: number
+  totalSalary: number
+  status: EmployeeStatus
+  role: UserRole
+  notes?: string
+  attendanceBonus?: boolean // Nuevo campo para el bono de presentismo
+  customStartTime?: string // Hora de entrada personalizada
+  customEndTime?: string // Hora de salida personalizada
+}
+
+// Actualización de la interfaz PayrollDetails para incluir el bono de presentismo
+export interface PayrollDetails {
+  concept: string
+  type: "addition" | "deduction"
+  amount: number
+}

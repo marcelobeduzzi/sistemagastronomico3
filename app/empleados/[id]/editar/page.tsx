@@ -407,6 +407,7 @@ export default function EditarEmpleadoPage({ params }: { params: { id: string } 
                           <SelectItem value="BR Dorrego">BR Dorrego</SelectItem>
                           <SelectItem value="Dean & Dennys">Dean & Dennys</SelectItem>
                           <SelectItem value="Administración">Administración</SelectItem>
+                          <SelectItem value="Capacitación">Capacitación</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
