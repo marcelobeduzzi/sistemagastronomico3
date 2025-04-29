@@ -763,13 +763,6 @@ export default function NominaPage() {
   // Si está verificando la sesión, mostrar cargando
   if (sessionStatus === "checking") {
     return (
-      <DashboardLayout
-
-This generation may require the following integrations: 
-<AddIntegration names={["supabase", "blob"]} />
-  // Si está verificando la sesión, mostrar cargando
-  if (sessionStatus === "checking") {
-    return (
       <DashboardLayout>
         <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
           <div className="flex justify-center items-center h-64">
@@ -1409,9 +1402,69 @@ This generation may require the following integrations:
                               Tipo
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Monto
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Descripción
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {selectedPayroll.details.map((detail, index) => (
+                            <tr key={index}>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm">{detail.concept}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                {detail.type === "addition" ? "Adición" : "Deducción"}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                <span
+                                  className={
+                                    detail.type === "addition" ? "text-green-600 font-medium" : "text-red-600 font-medium"
+                                  }
+                                >
+                                  {detail.type === "addition" ? "+" : "-"}
+                                  {formatCurrency(detail.amount)}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm">{detail.description || "-"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
-This generation may require the following integrations: 
-<AddIntegration names={["supabase", "blob"]} />
-
-
-
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsDetailsDialogOpen(false)}>
+                Cerrar
+              </Button>
+              {selectedPayroll && !selectedPayroll.isPaid && (
+                <Button onClick={() => {
+                  setSelectedPayroll(selectedPayroll)
+                  setIsHandSalaryPaid(selectedPayroll.handSalaryPaid)
+                  setIsBankSalaryPaid(selectedPayroll.bankSalaryPaid)
+                  setPaymentMethod(selectedPayroll.paymentMethod || "efectivo")
+                  setPaymentReference(selectedPayroll.paymentReference || "")
+                  setIsDetailsDialogOpen(false)
+                  setIsPaymentDialogOpen(true)
+                }}>
+                  <CheckCircle className="mr-1 h-4 w-4" />
+                  Confirmar Pago
+                </Button>
+              )}
+              {selectedPayroll && (
+                <Button variant="outline" onClick={() => handleExportPayslip(selectedPayroll)}>
+                  <Download className="mr-1 h-4 w-4" />
+                  Generar Recibo
+                </Button>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </DashboardLayout>
+  )
+}
