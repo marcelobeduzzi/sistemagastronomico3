@@ -10,7 +10,22 @@ import { DataTable } from "@/components/data-table"
 import { dbService } from "@/lib/db-service"
 import { formatCurrency, formatDate, generatePayslip } from "@/lib/export-utils"
 import { useToast } from "@/components/ui/use-toast"
-import { Download, RefreshCw, CheckCircle, FileText, Calendar, Eye, ArrowLeft, Calculator, Loader2, PlusCircle, DollarSign, CreditCard, Wallet } from 'lucide-react'
+import {
+  Download,
+  RefreshCw,
+  CheckCircle,
+  FileText,
+  Calendar,
+  Eye,
+  ArrowLeft,
+  Calculator,
+  Loader2,
+  PlusCircle,
+  DollarSign,
+  CreditCard,
+  Wallet,
+  Filter,
+} from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -24,6 +39,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { StatusBadge } from "@/components/status-badge"
+import { Badge } from "@/components/ui/badge"
 import type { ColumnDef } from "@tanstack/react-table"
 import type { Employee, Payroll, Liquidation, Attendance } from "@/types"
 import { supabase } from "@/lib/supabase/client" // Importamos la instancia compartida
@@ -37,6 +53,8 @@ export default function NominaPage() {
   const [filteredPayrolls, setFilteredPayrolls] = useState<Payroll[]>([])
   const [liquidations, setLiquidations] = useState<Liquidation[]>([])
   const [historyPayrolls, setHistoryPayrolls] = useState<Payroll[]>([])
+  const [historyLiquidations, setHistoryLiquidations] = useState<Liquidation[]>([])
+  const [filteredHistory, setFilteredHistory] = useState<(Payroll | Liquidation)[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
   const [inactiveEmployees, setInactiveEmployees] = useState<Employee[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -45,17 +63,21 @@ export default function NominaPage() {
   const [isGeneratingPayrolls, setIsGeneratingPayrolls] = useState(false)
   const [isGeneratingLiquidations, setIsGeneratingLiquidations] = useState(false)
   const [selectedPayroll, setSelectedPayroll] = useState<Payroll | null>(null)
+  const [selectedLiquidation, setSelectedLiquidation] = useState<Liquidation | null>(null)
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
+  const [isLiquidationPaymentDialogOpen, setIsLiquidationPaymentDialogOpen] = useState(false)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
   const [showAllPending, setShowAllPending] = useState(false)
   const [attendances, setAttendances] = useState<Attendance[]>([])
   const [isLoadingAttendances, setIsLoadingAttendances] = useState(false)
+  const [historyFilter, setHistoryFilter] = useState<"all" | "payroll" | "liquidation">("all")
   const { toast } = useToast()
 
   // Estados para el diálogo de pago
   const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split("T")[0])
   const [paymentMethod, setPaymentMethod] = useState<string>("efectivo")
   const [paymentReference, setPaymentReference] = useState<string>("")
+  const [paymentNotes, setPaymentNotes] = useState<string>("")
   const [isHandSalaryPaid, setIsHandSalaryPaid] = useState(false)
   const [isBankSalaryPaid, setIsBankSalaryPaid] = useState(false)
   const [sessionStatus, setSessionStatus] = useState<"valid" | "invalid" | "checking">("checking")
@@ -64,11 +86,11 @@ export default function NominaPage() {
   const [payrollTotals, setPayrollTotals] = useState({
     totalHand: 0,
     totalBank: 0,
-    totalAmount: 0
+    totalAmount: 0,
   })
-  
+
   const [liquidationTotals, setLiquidationTotals] = useState({
-    totalAmount: 0
+    totalAmount: 0,
   })
 
   // Verificar sesión al cargar la página
@@ -111,19 +133,22 @@ export default function NominaPage() {
     if (sessionStatus === "valid") {
       loadData()
     }
-  }, [selectedMonth, selectedYear, activeTab, showAllPending, sessionStatus])
+  }, [selectedMonth, selectedYear, activeTab, showAllPending, sessionStatus, historyFilter])
 
   // Función para calcular los totales de nóminas
   useEffect(() => {
     if (filteredPayrolls.length > 0) {
-      const totals = filteredPayrolls.reduce((acc, payroll) => {
-        return {
-          totalHand: acc.totalHand + (payroll.finalHandSalary || 0),
-          totalBank: acc.totalBank + (payroll.bankSalary || 0),
-          totalAmount: acc.totalAmount + (payroll.totalSalary || 0)
-        }
-      }, { totalHand: 0, totalBank: 0, totalAmount: 0 })
-      
+      const totals = filteredPayrolls.reduce(
+        (acc, payroll) => {
+          return {
+            totalHand: acc.totalHand + (payroll.finalHandSalary || 0),
+            totalBank: acc.totalBank + (payroll.bankSalary || 0),
+            totalAmount: acc.totalAmount + (payroll.totalSalary || 0),
+          }
+        },
+        { totalHand: 0, totalBank: 0, totalAmount: 0 },
+      )
+
       setPayrollTotals(totals)
     } else {
       setPayrollTotals({ totalHand: 0, totalBank: 0, totalAmount: 0 })
@@ -136,7 +161,7 @@ export default function NominaPage() {
       const total = liquidations.reduce((acc, liquidation) => {
         return acc + (liquidation.totalAmount || 0)
       }, 0)
-      
+
       setLiquidationTotals({ totalAmount: total })
     } else {
       setLiquidationTotals({ totalAmount: 0 })
@@ -185,6 +210,28 @@ export default function NominaPage() {
         // Cargar historial de nóminas pagadas
         const historyData = await dbService.getPayrollsByPeriod(selectedMonth, selectedYear, true)
         setHistoryPayrolls(historyData)
+
+        // Cargar historial de liquidaciones pagadas
+        const liquidationsHistoryData = await dbService.getLiquidations(true)
+        setHistoryLiquidations(liquidationsHistoryData)
+
+        // Aplicar filtro al historial
+        let filteredData: (Payroll | Liquidation)[] = []
+
+        if (historyFilter === "all") {
+          // Combinar ambos tipos y ordenar por fecha de pago
+          filteredData = [...historyData, ...liquidationsHistoryData].sort((a, b) => {
+            const dateA = new Date(a.paymentDate || "")
+            const dateB = new Date(b.paymentDate || "")
+            return dateB.getTime() - dateA.getTime() // Orden descendente
+          })
+        } else if (historyFilter === "payroll") {
+          filteredData = historyData
+        } else if (historyFilter === "liquidation") {
+          filteredData = liquidationsHistoryData
+        }
+
+        setFilteredHistory(filteredData)
       }
     } catch (error) {
       console.error("Error al cargar datos:", error)
@@ -197,7 +244,7 @@ export default function NominaPage() {
       setIsLoading(false)
     }
   }
-    const handleGeneratePayrolls = async () => {
+  const handleGeneratePayrolls = async () => {
     setIsGeneratingPayrolls(true)
     try {
       console.log(`Generando nóminas para ${selectedMonth}/${selectedYear}`)
@@ -293,6 +340,41 @@ export default function NominaPage() {
       loadData()
     } catch (error) {
       console.error("Error al confirmar pago:", error)
+      toast({
+        title: "Error",
+        description: "No se pudo confirmar el pago. Intente nuevamente.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Manejar confirmación de pago de liquidación
+  const handleLiquidationPaymentConfirmation = async () => {
+    if (!selectedLiquidation) return
+
+    try {
+      // Actualizar el estado de pago de la liquidación
+      const updatedLiquidation = {
+        ...selectedLiquidation,
+        isPaid: true,
+        paymentDate: paymentDate,
+        paymentMethod: paymentMethod,
+        paymentReference: paymentReference,
+        notes: paymentNotes,
+      }
+
+      await dbService.updateLiquidation(updatedLiquidation)
+
+      toast({
+        title: "Pago confirmado",
+        description: "La liquidación ha sido marcada como pagada correctamente.",
+      })
+
+      // Cerrar diálogo y recargar datos
+      setIsLiquidationPaymentDialogOpen(false)
+      loadData()
+    } catch (error) {
+      console.error("Error al confirmar pago de liquidación:", error)
       toast({
         title: "Error",
         description: "No se pudo confirmar el pago. Intente nuevamente.",
@@ -600,10 +682,27 @@ export default function NominaPage() {
       cell: ({ row }) => (
         <div className="flex items-center space-x-2">
           {!row.original.isPaid && (
-            <Button variant="outline" size="sm" onClick={() => handlePayLiquidation(row.original)}>
-              <FileText className="mr-1 h-4 w-4" />
-              Ver Detalles
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSelectedLiquidation(row.original)
+                  setPaymentDate(new Date().toISOString().split("T")[0])
+                  setPaymentMethod("transferencia")
+                  setPaymentReference("")
+                  setPaymentNotes("")
+                  setIsLiquidationPaymentDialogOpen(true)
+                }}
+              >
+                <CheckCircle className="mr-1 h-4 w-4" />
+                Confirmar Pago
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => handlePayLiquidation(row.original)}>
+                <FileText className="mr-1 h-4 w-4" />
+                Ver Detalles
+              </Button>
+            </>
           )}
           {row.original.isPaid && (
             <Button variant="outline" size="sm" onClick={() => router.push(`/nomina/liquidations/${row.original.id}`)}>
@@ -644,17 +743,27 @@ export default function NominaPage() {
     return total
   }
 
-  // Agregar estos estados para el diálogo de detalles de liquidación:
-  const [selectedLiquidation, setSelectedLiquidation] = useState<Liquidation | null>(null)
-  const [isLiquidationDetailsDialogOpen, setIsLiquidationDetailsDialogOpen] = useState(false)
-
-  // Columnas para la tabla de historial de nóminas
-  const historyPayrollColumns: ColumnDef<Payroll>[] = [
+  // Columnas para la tabla de historial de pagos (nóminas y liquidaciones)
+  const historyColumns: ColumnDef<Payroll | Liquidation>[] = [
+    {
+      accessorKey: "type",
+      header: "Tipo",
+      cell: ({ row }) => {
+        // Determinar si es nómina o liquidación
+        const isLiquidation = "terminationDate" in row.original
+        return (
+          <Badge className={isLiquidation ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"}>
+            {isLiquidation ? "Liquidación" : "Nómina"}
+          </Badge>
+        )
+      },
+    },
     {
       accessorKey: "employeeId",
       header: "Empleado",
       cell: ({ row }) => {
-        const employee = [...employees, ...inactiveEmployees].find((e) => e.id === row.original.employeeId)
+        const allEmployees = [...employees, ...inactiveEmployees]
+        const employee = allEmployees.find((e) => e.id === row.original.employeeId)
         return employee ? `${employee.firstName} ${employee.lastName}` : "Desconocido"
       },
     },
@@ -662,21 +771,31 @@ export default function NominaPage() {
       accessorKey: "period",
       header: "Período",
       cell: ({ row }) => {
-        const monthNames = [
-          "Enero",
-          "Febrero",
-          "Marzo",
-          "Abril",
-          "Mayo",
-          "Junio",
-          "Julio",
-          "Agosto",
-          "Septiembre",
-          "Octubre",
-          "Noviembre",
-          "Diciembre",
-        ]
-        return `${monthNames[row.original.month - 1]} ${row.original.year}`
+        // Si es nómina, mostrar mes/año
+        if ("month" in row.original) {
+          const payroll = row.original as Payroll
+          const monthNames = [
+            "Enero",
+            "Febrero",
+            "Marzo",
+            "Abril",
+            "Mayo",
+            "Junio",
+            "Julio",
+            "Agosto",
+            "Septiembre",
+            "Octubre",
+            "Noviembre",
+            "Diciembre",
+          ]
+          return `${monthNames[payroll.month - 1]} ${payroll.year}`
+        }
+        // Si es liquidación, mostrar fecha de egreso
+        else if ("terminationDate" in row.original) {
+          const liquidation = row.original as Liquidation
+          return `Egreso: ${formatDate(liquidation.terminationDate)}`
+        }
+        return "-"
       },
     },
     {
@@ -685,19 +804,16 @@ export default function NominaPage() {
       cell: ({ row }) => formatDate(row.original.paymentDate || ""),
     },
     {
-      accessorKey: "bankSalary",
-      header: "Sueldo Banco",
-      cell: ({ row }) => formatCurrency(row.original.bankSalary),
-    },
-    {
-      accessorKey: "finalHandSalary",
-      header: "Sueldo Final en Mano",
-      cell: ({ row }) => formatCurrency(row.original.finalHandSalary),
-    },
-    {
-      accessorKey: "totalSalary",
-      header: "Total Pagado",
-      cell: ({ row }) => formatCurrency(row.original.totalSalary),
+      accessorKey: "amount",
+      header: "Monto Total",
+      cell: ({ row }) => {
+        if ("totalSalary" in row.original) {
+          return formatCurrency(row.original.totalSalary)
+        } else if ("totalAmount" in row.original) {
+          return formatCurrency(row.original.totalAmount)
+        }
+        return "-"
+      },
     },
     {
       accessorKey: "paymentMethod",
@@ -715,19 +831,35 @@ export default function NominaPage() {
     {
       id: "actions",
       header: "Acciones",
-      cell: ({ row }) => (
-        <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm" onClick={() => handleExportPayslip(row.original)}>
-            <Download className="mr-1 h-4 w-4" />
-            Recibo
-          </Button>
-
-          <Button variant="outline" size="sm" onClick={() => handleOpenDetailsDialog(row.original)}>
-            <FileText className="mr-1 h-4 w-4" />
-            Detalles
-          </Button>
-        </div>
-      ),
+      cell: ({ row }) => {
+        // Si es nómina
+        if ("month" in row.original) {
+          const payroll = row.original as Payroll
+          return (
+            <div className="flex items-center space-x-2">
+              <Button variant="outline" size="sm" onClick={() => handleExportPayslip(payroll)}>
+                <Download className="mr-1 h-4 w-4" />
+                Recibo
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => handleOpenDetailsDialog(payroll)}>
+                <FileText className="mr-1 h-4 w-4" />
+                Detalles
+              </Button>
+            </div>
+          )
+        }
+        // Si es liquidación
+        else if ("terminationDate" in row.original) {
+          const liquidation = row.original as Liquidation
+          return (
+            <Button variant="outline" size="sm" onClick={() => router.push(`/nomina/liquidations/${liquidation.id}`)}>
+              <Eye className="mr-1 h-4 w-4" />
+              Ver Liquidación
+            </Button>
+          )
+        }
+        return null
+      },
     },
   ]
 
@@ -873,6 +1005,25 @@ export default function NominaPage() {
               {showAllPending ? "Mostrar solo mes actual" : "Ver todas las pendientes"}
             </Button>
           )}
+
+          {activeTab === "historial" && (
+            <div className="flex items-center space-x-2">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <Select
+                value={historyFilter}
+                onValueChange={(value: "all" | "payroll" | "liquidation") => setHistoryFilter(value)}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Filtrar por tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los pagos</SelectItem>
+                  <SelectItem value="payroll">Solo nóminas</SelectItem>
+                  <SelectItem value="liquidation">Solo liquidaciones</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
 
         <Tabs defaultValue="pendientes" value={activeTab} onValueChange={setActiveTab}>
@@ -984,12 +1135,18 @@ export default function NominaPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Historial de Pagos</CardTitle>
-                <CardDescription>Nóminas pagadas para el período seleccionado</CardDescription>
+                <CardDescription>
+                  {historyFilter === "all"
+                    ? "Todos los pagos realizados (nóminas y liquidaciones)"
+                    : historyFilter === "payroll"
+                      ? "Nóminas mensuales pagadas"
+                      : "Liquidaciones finales pagadas"}
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <DataTable
-                  columns={historyPayrollColumns}
-                  data={historyPayrolls}
+                  columns={historyColumns}
+                  data={filteredHistory}
                   searchColumn="employeeId"
                   searchPlaceholder="Buscar empleado..."
                   isLoading={isLoading}
@@ -999,7 +1156,7 @@ export default function NominaPage() {
           </TabsContent>
         </Tabs>
 
-        {/* Diálogo de confirmación de pago */}
+        {/* Diálogo de confirmación de pago de nómina */}
         <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
           <DialogContent>
             <DialogHeader>
@@ -1111,6 +1268,103 @@ export default function NominaPage() {
                 Cancelar
               </Button>
               <Button onClick={handlePaymentConfirmation}>Confirmar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Diálogo de confirmación de pago de liquidación */}
+        <Dialog open={isLiquidationPaymentDialogOpen} onOpenChange={setIsLiquidationPaymentDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Confirmar Pago de Liquidación</DialogTitle>
+              <DialogDescription>
+                {(() => {
+                  if (!selectedLiquidation) return "Confirme el pago de la liquidación"
+
+                  const employee = [...employees, ...inactiveEmployees].find(
+                    (e) => e.id === selectedLiquidation.employeeId,
+                  )
+                  const employeeName = employee ? `${employee.firstName} ${employee.lastName}` : "Empleado"
+
+                  return `${employeeName} - Liquidación Final`
+                })()}
+              </DialogDescription>
+            </DialogHeader>
+
+            {selectedLiquidation && (
+              <div className="grid gap-4 py-4">
+                <div className="border-b pb-4">
+                  <h3 className="font-medium mb-2">Detalles de la Liquidación</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Fecha de Egreso</p>
+                      <p>{formatDate(selectedLiquidation.terminationDate)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Monto Total</p>
+                      <p className="text-lg font-bold">{formatCurrency(selectedLiquidation.totalAmount)}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="font-medium mb-2">Detalles del Pago</h3>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="liquidationPaymentDate">Fecha de Pago</Label>
+                      <Input
+                        id="liquidationPaymentDate"
+                        type="date"
+                        value={paymentDate}
+                        onChange={(e) => setPaymentDate(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="liquidationPaymentMethod">Método de Pago</Label>
+                      <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                        <SelectTrigger id="liquidationPaymentMethod">
+                          <SelectValue placeholder="Seleccionar método" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="efectivo">Efectivo</SelectItem>
+                          <SelectItem value="transferencia">Transferencia</SelectItem>
+                          <SelectItem value="cheque">Cheque</SelectItem>
+                          <SelectItem value="otro">Otro</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="liquidationPaymentReference">Referencia de Pago</Label>
+                    <Input
+                      id="liquidationPaymentReference"
+                      placeholder="Número de transferencia, cheque, etc."
+                      value={paymentReference}
+                      onChange={(e) => setPaymentReference(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="liquidationPaymentNotes">Notas</Label>
+                    <Input
+                      id="liquidationPaymentNotes"
+                      placeholder="Observaciones adicionales"
+                      value={paymentNotes}
+                      onChange={(e) => setPaymentNotes(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsLiquidationPaymentDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleLiquidationPaymentConfirmation}>Confirmar Pago</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1419,7 +1673,9 @@ export default function NominaPage() {
                               <td className="px-6 py-4 whitespace-nowrap text-sm">
                                 <span
                                   className={
-                                    detail.type === "addition" ? "text-green-600 font-medium" : "text-red-600 font-medium"
+                                    detail.type === "addition"
+                                      ? "text-green-600 font-medium"
+                                      : "text-red-600 font-medium"
                                   }
                                 >
                                   {detail.type === "addition" ? "+" : "-"}
@@ -1442,15 +1698,17 @@ export default function NominaPage() {
                 Cerrar
               </Button>
               {selectedPayroll && !selectedPayroll.isPaid && (
-                <Button onClick={() => {
-                  setSelectedPayroll(selectedPayroll)
-                  setIsHandSalaryPaid(selectedPayroll.handSalaryPaid)
-                  setIsBankSalaryPaid(selectedPayroll.bankSalaryPaid)
-                  setPaymentMethod(selectedPayroll.paymentMethod || "efectivo")
-                  setPaymentReference(selectedPayroll.paymentReference || "")
-                  setIsDetailsDialogOpen(false)
-                  setIsPaymentDialogOpen(true)
-                }}>
+                <Button
+                  onClick={() => {
+                    setSelectedPayroll(selectedPayroll)
+                    setIsHandSalaryPaid(selectedPayroll.handSalaryPaid)
+                    setIsBankSalaryPaid(selectedPayroll.bankSalaryPaid)
+                    setPaymentMethod(selectedPayroll.paymentMethod || "efectivo")
+                    setPaymentReference(selectedPayroll.paymentReference || "")
+                    setIsDetailsDialogOpen(false)
+                    setIsPaymentDialogOpen(true)
+                  }}
+                >
                   <CheckCircle className="mr-1 h-4 w-4" />
                   Confirmar Pago
                 </Button>
