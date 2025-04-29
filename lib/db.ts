@@ -116,25 +116,37 @@ class DatabaseService {
   // MÉTODO CORREGIDO: Ahora recibe el ID como parámetro separado
   async updateEmployee(id: string, employee: Employee) {
     try {
+      // Crear una copia del empleado para no modificar el original
+      const employeeToUpdate = { ...employee }
+
+      // Eliminar el id del objeto de datos para evitar conflictos
+      if (employeeToUpdate.id) {
+        delete employeeToUpdate.id
+      }
+
+      // Asegurarse de que customSchedule sea un objeto JSON válido si existe
+      if (employeeToUpdate.customSchedule && typeof employeeToUpdate.customSchedule === "object") {
+        // No es necesario hacer nada, ya es un objeto
+      } else if (employeeToUpdate.customSchedule && typeof employeeToUpdate.customSchedule === "string") {
+        try {
+          // Intentar parsear si es un string
+          employeeToUpdate.customSchedule = JSON.parse(employeeToUpdate.customSchedule)
+        } catch (e) {
+          console.error("Error parsing customSchedule:", e)
+          // Si no se puede parsear, establecer como null para evitar errores
+          employeeToUpdate.customSchedule = null
+        }
+      }
+
       // Convertir automáticamente de camelCase a snake_case
       const updateData = objectToSnakeCase({
-        ...employee,
+        ...employeeToUpdate,
         updated_at: new Date().toISOString(),
       })
 
-      // Eliminar el id del objeto de datos para evitar conflictos
-      if (updateData.id) {
-        delete updateData.id
-      }
-
       console.log("Actualizando empleado con ID:", id, "Datos:", updateData)
 
-      const { data, error } = await this.supabase
-        .from("employees")
-        .update(updateData)
-        .eq("id", id) // Usar el ID como parámetro separado
-        .select()
-        .single()
+      const { data, error } = await this.supabase.from("employees").update(updateData).eq("id", id).select().single()
 
       if (error) {
         console.error("Error updating employee:", error)
