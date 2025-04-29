@@ -96,9 +96,7 @@ export async function generateLiquidations() {
 
         // Total
         const totalAmount =
-          lastMonthPayment +
-          (includeByDefault ? proportionalVacation : 0) +
-          (includeByDefault ? proportionalBonus : 0)
+          lastMonthPayment + (includeByDefault ? proportionalVacation : 0) + (includeByDefault ? proportionalBonus : 0)
 
         // 4. Crear la liquidación
         console.log(`Creando nueva liquidación para empleado ${employee.id}`)
@@ -169,43 +167,51 @@ export async function generateLiquidations() {
 }
 
 // Función para marcar liquidaciones como pagadas
-export async function markLiquidationsAsPaid(
-  liquidationIds: string[],
-  paymentDetails: {
-    payment_date: string
-    payment_method: string
-    payment_reference?: string
-    notes?: string
-  },
-) {
-  // Crear el cliente con las claves explícitas solo para esta función
-  const supabase = createClientComponentClient({
-    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
-    supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  })
-
+/**
+ * Marca múltiples liquidaciones como pagadas
+ * @param liquidationIds IDs de las liquidaciones a marcar como pagadas
+ * @param paymentDetails Detalles del pago
+ * @returns Resultado de la operación
+ */
+export async function markLiquidationsAsPaid(liquidationIds: string[], paymentDetails: any) {
   try {
-    const { error } = await supabase
-      .from("liquidations")
-      .update({
-        is_paid: true,
-        payment_date: paymentDetails.payment_date,
-        payment_method: paymentDetails.payment_method,
-        payment_reference: paymentDetails.payment_reference,
-        notes: paymentDetails.notes,
-        updated_at: new Date().toISOString(),
-      })
-      .in("id", liquidationIds)
+    console.log(`Marcando ${liquidationIds.length} liquidaciones como pagadas:`, liquidationIds)
+
+    const supabase = createClientComponentClient({
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+      supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    })
+
+    // Convertir fecha a formato ISO si es necesario
+    const paymentDate = paymentDetails.payment_date
+      ? new Date(paymentDetails.payment_date).toISOString()
+      : new Date().toISOString()
+
+    // Datos de actualización
+    const updateData = {
+      is_paid: true,
+      payment_date: paymentDate,
+      payment_method: paymentDetails.payment_method || "transfer",
+      payment_reference: paymentDetails.payment_reference || "",
+      notes: paymentDetails.notes || "",
+      updated_at: new Date().toISOString(),
+    }
+
+    // Actualizar todas las liquidaciones seleccionadas
+    const { error } = await supabase.from("liquidations").update(updateData).in("id", liquidationIds)
 
     if (error) {
       console.error("Error al marcar liquidaciones como pagadas:", error)
       return { success: false, error: error.message }
     }
 
-    return { success: true, count: liquidationIds.length }
-  } catch (error) {
-    console.error("Error general al marcar liquidaciones como pagadas:", error)
-    return { success: false, error: String(error) }
+    return {
+      success: true,
+      message: `${liquidationIds.length} liquidaciones marcadas como pagadas correctamente`,
+    }
+  } catch (error: any) {
+    console.error("Error en markLiquidationsAsPaid:", error)
+    return { success: false, error: error.message || "Error desconocido" }
   }
 }
 
@@ -288,9 +294,7 @@ export async function regenerateLiquidation(liquidationId: string) {
 
     // Total
     const totalAmount =
-      lastMonthPayment +
-      (includeVacation ? proportionalVacation : 0) +
-      (includeBonus ? proportionalBonus : 0)
+      lastMonthPayment + (includeVacation ? proportionalVacation : 0) + (includeBonus ? proportionalBonus : 0)
 
     // 4. Crear la nueva versión de la liquidación
     const newVersion = (currentLiquidation.version || 1) + 1
@@ -310,10 +314,7 @@ export async function regenerateLiquidation(liquidationId: string) {
       updated_at: new Date().toISOString(),
     }
 
-    const { error: updateError } = await supabase
-      .from("liquidations")
-      .update(updateData)
-      .eq("id", liquidationId)
+    const { error: updateError } = await supabase.from("liquidations").update(updateData).eq("id", liquidationId)
 
     if (updateError) {
       console.error("Error al actualizar liquidación:", updateError)

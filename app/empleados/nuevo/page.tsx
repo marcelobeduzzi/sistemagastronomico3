@@ -40,15 +40,13 @@ export default function NuevoEmpleadoPage() {
     totalSalary: 0,
     status: "active",
     role: "employee",
-    attendanceBonus: false, // Inicializar el bono de presentismo como falso
+    attendanceBonus: false,
+    customCheckIn: "09:00",
+    customCheckOut: "17:00",
   })
 
   // Estado para horario personalizado
   const [useCustomSchedule, setUseCustomSchedule] = useState(false)
-  const [customSchedule, setCustomSchedule] = useState({
-    expectedCheckIn: "09:00",
-    expectedCheckOut: "17:00",
-  })
 
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -80,9 +78,12 @@ export default function NuevoEmpleadoPage() {
 
   const handleCustomScheduleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
-    setCustomSchedule((prev) => ({
+    // Extraer el nombre del campo sin el "expected" al inicio
+    const fieldName = name === "expectedCheckIn" ? "customCheckIn" : "customCheckOut"
+
+    setFormData((prev) => ({
       ...prev,
-      [name]: value,
+      [fieldName]: value,
     }))
   }
 
@@ -136,7 +137,11 @@ export default function NuevoEmpleadoPage() {
 
       // Agregar horario personalizado si está habilitado
       if (useCustomSchedule) {
-        employeeData.customSchedule = customSchedule
+        // No es necesario hacer nada especial, los campos ya están en formData
+      } else {
+        // Si no se usa horario personalizado, establecer los valores como null
+        employeeData.customCheckIn = null
+        employeeData.customCheckOut = null
       }
 
       console.log("Datos a enviar:", employeeData)
@@ -501,7 +506,7 @@ export default function NuevoEmpleadoPage() {
                             id="expectedCheckIn"
                             name="expectedCheckIn"
                             type="time"
-                            value={customSchedule.expectedCheckIn}
+                            value={formData.customCheckIn || ""}
                             onChange={handleCustomScheduleChange}
                           />
                         </div>
@@ -511,7 +516,7 @@ export default function NuevoEmpleadoPage() {
                             id="expectedCheckOut"
                             name="expectedCheckOut"
                             type="time"
-                            value={customSchedule.expectedCheckOut}
+                            value={formData.customCheckOut || ""}
                             onChange={handleCustomScheduleChange}
                           />
                         </div>

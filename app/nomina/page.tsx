@@ -10,18 +10,7 @@ import { DataTable } from "@/components/data-table"
 import { dbService } from "@/lib/db-service"
 import { formatCurrency, formatDate, generatePayslip } from "@/lib/export-utils"
 import { useToast } from "@/components/ui/use-toast"
-import {
-  Download,
-  RefreshCw,
-  CheckCircle,
-  FileText,
-  Calendar,
-  Eye,
-  ArrowLeft,
-  Calculator,
-  Loader2,
-  PlusCircle,
-} from "lucide-react"
+import { Download, RefreshCw, CheckCircle, FileText, Calendar, Eye, ArrowLeft, Calculator, Loader2, PlusCircle, DollarSign, CreditCard, Wallet } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -71,6 +60,17 @@ export default function NominaPage() {
   const [isBankSalaryPaid, setIsBankSalaryPaid] = useState(false)
   const [sessionStatus, setSessionStatus] = useState<"valid" | "invalid" | "checking">("checking")
 
+  // Nuevos estados para los totales
+  const [payrollTotals, setPayrollTotals] = useState({
+    totalHand: 0,
+    totalBank: 0,
+    totalAmount: 0
+  })
+  
+  const [liquidationTotals, setLiquidationTotals] = useState({
+    totalAmount: 0
+  })
+
   // Verificar sesión al cargar la página
   useEffect(() => {
     const checkSession = async () => {
@@ -112,6 +112,36 @@ export default function NominaPage() {
       loadData()
     }
   }, [selectedMonth, selectedYear, activeTab, showAllPending, sessionStatus])
+
+  // Función para calcular los totales de nóminas
+  useEffect(() => {
+    if (filteredPayrolls.length > 0) {
+      const totals = filteredPayrolls.reduce((acc, payroll) => {
+        return {
+          totalHand: acc.totalHand + (payroll.finalHandSalary || 0),
+          totalBank: acc.totalBank + (payroll.bankSalary || 0),
+          totalAmount: acc.totalAmount + (payroll.totalSalary || 0)
+        }
+      }, { totalHand: 0, totalBank: 0, totalAmount: 0 })
+      
+      setPayrollTotals(totals)
+    } else {
+      setPayrollTotals({ totalHand: 0, totalBank: 0, totalAmount: 0 })
+    }
+  }, [filteredPayrolls])
+
+  // Función para calcular los totales de liquidaciones
+  useEffect(() => {
+    if (liquidations.length > 0) {
+      const total = liquidations.reduce((acc, liquidation) => {
+        return acc + (liquidation.totalAmount || 0)
+      }, 0)
+      
+      setLiquidationTotals({ totalAmount: total })
+    } else {
+      setLiquidationTotals({ totalAmount: 0 })
+    }
+  }, [liquidations])
 
   // Función para preservar la sesión al navegar a otras páginas
   const preserveSession = () => {
@@ -167,8 +197,7 @@ export default function NominaPage() {
       setIsLoading(false)
     }
   }
-
-  const handleGeneratePayrolls = async () => {
+    const handleGeneratePayrolls = async () => {
     setIsGeneratingPayrolls(true)
     try {
       console.log(`Generando nóminas para ${selectedMonth}/${selectedYear}`)
@@ -734,6 +763,13 @@ export default function NominaPage() {
   // Si está verificando la sesión, mostrar cargando
   if (sessionStatus === "checking") {
     return (
+      <DashboardLayout
+
+This generation may require the following integrations: 
+<AddIntegration names={["supabase", "blob"]} />
+  // Si está verificando la sesión, mostrar cargando
+  if (sessionStatus === "checking") {
+    return (
       <DashboardLayout>
         <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
           <div className="flex justify-center items-center h-64">
@@ -854,6 +890,44 @@ export default function NominaPage() {
           </TabsList>
 
           <TabsContent value="pendientes">
+            {/* Totalizador de nóminas pendientes */}
+            {filteredPayrolls.length > 0 && (
+              <Card className="mb-6">
+                <CardContent className="pt-6">
+                  <h3 className="text-lg font-medium mb-4">Resumen de Pagos Pendientes</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-4 rounded-lg bg-blue-50">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          <Wallet className="h-5 w-5 text-blue-600" />
+                          <span className="ml-2 font-medium">Total a Pagar en Mano</span>
+                        </div>
+                        <span className="text-lg font-bold">{formatCurrency(payrollTotals.totalHand)}</span>
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-lg bg-green-50">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          <CreditCard className="h-5 w-5 text-green-600" />
+                          <span className="ml-2 font-medium">Total a Pagar en Banco</span>
+                        </div>
+                        <span className="text-lg font-bold">{formatCurrency(payrollTotals.totalBank)}</span>
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-lg bg-purple-50">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          <DollarSign className="h-5 w-5 text-purple-600" />
+                          <span className="ml-2 font-medium">Total a Pagar</span>
+                        </div>
+                        <span className="text-lg font-bold">{formatCurrency(payrollTotals.totalAmount)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardHeader>
                 <CardTitle>Pagos Pendientes</CardTitle>
@@ -876,6 +950,26 @@ export default function NominaPage() {
           </TabsContent>
 
           <TabsContent value="liquidaciones">
+            {/* Totalizador de liquidaciones */}
+            {liquidations.length > 0 && (
+              <Card className="mb-6">
+                <CardContent className="pt-6">
+                  <h3 className="text-lg font-medium mb-4">Resumen de Liquidaciones Pendientes</h3>
+                  <div className="grid grid-cols-1 gap-4">
+                    <div className="p-4 rounded-lg bg-purple-50">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          <DollarSign className="h-5 w-5 text-purple-600" />
+                          <span className="ml-2 font-medium">Total a Pagar por Liquidaciones</span>
+                        </div>
+                        <span className="text-lg font-bold">{formatCurrency(liquidationTotals.totalAmount)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardHeader>
                 <CardTitle>Liquidaciones Finales</CardTitle>
@@ -1315,48 +1409,9 @@ export default function NominaPage() {
                               Tipo
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Monto
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {selectedPayroll.details.map((detail, index) => (
-                            <tr key={index}>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm">{detail.concept}</td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                {detail.type === "addition" ? "Adición" : "Deducción"}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                {detail.type === "addition"
-                                  ? formatCurrency(detail.amount)
-                                  : `- ${formatCurrency(detail.amount)}`}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
 
-                <div className="flex justify-end space-x-2">
-                  {selectedPayroll.isPaid && (
-                    <Button variant="outline" onClick={() => handleExportPayslip(selectedPayroll)}>
-                      <Download className="mr-2 h-4 w-4" />
-                      Descargar Recibo
-                    </Button>
-                  )}
+This generation may require the following integrations: 
+<AddIntegration names={["supabase", "blob"]} />
 
-                  <Button variant="outline" onClick={() => setIsDetailsDialogOpen(false)}>
-                    Cerrar
-                  </Button>
-                </div>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
-      </div>
-    </DashboardLayout>
-  )
-}
+
 

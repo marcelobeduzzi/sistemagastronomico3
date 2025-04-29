@@ -5,8 +5,12 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { Loader2, CheckCircle, AlertCircle, FileText, Edit, RefreshCw } from 'lucide-react'
-import { generateLiquidations, markLiquidationsAsPaid, regenerateLiquidation } from "@/lib/liquidation-service-column-fix"
+import { Loader2, CheckCircle, AlertCircle, FileText, Edit, RefreshCw } from "lucide-react"
+import {
+  generateLiquidations,
+  markLiquidationsAsPaid,
+  regenerateLiquidation,
+} from "@/lib/liquidation-service-column-fix"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -526,9 +530,7 @@ export default function LiquidationsPage() {
               {regenerateResult.success ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
               <AlertTitle>{regenerateResult.success ? "Éxito" : "Error"}</AlertTitle>
               <AlertDescription>
-                {regenerateResult.success
-                  ? "La liquidación ha sido regenerada correctamente."
-                  : regenerateResult.error}
+                {regenerateResult.success ? "La liquidación ha sido regenerada correctamente." : regenerateResult.error}
               </AlertDescription>
             </Alert>
           )}
@@ -553,5 +555,3 @@ export default function LiquidationsPage() {
     </div>
   )
 }
-
-

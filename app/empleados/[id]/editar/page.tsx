@@ -29,10 +29,6 @@ export default function EditarEmpleadoPage({ params }: { params: { id: string } 
 
   // Estado para horario personalizado
   const [useCustomSchedule, setUseCustomSchedule] = useState(false)
-  const [customSchedule, setCustomSchedule] = useState({
-    expectedCheckIn: "09:00",
-    expectedCheckOut: "17:00",
-  })
 
   useEffect(() => {
     const fetchEmployee = async () => {
@@ -54,9 +50,8 @@ export default function EditarEmpleadoPage({ params }: { params: { id: string } 
           employee.totalSalary = (employee.baseSalary || 0) + (employee.bankSalary || 0)
 
           // Verificar si tiene horario personalizado
-          if (employee.customSchedule) {
+          if (employee.customCheckIn && employee.customCheckOut) {
             setUseCustomSchedule(true)
-            setCustomSchedule(employee.customSchedule)
           }
 
           // Asegurarse de que attendanceBonus tenga un valor
@@ -128,10 +123,16 @@ export default function EditarEmpleadoPage({ params }: { params: { id: string } 
 
   const handleCustomScheduleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
-    setCustomSchedule((prev) => ({
-      ...prev,
-      [name]: value,
-    }))
+    // Extraer el nombre del campo sin el "expected" al inicio
+    const fieldName = name === "expectedCheckIn" ? "customCheckIn" : "customCheckOut"
+
+    setFormData((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        [fieldName]: value,
+      }
+    })
   }
 
   const handleAttendanceBonusChange = (checked: boolean) => {
@@ -161,14 +162,10 @@ export default function EditarEmpleadoPage({ params }: { params: { id: string } 
         totalSalary: typeof formData.totalSalary === "number" ? formData.totalSalary : 0,
       }
 
-      // Agregar horario personalizado si está habilitado
-      if (useCustomSchedule) {
-        dataToSubmit.customSchedule = customSchedule
-      } else {
-        // Si no se usa horario personalizado, eliminar la propiedad
-        if (dataToSubmit.customSchedule) {
-          delete dataToSubmit.customSchedule
-        }
+      if (!useCustomSchedule) {
+        // Si no se usa horario personalizado, establecer los valores como null
+        dataToSubmit.customCheckIn = null
+        dataToSubmit.customCheckOut = null
       }
 
       const updatedEmployee = await dbService.updateEmployee(id, dataToSubmit)
@@ -557,7 +554,7 @@ export default function EditarEmpleadoPage({ params }: { params: { id: string } 
                             id="expectedCheckIn"
                             name="expectedCheckIn"
                             type="time"
-                            value={customSchedule.expectedCheckIn}
+                            value={formData.customCheckIn || ""}
                             onChange={handleCustomScheduleChange}
                           />
                         </div>
@@ -567,7 +564,7 @@ export default function EditarEmpleadoPage({ params }: { params: { id: string } 
                             id="expectedCheckOut"
                             name="expectedCheckOut"
                             type="time"
-                            value={customSchedule.expectedCheckOut}
+                            value={formData.customCheckOut || ""}
                             onChange={handleCustomScheduleChange}
                           />
                         </div>

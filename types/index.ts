@@ -60,6 +60,8 @@ export interface Employee {
   workedDays?: number
   createdAt: string
   updatedAt: string
+  customCheckIn?: string | null
+  customCheckOut?: string | null
 }
 
 export interface Attendance {
@@ -229,6 +231,3 @@ export interface Order {
   createdAt: string
   updatedAt?: string
 }
-
-
-
