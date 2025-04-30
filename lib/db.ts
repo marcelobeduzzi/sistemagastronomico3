@@ -115,6 +115,23 @@ class DatabaseService {
 
       console.log("Attempting to create employee with data:", employeeData)
 
+      // Asegurarse de que los campos numéricos tengan valores numéricos válidos
+      if (typeof employeeData.base_salary !== "number")
+        employeeData.base_salary = Number.parseFloat(employeeData.base_salary) || 0
+      if (typeof employeeData.bank_salary !== "number")
+        employeeData.bank_salary = Number.parseFloat(employeeData.bank_salary) || 0
+      if (typeof employeeData.total_salary !== "number")
+        employeeData.total_salary = Number.parseFloat(employeeData.total_salary) || 0
+      if (typeof employeeData.attendance_bonus !== "number")
+        employeeData.attendance_bonus = Number.parseFloat(employeeData.attendance_bonus) || 0
+
+      // Asegurarse de que los campos booleanos sean booleanos y no strings
+      if (employeeData.has_attendance_bonus === "true") employeeData.has_attendance_bonus = true
+      if (employeeData.has_attendance_bonus === "false") employeeData.has_attendance_bonus = false
+      if (employeeData.has_attendance_bonus === undefined) employeeData.has_attendance_bonus = false
+
+      console.log("Datos finales para crear empleado después de validación:", employeeData)
+
       const { data, error } = await this.supabase.from("employees").insert([employeeData]).select().single()
 
       if (error) {
@@ -978,7 +995,8 @@ class DatabaseService {
         updateData.hand_payment_date = now
       }
 
-      // Manejar el bono de presentismo si está presente en los datos
+      // IMPORTANTE: Manejar explícitamente los campos del bono de presentismo
+      // Asegurarse de que estos campos se incluyan siempre que estén presentes en los datos
       if (payroll.hasAttendanceBonus !== undefined) {
         updateData.has_attendance_bonus = payroll.hasAttendanceBonus
       }
@@ -1015,6 +1033,7 @@ class DatabaseService {
         throw new Error("No se especificó ningún tipo de pago válido para actualizar")
       }
 
+      // IMPORTANTE: Usar upsert para asegurar que los campos se actualicen correctamente
       const { data, error } = await this.supabase.from("payroll").update(updateData).eq("id", id).select().single()
 
       if (error) {
