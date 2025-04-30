@@ -62,9 +62,9 @@ export interface Employee {
   updatedAt: string
   customCheckIn?: string | null
   customCheckOut?: string | null
-  // Nuevos campos para el bono de presentismo
-  attendanceBonus?: number
-  hasAttendanceBonus?: boolean
+  // Eliminamos los campos de bono que ya no existen en la tabla
+  // attendanceBonus?: number
+  // hasAttendanceBonus?: boolean
 }
 
 export interface Attendance {
@@ -106,14 +106,6 @@ export interface Payroll {
   // Nuevos campos para el bono de presentismo
   attendanceBonus?: number
   hasAttendanceBonus?: boolean
-  // Campos adicionales que podrían estar presentes
-  isPaid?: boolean
-  paymentDate?: string
-  paymentMethod?: string
-  paymentReference?: string
-  paymentType?: "bank" | "hand" | "all"
-  bankSalaryPaid?: boolean
-  handSalaryPaid?: boolean
 }
 
 export interface PayrollDetail {
@@ -125,7 +117,6 @@ export interface PayrollDetail {
   date: string
   createdAt: string
   updatedAt: string
-  description?: string
 }
 
 export interface DeliveryStats {

@@ -10,7 +10,7 @@ interface AttendanceType {
 // Clase principal que contiene toda la funcionalidad original
 class DatabaseService {
   private supabase = createClientComponentClient()
-  // Columnas conocidas en la tabla employees (actualizar según la estructura real)
+  // Actualizar la lista de columnas conocidas en la tabla employees para eliminar las referencias a las columnas de bono
   private employeeColumns = [
     "id",
     "first_name",
@@ -29,7 +29,7 @@ class DatabaseService {
     "custom_days",
     "created_at",
     "updated_at",
-    "attendance_bonus", // Agregamos la columna para el bono de presentismo
+    // Eliminamos la columna attendance_bonus que ya no debería estar en la tabla employees
     // Agregar aquí todas las columnas que existen en la tabla
   ]
 
@@ -122,13 +122,14 @@ class DatabaseService {
         employeeData.bank_salary = Number.parseFloat(employeeData.bank_salary) || 0
       if (typeof employeeData.total_salary !== "number")
         employeeData.total_salary = Number.parseFloat(employeeData.total_salary) || 0
-      if (typeof employeeData.attendance_bonus !== "number")
-        employeeData.attendance_bonus = Number.parseFloat(employeeData.attendance_bonus) || 0
 
-      // Asegurarse de que los campos booleanos sean booleanos y no strings
-      if (employeeData.has_attendance_bonus === "true") employeeData.has_attendance_bonus = true
-      if (employeeData.has_attendance_bonus === "false") employeeData.has_attendance_bonus = false
-      if (employeeData.has_attendance_bonus === undefined) employeeData.has_attendance_bonus = false
+      // Eliminar los campos de bono que ya no existen en la tabla
+      if ("attendance_bonus" in employeeData) {
+        delete employeeData.attendance_bonus
+      }
+      if ("has_attendance_bonus" in employeeData) {
+        delete employeeData.has_attendance_bonus
+      }
 
       console.log("Datos finales para crear empleado después de validación:", employeeData)
 
@@ -220,11 +221,27 @@ class DatabaseService {
         }
       }
 
+      // Eliminar los campos de bono que ya no existen en la tabla
+      if ("attendanceBonus" in employeeToUpdate) {
+        delete employeeToUpdate.attendanceBonus
+      }
+      if ("hasAttendanceBonus" in employeeToUpdate) {
+        delete employeeToUpdate.hasAttendanceBonus
+      }
+
       // Convertir automáticamente de camelCase a snake_case
       const snakeCaseData = objectToSnakeCase({
         ...employeeToUpdate,
         updated_at: new Date().toISOString(),
       })
+
+      // Eliminar los campos de bono que ya no existen en la tabla (versión snake_case)
+      if ("attendance_bonus" in snakeCaseData) {
+        delete snakeCaseData.attendance_bonus
+      }
+      if ("has_attendance_bonus" in snakeCaseData) {
+        delete snakeCaseData.has_attendance_bonus
+      }
 
       // Filtrar solo los campos que existen en la tabla
       const filteredData: Record<string, any> = {}
@@ -998,6 +1015,53 @@ class DatabaseService {
       // IMPORTANTE: Manejar explícitamente los campos del bono de presentismo
       // Asegurarse de que estos campos se incluyan siempre que estén presentes en los datos
       if (payroll.hasAttendanceBonus !== undefined) {
+        // Verificar si la columna existe en la tabla
+        try {
+          // Primero, verificar la estructura de la tabla payroll
+          const { data: tableInfo, error: tableError } = await this.supabase.from("payroll").select("*").limit(1)
+
+          if (tableError) {
+            console.error("Error al verificar estructura de tabla payroll:", tableError)
+          } else {
+            const sampleRow = tableInfo && tableInfo.length > 0 ? tableInfo[0] : null
+            console.log("Estructura de tabla payroll:", sampleRow ? Object.keys(sampleRow) : "No hay datos")
+
+            // Si la columna no existe, intentar crearla
+            if (sampleRow && !("has_attendance_bonus" in sampleRow)) {
+              console.log("La columna has_attendance_bonus no existe en la tabla payroll")
+              // Intentar usar RPC para añadir la columna (requiere permisos de administrador)
+              try {
+                await this.supabase.rpc("add_column_if_not_exists", {
+                  table_name: "payroll",
+                  column_name: "has_attendance_bonus",
+                  column_type: "boolean",
+                })
+                console.log("Columna has_attendance_bonus añadida correctamente")
+              } catch (rpcError) {
+                console.error("Error al añadir columna has_attendance_bonus:", rpcError)
+              }
+            }
+
+            if (sampleRow && !("attendance_bonus" in sampleRow)) {
+              console.log("La columna attendance_bonus no existe en la tabla payroll")
+              // Intentar usar RPC para añadir la columna (requiere permisos de administrador)
+              try {
+                await this.supabase.rpc("add_column_if_not_exists", {
+                  table_name: "payroll",
+                  column_name: "attendance_bonus",
+                  column_type: "numeric",
+                })
+                console.log("Columna attendance_bonus añadida correctamente")
+              } catch (rpcError) {
+                console.error("Error al añadir columna attendance_bonus:", rpcError)
+              }
+            }
+          }
+        } catch (checkError) {
+          console.error("Error al verificar columnas:", checkError)
+        }
+
+        // Continuar con la actualización
         updateData.has_attendance_bonus = payroll.hasAttendanceBonus
       }
 
@@ -1047,6 +1111,31 @@ class DatabaseService {
       }
 
       console.log("Nómina actualizada correctamente:", data)
+
+      // Verificar si los campos del bono se actualizaron correctamente
+      if ((payroll.hasAttendanceBonus !== undefined || payroll.attendanceBonus !== undefined) && data) {
+        console.log("Verificando campos de bono en la respuesta:", {
+          has_attendance_bonus: data.has_attendance_bonus,
+          attendance_bonus: data.attendance_bonus,
+        })
+
+        // Si los campos no están en la respuesta, intentar una consulta directa
+        if (data.has_attendance_bonus === undefined && data.attendance_bonus === undefined) {
+          console.log("Los campos de bono no están en la respuesta, verificando directamente...")
+          const { data: verifyData, error: verifyError } = await this.supabase
+            .from("payroll")
+            .select("has_attendance_bonus, attendance_bonus")
+            .eq("id", id)
+            .single()
+
+          if (verifyError) {
+            console.error("Error al verificar campos de bono:", verifyError)
+          } else {
+            console.log("Valores actuales en la base de datos:", verifyData)
+          }
+        }
+      }
+
       return objectToCamelCase(data)
     } catch (error) {
       console.error("Error al actualizar nómina:", error)
