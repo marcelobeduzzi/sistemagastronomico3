@@ -16,7 +16,7 @@ import { ConciliacionSummary } from "./conciliacion-summary"
 import { StockDiscrepancyTable } from "./stock-discrepancy-table"
 import { CashDiscrepancyTable } from "./cash-discrepancy-table"
 import { AutoReconcilePanel } from "./auto-reconcile-panel"
-import { ReconciliationService } from "@/lib/reconciliation-service"
+import { ReconciliationService } from "../../lib/reconciliation-service"
 
 // Lista de locales para seleccionar (igual que en los otros componentes)
 const locales = [
