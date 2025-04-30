@@ -489,14 +489,20 @@ export default function NominaPage() {
     try {
       // Calcular el nuevo total con o sin bono
       const bonusAmount = hasAttendanceBonus ? attendanceBonus : 0
+
+      // Calcular el nuevo total incluyendo el bono
       const newTotal =
         selectedPayroll.baseSalary + selectedPayroll.bankSalary + selectedPayroll.handSalary + bonusAmount
 
-      await dbService.updatePayroll(selectedPayroll.id, {
+      // Asegurarse de que todos los campos necesarios estén incluidos en la actualización
+      const updateData = {
         hasAttendanceBonus,
         attendanceBonus: bonusAmount,
         totalSalary: newTotal,
-      })
+      }
+
+      console.log("Enviando actualización de bono:", updateData)
+      await dbService.updatePayroll(selectedPayroll.id, updateData)
 
       toast({
         title: "Bono actualizado",
