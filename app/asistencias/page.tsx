@@ -166,13 +166,45 @@ export default function AsistenciasPage() {
     exportToCSV(data, `asistencias_${activeTab === "recent" ? "recientes" : selectedDateString}`)
   }
 
-  const handleEmployeeChange = (employeeId: string) => {
-    setSelectedEmployee(employeeId)
+  const handleEmployeeChange = async (employeeId: string) => {
+    setNewAttendance((prev) => ({
+      ...prev,
+      employeeId,
+    }))
 
-    // Si se selecciona un empleado para nueva asistencia, actualizar los horarios esperados
+    // Si se selecciona un empleado para nueva asistencia, cargar sus horarios personalizados
     if (employeeId && employeeId !== "all") {
-      const employee = employees.find((e) => e.id === employeeId)
-      if (employee) {
+      try {
+        const employee = await dbService.getEmployeeById(employeeId)
+
+        // Verificar si el empleado tiene horario personalizado
+        if (employee.customSchedule) {
+          let customScheduleObj
+
+          // Convertir el customSchedule a objeto si es string
+          if (typeof employee.customSchedule === "string") {
+            try {
+              customScheduleObj = JSON.parse(employee.customSchedule)
+            } catch (e) {
+              console.error("Error al parsear customSchedule:", e)
+              customScheduleObj = null
+            }
+          } else {
+            customScheduleObj = employee.customSchedule
+          }
+
+          // Si hay un horario personalizado válido, usarlo
+          if (customScheduleObj && customScheduleObj.checkIn && customScheduleObj.checkOut) {
+            setNewAttendance((prev) => ({
+              ...prev,
+              expectedCheckIn: customScheduleObj.checkIn,
+              expectedCheckOut: customScheduleObj.checkOut,
+            }))
+            return
+          }
+        }
+
+        // Si no hay horario personalizado, usar el horario según el turno
         let expectedCheckIn = ""
         let expectedCheckOut = ""
 
@@ -201,10 +233,11 @@ export default function AsistenciasPage() {
 
         setNewAttendance((prev) => ({
           ...prev,
-          employeeId,
           expectedCheckIn,
           expectedCheckOut,
         }))
+      } catch (error) {
+        console.error("Error al cargar datos del empleado:", error)
       }
     }
   }
@@ -301,9 +334,46 @@ export default function AsistenciasPage() {
   }
 
   // Función para abrir el diálogo de edición
-  const handleEditAttendance = (attendance: Attendance) => {
+  const handleEditAttendance = async (attendance: Attendance) => {
     setSelectedAttendance(attendance)
-    setEditAttendance(attendance)
+
+    // Crear una copia profunda para evitar modificar el original
+    const attendanceCopy = JSON.parse(JSON.stringify(attendance))
+
+    // Si el empleado tiene horario personalizado, cargarlo
+    try {
+      const employee = await dbService.getEmployeeById(attendance.employeeId)
+
+      // Solo actualizar los horarios esperados si no están ya definidos
+      if (!attendanceCopy.expectedCheckIn || !attendanceCopy.expectedCheckOut) {
+        // Verificar si el empleado tiene horario personalizado
+        if (employee.customSchedule) {
+          let customScheduleObj
+
+          // Convertir el customSchedule a objeto si es string
+          if (typeof employee.customSchedule === "string") {
+            try {
+              customScheduleObj = JSON.parse(employee.customSchedule)
+            } catch (e) {
+              console.error("Error al parsear customSchedule:", e)
+              customScheduleObj = null
+            }
+          } else {
+            customScheduleObj = employee.customSchedule
+          }
+
+          // Si hay un horario personalizado válido, usarlo
+          if (customScheduleObj && customScheduleObj.checkIn && customScheduleObj.checkOut) {
+            attendanceCopy.expectedCheckIn = customScheduleObj.checkIn
+            attendanceCopy.expectedCheckOut = customScheduleObj.checkOut
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error al cargar datos del empleado para edición:", error)
+    }
+
+    setEditAttendance(attendanceCopy)
     setIsEditDialogOpen(true)
   }
 
@@ -1094,4 +1164,3 @@ export default function AsistenciasPage() {
     </DashboardLayout>
   )
 }
-
