@@ -246,6 +246,12 @@ export function DashboardLayout({ children, isLoading }: { children: React.React
         icon: Package,
         roles: ["admin", "gerente", "supervisor", "encargado"],
       },
+	  {
+		title: "Conciliación",
+		href: "/conciliacion",
+		icon: Package,
+        roles: ["admin", "gerente", "supervisor"],
+		},
       {
         title: "Delivery",
         href: "#",
