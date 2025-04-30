@@ -10,7 +10,7 @@ interface AttendanceType {
 // Clase principal que contiene toda la funcionalidad original
 class DatabaseService {
   private supabase = createClientComponentClient()
-  // Columnas conocidas en la tabla employees (actualizar según la estructura real)
+  // Actualizar la lista de columnas conocidas para incluir todos los campos que faltan
   private employeeColumns = [
     "id",
     "first_name",
@@ -29,9 +29,19 @@ class DatabaseService {
     "custom_days",
     "created_at",
     "updated_at",
-    "attendance_bonus", // Agregamos la columna para el bono de presentismo
-    "has_attendance_bonus", // Agregamos la columna para indicar si tiene bono de presentismo
-    // Agregar aquí todas las columnas que existen en la tabla
+    "attendance_bonus",
+    "has_attendance_bonus",
+    "document_id",
+    "document_type",
+    "local",
+    "work_shift",
+    "base_salary",
+    "bank_salary",
+    "total_salary",
+    "role",
+    "worked_days",
+    "custom_check_in",
+    "custom_check_out",
   ]
 
   // Método para obtener el cliente de Supabase (AÑADIDO)
@@ -136,7 +146,7 @@ class DatabaseService {
     }
   }
 
-  // MÉTODO CORREGIDO: Ahora recibe el ID como parámetro separado y filtra campos inexistentes
+  // Modificar el método updateEmployee para que no filtre campos si la lista está vacía
   async updateEmployee(id: string, employee: Employee) {
     try {
       // Crear una copia del empleado para no modificar el original
@@ -210,20 +220,28 @@ class DatabaseService {
         updated_at: new Date().toISOString(),
       })
 
-      // Filtrar solo los campos que existen en la tabla
-      const filteredData: Record<string, any> = {}
-      for (const key in snakeCaseData) {
-        if (this.employeeColumns.includes(key)) {
-          filteredData[key] = snakeCaseData[key]
-        } else {
-          console.log(`Eliminando campo ${key} que no existe en la tabla employees`)
+      // MODIFICACIÓN: No filtrar campos si la lista de columnas está vacía o incompleta
+      let dataToUpdate = snakeCaseData
+
+      // Solo filtrar si tenemos una lista de columnas con más de 20 elementos (para asegurar que sea completa)
+      if (this.employeeColumns.length > 20) {
+        const filteredData: Record<string, any> = {}
+        for (const key in snakeCaseData) {
+          if (this.employeeColumns.includes(key)) {
+            filteredData[key] = snakeCaseData[key]
+          } else {
+            console.log(`Eliminando campo ${key} que no existe en la tabla employees`)
+          }
         }
+        dataToUpdate = filteredData
+      } else {
+        console.log("Usando todos los campos sin filtrar debido a que la lista de columnas puede estar incompleta")
       }
 
-      console.log("Datos finales enviados a Supabase:", JSON.stringify(filteredData, null, 2))
+      console.log("Datos finales enviados a Supabase:", JSON.stringify(dataToUpdate, null, 2))
 
-      // Intentar la actualización con los datos filtrados
-      const { data, error } = await this.supabase.from("employees").update(filteredData).eq("id", id).select().single()
+      // Intentar la actualización con los datos
+      const { data, error } = await this.supabase.from("employees").update(dataToUpdate).eq("id", id).select().single()
 
       if (error) {
         console.error("Error detallado de Supabase:", {
@@ -243,19 +261,24 @@ class DatabaseService {
     }
   }
 
-  // Método para actualizar la lista de columnas conocidas
+  // Mejorar el método updateEmployeeColumns para que sea más robusto
   async updateEmployeeColumns() {
     try {
+      // Intentar obtener las columnas de la tabla employees
       const { data, error } = await this.supabase.rpc("get_table_columns", { table_name: "employees" })
 
       if (error) {
         console.error("Error al obtener columnas:", error)
+        // Si hay error, no actualizamos la lista para evitar perder las columnas conocidas
         return
       }
 
-      if (data && Array.isArray(data)) {
+      if (data && Array.isArray(data) && data.length > 0) {
+        // Solo actualizar si recibimos datos válidos y no vacíos
         this.employeeColumns = data
         console.log("Columnas actualizadas:", this.employeeColumns)
+      } else {
+        console.warn("No se recibieron columnas válidas de la base de datos")
       }
     } catch (error) {
       console.error("Error al actualizar columnas:", error)
