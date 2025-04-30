@@ -62,6 +62,9 @@ export interface Employee {
   updatedAt: string
   customCheckIn?: string | null
   customCheckOut?: string | null
+  // Nuevos campos para el bono de presentismo
+  attendanceBonus?: number
+  hasAttendanceBonus?: boolean
 }
 
 export interface Attendance {
@@ -100,6 +103,17 @@ export interface Payroll {
   details: PayrollDetail[]
   createdAt: string
   updatedAt: string
+  // Nuevos campos para el bono de presentismo
+  attendanceBonus?: number
+  hasAttendanceBonus?: boolean
+  // Campos adicionales que podrían estar presentes
+  isPaid?: boolean
+  paymentDate?: string
+  paymentMethod?: string
+  paymentReference?: string
+  paymentType?: "bank" | "hand" | "all"
+  bankSalaryPaid?: boolean
+  handSalaryPaid?: boolean
 }
 
 export interface PayrollDetail {
@@ -111,6 +125,7 @@ export interface PayrollDetail {
   date: string
   createdAt: string
   updatedAt: string
+  description?: string
 }
 
 export interface DeliveryStats {
@@ -230,4 +245,27 @@ export interface Order {
   status: "pending" | "delivered" | "cancelled"
   createdAt: string
   updatedAt?: string
+}
+
+export interface Liquidation {
+  id: string
+  employeeId: string
+  terminationDate: string
+  workedDays: number
+  workedMonths: number
+  daysToPayInLastMonth: number
+  baseSalary: number
+  proportionalVacation: number
+  proportionalBonus: number
+  compensationAmount: number
+  totalAmount: number
+  isPaid: boolean
+  includeVacation: boolean
+  includeBonus: boolean
+  paymentDate?: string
+  paymentMethod?: string
+  paymentReference?: string
+  notes?: string
+  createdAt: string
+  updatedAt: string
 }

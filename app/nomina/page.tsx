@@ -82,6 +82,11 @@ export default function NominaPage() {
   const [isBankSalaryPaid, setIsBankSalaryPaid] = useState(false)
   const [sessionStatus, setSessionStatus] = useState<"valid" | "invalid" | "checking">("checking")
 
+  // Estados para el bono de presentismo
+  const [hasAttendanceBonus, setHasAttendanceBonus] = useState(false)
+  const [attendanceBonus, setAttendanceBonus] = useState(50000) // Valor predeterminado del bono
+  const [isAttendanceBonusDialogOpen, setIsAttendanceBonusDialogOpen] = useState(false)
+
   // Nuevos estados para los totales
   const [payrollTotals, setPayrollTotals] = useState({
     totalHand: 0,
@@ -463,8 +468,53 @@ export default function NominaPage() {
   // Función para abrir el diálogo de detalles y cargar asistencias
   const handleOpenDetailsDialog = async (payroll: Payroll) => {
     setSelectedPayroll(payroll)
+    setHasAttendanceBonus(payroll.hasAttendanceBonus || false)
+    setAttendanceBonus(payroll.attendanceBonus || 50000)
     setIsDetailsDialogOpen(true)
     await loadAttendancesForPayroll(payroll)
+  }
+
+  // Función para abrir el diálogo de bono de presentismo
+  const handleOpenAttendanceBonusDialog = (payroll: Payroll) => {
+    setSelectedPayroll(payroll)
+    setHasAttendanceBonus(payroll.hasAttendanceBonus || false)
+    setAttendanceBonus(payroll.attendanceBonus || 50000)
+    setIsAttendanceBonusDialogOpen(true)
+  }
+
+  // Función para actualizar el bono de presentismo
+  const handleUpdateBonus = async () => {
+    if (!selectedPayroll) return
+
+    try {
+      // Calcular el nuevo total con o sin bono
+      const bonusAmount = hasAttendanceBonus ? attendanceBonus : 0
+      const newTotal =
+        selectedPayroll.baseSalary + selectedPayroll.bankSalary + selectedPayroll.handSalary + bonusAmount
+
+      await dbService.updatePayroll(selectedPayroll.id, {
+        hasAttendanceBonus,
+        attendanceBonus: bonusAmount,
+        totalSalary: newTotal,
+      })
+
+      toast({
+        title: "Bono actualizado",
+        description: hasAttendanceBonus
+          ? `Se ha aplicado el bono de presentismo de ${formatCurrency(attendanceBonus)}`
+          : "Se ha removido el bono de presentismo",
+      })
+
+      setIsAttendanceBonusDialogOpen(false)
+      loadData()
+    } catch (error) {
+      console.error("Error al actualizar bono:", error)
+      toast({
+        title: "Error",
+        description: "No se pudo actualizar el bono. Intente nuevamente.",
+        variant: "destructive",
+      })
+    }
   }
 
   // Columnas para la tabla de nóminas pendientes
@@ -514,6 +564,16 @@ export default function NominaPage() {
       cell: ({ row }) => formatCurrency(row.original.finalHandSalary),
     },
     {
+      accessorKey: "attendanceBonus",
+      header: "Bono Presentismo",
+      cell: ({ row }) => {
+        if (row.original.hasAttendanceBonus) {
+          return <span className="text-green-600">+{formatCurrency(row.original.attendanceBonus || 0)}</span>
+        }
+        return "-"
+      },
+    },
+    {
       accessorKey: "totalSalary",
       header: "Total a Pagar",
       cell: ({ row }) => formatCurrency(row.original.totalSalary),
@@ -557,6 +617,11 @@ export default function NominaPage() {
           <Button variant="outline" size="sm" onClick={() => handleOpenDetailsDialog(row.original)}>
             <FileText className="mr-1 h-4 w-4" />
             Detalles
+          </Button>
+
+          <Button variant="outline" size="sm" onClick={() => handleOpenAttendanceBonusDialog(row.original)}>
+            <PlusCircle className="mr-1 h-4 w-4" />
+            Bono
           </Button>
         </div>
       ),
@@ -1442,6 +1507,12 @@ export default function NominaPage() {
                           <span className="font-medium">Referencia:</span> {selectedPayroll.paymentReference}
                         </p>
                       )}
+                      {selectedPayroll.hasAttendanceBonus && (
+                        <p>
+                          <span className="font-medium">Bono de Presentismo:</span>{" "}
+                          {formatCurrency(selectedPayroll.attendanceBonus || 0)}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1503,6 +1574,15 @@ export default function NominaPage() {
                             <br />
                             <span className="text-green-600">+{formatCurrency(selectedPayroll.additions)}</span>
                           </p>
+                          {selectedPayroll.hasAttendanceBonus && (
+                            <p>
+                              <span className="font-medium">Bono de Presentismo:</span>
+                              <br />
+                              <span className="text-green-600">
+                                +{formatCurrency(selectedPayroll.attendanceBonus || 0)}
+                              </span>
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -1719,6 +1799,84 @@ export default function NominaPage() {
                   Generar Recibo
                 </Button>
               )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Diálogo de bono de presentismo */}
+        <Dialog open={isAttendanceBonusDialogOpen} onOpenChange={setIsAttendanceBonusDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Bono de Presentismo</DialogTitle>
+              <DialogDescription>
+                {(() => {
+                  if (!selectedPayroll) return "Configurar bono de presentismo"
+
+                  const employee = employees.find((e) => e.id === selectedPayroll.employeeId)
+                  const employeeName = employee ? `${employee.firstName} ${employee.lastName}` : "Empleado"
+
+                  const monthNames = [
+                    "Enero",
+                    "Febrero",
+                    "Marzo",
+                    "Abril",
+                    "Mayo",
+                    "Junio",
+                    "Julio",
+                    "Agosto",
+                    "Septiembre",
+                    "Octubre",
+                    "Noviembre",
+                    "Diciembre",
+                  ]
+
+                  return `${employeeName} - ${monthNames[selectedPayroll.month - 1]} ${selectedPayroll.year}`
+                })()}
+              </DialogDescription>
+            </DialogHeader>
+
+            {selectedPayroll && (
+              <div className="grid gap-4 py-4">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="hasAttendanceBonus"
+                    checked={hasAttendanceBonus}
+                    onCheckedChange={(checked) => setHasAttendanceBonus(checked === true)}
+                    disabled={selectedPayroll.isPaid}
+                  />
+                  <Label htmlFor="hasAttendanceBonus" className="font-medium">
+                    Aplicar Bono de Presentismo
+                  </Label>
+                </div>
+
+                {hasAttendanceBonus && (
+                  <div className="space-y-2">
+                    <Label htmlFor="attendanceBonus">Monto del Bono</Label>
+                    <Input
+                      id="attendanceBonus"
+                      type="number"
+                      value={attendanceBonus}
+                      onChange={(e) => setAttendanceBonus(Number(e.target.value) || 0)}
+                      disabled={selectedPayroll.isPaid}
+                    />
+                  </div>
+                )}
+
+                {selectedPayroll.hasAttendanceBonus && (
+                  <div className="mt-2 text-sm">
+                    <p>Bono actual: {formatCurrency(selectedPayroll.attendanceBonus || 0)}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsAttendanceBonusDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleUpdateBonus} disabled={selectedPayroll?.isPaid}>
+                Actualizar Bono
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

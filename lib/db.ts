@@ -10,6 +10,29 @@ interface AttendanceType {
 // Clase principal que contiene toda la funcionalidad original
 class DatabaseService {
   private supabase = createClientComponentClient()
+  // Columnas conocidas en la tabla employees (actualizar según la estructura real)
+  private employeeColumns = [
+    "id",
+    "first_name",
+    "last_name",
+    "email",
+    "phone",
+    "birth_date",
+    "hire_date",
+    "termination_date",
+    "position",
+    "department",
+    "salary",
+    "status",
+    "address",
+    "custom_schedule",
+    "custom_days",
+    "created_at",
+    "updated_at",
+    "attendance_bonus", // Agregamos la columna para el bono de presentismo
+    "has_attendance_bonus", // Agregamos la columna para indicar si tiene bono de presentismo
+    // Agregar aquí todas las columnas que existen en la tabla
+  ]
 
   // Método para obtener el cliente de Supabase (AÑADIDO)
   getSupabase() {
@@ -113,7 +136,7 @@ class DatabaseService {
     }
   }
 
-  // MÉTODO CORREGIDO: Ahora recibe el ID como parámetro separado
+  // MÉTODO CORREGIDO: Ahora recibe el ID como parámetro separado y filtra campos inexistentes
   async updateEmployee(id: string, employee: Employee) {
     try {
       // Crear una copia del empleado para no modificar el original
@@ -124,32 +147,91 @@ class DatabaseService {
         delete employeeToUpdate.id
       }
 
-      // Asegurarse de que customSchedule sea un objeto JSON válido si existe
-      if (employeeToUpdate.customSchedule && typeof employeeToUpdate.customSchedule === "object") {
-        // No es necesario hacer nada, ya es un objeto
-      } else if (employeeToUpdate.customSchedule && typeof employeeToUpdate.customSchedule === "string") {
-        try {
-          // Intentar parsear si es un string
-          employeeToUpdate.customSchedule = JSON.parse(employeeToUpdate.customSchedule)
-        } catch (e) {
-          console.error("Error parsing customSchedule:", e)
-          // Si no se puede parsear, establecer como null para evitar errores
-          employeeToUpdate.customSchedule = null
+      // Registrar los datos recibidos para depuración
+      console.log("Datos originales del empleado a actualizar:", JSON.stringify(employeeToUpdate, null, 2))
+
+      // Manejar específicamente el campo customSchedule
+      if (employeeToUpdate.customSchedule !== undefined) {
+        console.log("Tipo de customSchedule:", typeof employeeToUpdate.customSchedule)
+
+        if (typeof employeeToUpdate.customSchedule === "object" && employeeToUpdate.customSchedule !== null) {
+          // Si ya es un objeto, convertirlo a JSON string para almacenarlo
+          try {
+            console.log("customSchedule es un objeto, convirtiéndolo a string")
+            employeeToUpdate.customSchedule = JSON.stringify(employeeToUpdate.customSchedule)
+          } catch (e) {
+            console.error("Error al convertir customSchedule a string:", e)
+            employeeToUpdate.customSchedule = null
+          }
+        } else if (typeof employeeToUpdate.customSchedule === "string") {
+          // Verificar que sea un JSON válido
+          try {
+            console.log("customSchedule es un string, verificando si es JSON válido")
+            const parsed = JSON.parse(employeeToUpdate.customSchedule)
+            // Volver a convertir a string para asegurar formato correcto
+            employeeToUpdate.customSchedule = JSON.stringify(parsed)
+          } catch (e) {
+            console.error("Error al parsear customSchedule como JSON:", e)
+            // Si no es un JSON válido, podría ser un string normal, lo dejamos como está
+          }
+        }
+      }
+
+      // Manejar el campo customDays si existe
+      if (employeeToUpdate.customDays !== undefined) {
+        console.log("Tipo de customDays:", typeof employeeToUpdate.customDays)
+
+        if (typeof employeeToUpdate.customDays === "object" && employeeToUpdate.customDays !== null) {
+          // Si ya es un objeto, convertirlo a JSON string para almacenarlo
+          try {
+            console.log("customDays es un objeto, convirtiéndolo a string")
+            employeeToUpdate.customDays = JSON.stringify(employeeToUpdate.customDays)
+          } catch (e) {
+            console.error("Error al convertir customDays a string:", e)
+            employeeToUpdate.customDays = null
+          }
+        } else if (typeof employeeToUpdate.customDays === "string") {
+          // Verificar que sea un JSON válido
+          try {
+            console.log("customDays es un string, verificando si es JSON válido")
+            const parsed = JSON.parse(employeeToUpdate.customDays)
+            // Volver a convertir a string para asegurar formato correcto
+            employeeToUpdate.customDays = JSON.stringify(parsed)
+          } catch (e) {
+            console.error("Error al parsear customDays como JSON:", e)
+            // Si no es un JSON válido, podría ser un string normal, lo dejamos como está
+          }
         }
       }
 
       // Convertir automáticamente de camelCase a snake_case
-      const updateData = objectToSnakeCase({
+      const snakeCaseData = objectToSnakeCase({
         ...employeeToUpdate,
         updated_at: new Date().toISOString(),
       })
 
-      console.log("Actualizando empleado con ID:", id, "Datos:", updateData)
+      // Filtrar solo los campos que existen en la tabla
+      const filteredData: Record<string, any> = {}
+      for (const key in snakeCaseData) {
+        if (this.employeeColumns.includes(key)) {
+          filteredData[key] = snakeCaseData[key]
+        } else {
+          console.log(`Eliminando campo ${key} que no existe en la tabla employees`)
+        }
+      }
 
-      const { data, error } = await this.supabase.from("employees").update(updateData).eq("id", id).select().single()
+      console.log("Datos finales enviados a Supabase:", JSON.stringify(filteredData, null, 2))
+
+      // Intentar la actualización con los datos filtrados
+      const { data, error } = await this.supabase.from("employees").update(filteredData).eq("id", id).select().single()
 
       if (error) {
-        console.error("Error updating employee:", error)
+        console.error("Error detallado de Supabase:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+        })
         throw error
       }
 
@@ -158,6 +240,25 @@ class DatabaseService {
     } catch (error) {
       console.error("Error updating employee:", error)
       throw error
+    }
+  }
+
+  // Método para actualizar la lista de columnas conocidas
+  async updateEmployeeColumns() {
+    try {
+      const { data, error } = await this.supabase.rpc("get_table_columns", { table_name: "employees" })
+
+      if (error) {
+        console.error("Error al obtener columnas:", error)
+        return
+      }
+
+      if (data && Array.isArray(data)) {
+        this.employeeColumns = data
+        console.log("Columnas actualizadas:", this.employeeColumns)
+      }
+    } catch (error) {
+      console.error("Error al actualizar columnas:", error)
     }
   }
 
@@ -721,12 +822,29 @@ class DatabaseService {
     return data.map((item) => objectToCamelCase(item))
   }
 
+  // Modificar el método createPayroll para incluir el bono de presentismo
   async createPayroll(payroll: Omit<Payroll, "id">) {
-    const payrollData = objectToSnakeCase(payroll)
-    const { data, error } = await this.supabase.from("payroll").insert([payrollData]).select().single()
+    try {
+      // Asegurarse de que el bono de presentismo esté incluido si está definido
+      const payrollWithBonus = {
+        ...payroll,
+        attendance_bonus: payroll.attendanceBonus || 0,
+        has_attendance_bonus: payroll.hasAttendanceBonus || false,
+      }
 
-    if (error) throw error
-    return objectToCamelCase(data)
+      const payrollData = objectToSnakeCase(payrollWithBonus)
+      const { data, error } = await this.supabase.from("payroll").insert([payrollData]).select().single()
+
+      if (error) {
+        console.error("Error al crear nómina:", error)
+        throw error
+      }
+
+      return objectToCamelCase(data)
+    } catch (error) {
+      console.error("Error al crear nómina:", error)
+      throw error
+    }
   }
 
   async createPayrollDetail(detail: Omit<PayrollDetail, "id">) {
@@ -831,7 +949,7 @@ class DatabaseService {
     }
   }
 
-  // Método para actualizar una nómina
+  // Modificar el método updatePayroll para incluir el manejo del bono de presentismo
   async updatePayroll(id: string, payroll: Partial<Payroll>) {
     try {
       console.log("Actualizando nómina con ID:", id, "Datos:", payroll)
@@ -859,6 +977,32 @@ class DatabaseService {
         updateData.is_paid_hand = true
         updateData.bank_payment_date = now
         updateData.hand_payment_date = now
+      }
+
+      // Manejar el bono de presentismo si está presente en los datos
+      if (payroll.hasAttendanceBonus !== undefined) {
+        updateData.has_attendance_bonus = payroll.hasAttendanceBonus
+      }
+
+      if (payroll.attendanceBonus !== undefined) {
+        updateData.attendance_bonus = payroll.attendanceBonus
+      }
+
+      // Si se actualizan las adiciones, deducciones o montos totales
+      if (payroll.additions !== undefined) {
+        updateData.additions = payroll.additions
+      }
+
+      if (payroll.deductions !== undefined) {
+        updateData.deductions = payroll.deductions
+      }
+
+      if (payroll.totalSalary !== undefined) {
+        updateData.total_salary = payroll.totalSalary
+      }
+
+      if (payroll.finalHandSalary !== undefined) {
+        updateData.final_hand_salary = payroll.finalHandSalary
       }
 
       // Añadir timestamp de actualización
@@ -1583,7 +1727,6 @@ class DatabaseService {
           name: "Facturación por Local",
           data: {
             labels: ["BR Cabildo", "BR Carranza", "BR Pacifico", "BR Lavalle", "BR Rivadavia"],
-            datasets: ["BR Carranza", "BR Pacifico", "BR Lavalle", "BR Rivadavia"],
             datasets: [
               {
                 label: "Ventas Mensuales",
@@ -1926,6 +2069,9 @@ function calculateExpectedWorkday(expectedCheckIn: string, expectedCheckOut: str
 
 // Crear una instancia del servicio
 const dbService = new DatabaseService()
+
+// Intentar actualizar las columnas conocidas al iniciar
+dbService.updateEmployeeColumns().catch(console.error)
 
 // Exportar la función getSupabase (AÑADIDO)
 export const getSupabase = () => dbService.getSupabase()
