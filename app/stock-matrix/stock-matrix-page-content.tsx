@@ -132,6 +132,9 @@ export default function StockMatrixPageContent() {
       setError(null)
       console.log("Cargando datos...")
 
+      // Variable para almacenar un ID de encargado predeterminado
+      let defaultManagerId = ""
+
       // Fetch encargados desde la tabla de empleados
       try {
         const { data: employeesData, error: employeesError } = await supabase
@@ -162,6 +165,20 @@ export default function StockMatrixPageContent() {
           // Agregar un log para depuración
           console.log("Empleados filtrados:", filteredEmployees)
 
+          // Guardar el primer ID como predeterminado si existe
+          if (filteredEmployees.length > 0) {
+            defaultManagerId = filteredEmployees[0].id
+            console.log("ID de encargado predeterminado:", defaultManagerId)
+          } else {
+            // Si no hay encargados, intentar obtener cualquier empleado
+            const { data: anyEmployee } = await supabase.from("employees").select("id").limit(1).single()
+
+            if (anyEmployee) {
+              defaultManagerId = anyEmployee.id
+              console.log("ID de empleado predeterminado:", defaultManagerId)
+            }
+          }
+
           // Transformar los datos de empleados al formato de Manager
           const managers: Manager[] = filteredEmployees.map((emp) => ({
             id: emp.id,
@@ -187,6 +204,15 @@ export default function StockMatrixPageContent() {
         // No interrumpir el flujo, continuar con los productos
       }
 
+      // Actualizar el estado con el ID predeterminado
+      if (defaultManagerId) {
+        setSheetData((prev) => ({
+          ...prev,
+          manager_id: prev.manager_id || defaultManagerId,
+        }))
+      }
+
+      // Resto del código de fetchData...
       // Fetch product configs
       try {
         const { data: productConfigsData, error: productConfigsError } = await supabase
@@ -438,7 +464,7 @@ export default function StockMatrixPageContent() {
     }
   }
 
-  // Modificar la función validateData() para que no asigne un valor por defecto
+  // Modificar la función validateData() para permitir valores NULL
   const validateData = () => {
     try {
       console.log("Validando datos...")
@@ -457,12 +483,7 @@ export default function StockMatrixPageContent() {
         return false
       }
 
-      // Temporalmente hacemos opcional el campo de encargado
-      if (!sheetData.manager_id) {
-        console.log("Aviso: No se ha seleccionado un encargado, pero se permitirá continuar")
-        // No asignamos ningún valor por defecto, dejamos que sea null o vacío
-      }
-
+      // Ya no es necesario validar el manager_id, puede ser NULL
       console.log("Validación exitosa")
       return true
     } catch (err) {
@@ -502,18 +523,15 @@ export default function StockMatrixPageContent() {
       // 1. Guardar la planilla principal
       let sheetId = sheetData.id
 
-      // Crear un objeto con los datos a guardar, excluyendo manager_id si está vacío
+      // Crear un objeto con los datos a guardar
       const sheetDataToSave = {
         date: sheetData.date,
         location_id: sheetData.location_id,
         shift: sheetData.shift,
         status: "parcial",
         updated_by: sheetData.updated_by,
-      }
-
-      // Solo incluir manager_id si tiene un valor
-      if (sheetData.manager_id) {
-        sheetDataToSave.manager_id = sheetData.manager_id
+        // Incluir manager_id incluso si está vacío, ahora que la tabla permite NULL
+        manager_id: sheetData.manager_id || null,
       }
 
       if (sheetId) {
@@ -665,18 +683,15 @@ export default function StockMatrixPageContent() {
       // 1. Guardar o actualizar la planilla principal
       let sheetId = sheetData.id
 
-      // Crear un objeto con los datos a guardar, excluyendo manager_id si está vacío
+      // Crear un objeto con los datos a guardar
       const sheetDataToSave = {
         date: sheetData.date,
         location_id: sheetData.location_id,
         shift: sheetData.shift,
         status: "completado",
         updated_by: sheetData.updated_by,
-      }
-
-      // Solo incluir manager_id si tiene un valor
-      if (sheetData.manager_id) {
-        sheetDataToSave.manager_id = sheetData.manager_id
+        // Incluir manager_id incluso si está vacío, ahora que la tabla permite NULL
+        manager_id: sheetData.manager_id || null,
       }
 
       if (sheetId) {
