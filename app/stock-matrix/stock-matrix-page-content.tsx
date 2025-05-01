@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "@/components/ui/use-toast"
-import { ArrowLeft, Save, Plus, Check, AlertTriangle, Lock, Download, List, Loader2 } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Check, AlertTriangle, Lock, Download, List, Loader2 } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -457,14 +457,14 @@ export default function StockMatrixPageContent() {
         return false
       }
 
+      // Temporalmente hacemos opcional el campo de encargado
       if (!sheetData.manager_id) {
-        console.error("Error de validación: No se ha seleccionado un encargado")
-        toast({
-          title: "Error",
-          description: "Debe seleccionar un encargado",
-          variant: "destructive",
-        })
-        return false
+        console.log("Aviso: No se ha seleccionado un encargado, pero se permitirá continuar")
+        // Asignar un valor por defecto para evitar problemas con la base de datos
+        setSheetData((prev) => ({
+          ...prev,
+          manager_id: "sin_encargado",
+        }))
       }
 
       console.log("Validación exitosa")
