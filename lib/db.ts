@@ -156,7 +156,7 @@ class DatabaseService {
     }
   }
 
-  // MÉTODO CORREGIDO: Ahora recibe el ID como parámetro separado y filtra campos inexistentes
+  // MÉTODO CORREGIDO: Ahora recibe el ID como parámetro separado y no filtra campos
   async updateEmployee(id: string, employee: Employee) {
     try {
       // Crear una copia del empleado para no modificar el original
@@ -259,20 +259,11 @@ class DatabaseService {
         console.log(`Estado del empleado a actualizar: ${snakeCaseData.status}`)
       }
 
-      // Filtrar solo los campos que existen en la tabla
-      const filteredData: Record<string, any> = {}
-      for (const key in snakeCaseData) {
-        if (this.employeeColumns.includes(key)) {
-          filteredData[key] = snakeCaseData[key]
-        } else {
-          console.log(`Eliminando campo ${key} que no existe en la tabla employees`)
-        }
-      }
+      // IMPORTANTE: Ya no filtramos los campos, enviamos todos los datos recibidos
+      console.log("Datos finales enviados a Supabase:", JSON.stringify(snakeCaseData, null, 2))
 
-      console.log("Datos finales enviados a Supabase:", JSON.stringify(filteredData, null, 2))
-
-      // Intentar la actualización con los datos filtrados
-      const { data, error } = await this.supabase.from("employees").update(filteredData).eq("id", id).select().single()
+      // Intentar la actualización con todos los datos
+      const { data, error } = await this.supabase.from("employees").update(snakeCaseData).eq("id", id).select().single()
 
       if (error) {
         console.error("Error detallado de Supabase:", {
