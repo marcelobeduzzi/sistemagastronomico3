@@ -438,7 +438,7 @@ export default function StockMatrixPageContent() {
     }
   }
 
-  // Validar datos antes de guardar
+  // Modificar la función validateData() para que no asigne un valor por defecto
   const validateData = () => {
     try {
       console.log("Validando datos...")
@@ -460,11 +460,7 @@ export default function StockMatrixPageContent() {
       // Temporalmente hacemos opcional el campo de encargado
       if (!sheetData.manager_id) {
         console.log("Aviso: No se ha seleccionado un encargado, pero se permitirá continuar")
-        // Asignar un valor por defecto para evitar problemas con la base de datos
-        setSheetData((prev) => ({
-          ...prev,
-          manager_id: "sin_encargado",
-        }))
+        // No asignamos ningún valor por defecto, dejamos que sea null o vacío
       }
 
       console.log("Validación exitosa")
@@ -475,7 +471,7 @@ export default function StockMatrixPageContent() {
     }
   }
 
-  // Simplificar la función handleSaveSheet para no verificar autenticación
+  // Modificar la función handleSaveSheet para manejar el caso de manager_id vacío
   const handleSaveSheet = async () => {
     if (!validateData()) return
 
@@ -506,18 +502,25 @@ export default function StockMatrixPageContent() {
       // 1. Guardar la planilla principal
       let sheetId = sheetData.id
 
+      // Crear un objeto con los datos a guardar, excluyendo manager_id si está vacío
+      const sheetDataToSave = {
+        date: sheetData.date,
+        location_id: sheetData.location_id,
+        shift: sheetData.shift,
+        status: "parcial",
+        updated_by: sheetData.updated_by,
+      }
+
+      // Solo incluir manager_id si tiene un valor
+      if (sheetData.manager_id) {
+        sheetDataToSave.manager_id = sheetData.manager_id
+      }
+
       if (sheetId) {
         // Actualizar planilla existente
         const { error: updateError } = await supabase
           .from("stock_matrix_sheets")
-          .update({
-            date: sheetData.date,
-            location_id: sheetData.location_id,
-            manager_id: sheetData.manager_id, // Usar directamente el UUID
-            shift: sheetData.shift,
-            status: "parcial",
-            updated_by: sheetData.updated_by,
-          })
+          .update(sheetDataToSave)
           .eq("id", sheetId)
 
         if (updateError) {
@@ -529,13 +532,8 @@ export default function StockMatrixPageContent() {
         const { data: insertData, error: insertError } = await supabase
           .from("stock_matrix_sheets")
           .insert({
-            date: sheetData.date,
-            location_id: sheetData.location_id,
-            manager_id: sheetData.manager_id, // Usar directamente el UUID
-            shift: sheetData.shift,
-            status: "parcial",
+            ...sheetDataToSave,
             created_by: sheetData.created_by,
-            updated_by: sheetData.updated_by,
           })
           .select()
 
@@ -633,7 +631,7 @@ export default function StockMatrixPageContent() {
     }
   }
 
-  // Simplificar la función handleFinalizeSheet para no verificar autenticación
+  // También necesitamos modificar la función handleFinalizeSheet de manera similar
   const handleFinalizeSheet = async () => {
     if (!validateData()) return
 
@@ -667,18 +665,25 @@ export default function StockMatrixPageContent() {
       // 1. Guardar o actualizar la planilla principal
       let sheetId = sheetData.id
 
+      // Crear un objeto con los datos a guardar, excluyendo manager_id si está vacío
+      const sheetDataToSave = {
+        date: sheetData.date,
+        location_id: sheetData.location_id,
+        shift: sheetData.shift,
+        status: "completado",
+        updated_by: sheetData.updated_by,
+      }
+
+      // Solo incluir manager_id si tiene un valor
+      if (sheetData.manager_id) {
+        sheetDataToSave.manager_id = sheetData.manager_id
+      }
+
       if (sheetId) {
         // Actualizar planilla existente
         const { error: updateError } = await supabase
           .from("stock_matrix_sheets")
-          .update({
-            date: sheetData.date,
-            location_id: sheetData.location_id,
-            manager_id: sheetData.manager_id, // Usar directamente el UUID
-            shift: sheetData.shift,
-            status: "completado",
-            updated_by: sheetData.updated_by,
-          })
+          .update(sheetDataToSave)
           .eq("id", sheetId)
 
         if (updateError) {
@@ -690,13 +695,8 @@ export default function StockMatrixPageContent() {
         const { data: insertData, error: insertError } = await supabase
           .from("stock_matrix_sheets")
           .insert({
-            date: sheetData.date,
-            location_id: sheetData.location_id,
-            manager_id: sheetData.manager_id, // Usar directamente el UUID
-            shift: sheetData.shift,
-            status: "completado",
+            ...sheetDataToSave,
             created_by: sheetData.created_by,
-            updated_by: sheetData.updated_by,
           })
           .select()
 
