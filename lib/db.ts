@@ -747,7 +747,6 @@ class DatabaseService {
 
         // Calcular minutos trabajados
         if (updatedAttendance.checkIn && updatedAttendance.checkOut) {
-          const checkIn = new Date(`2000-01-01T${updatedAttendance.checkIn}`)  {
           const checkIn = new Date(`2000-01-01T${updatedAttendance.checkIn}`)
           const checkOut = new Date(`2000-01-01T${updatedAttendance.checkOut}`)
           totalMinutesWorked = Math.floor((checkOut.getTime() - checkIn.getTime()) / 60000)
