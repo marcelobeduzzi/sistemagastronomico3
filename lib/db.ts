@@ -29,6 +29,9 @@ class DatabaseService {
     "custom_days",
     "created_at",
     "updated_at",
+    "base_salary",
+    "bank_salary",
+    "total_salary",
     // Eliminamos la columna attendance_bonus que ya no debería estar en la tabla employees
     // Agregar aquí todas las columnas que existen en la tabla
   ]
@@ -241,6 +244,19 @@ class DatabaseService {
       }
       if ("has_attendance_bonus" in snakeCaseData) {
         delete snakeCaseData.has_attendance_bonus
+      }
+
+      // Asegurarse de que los campos numéricos tengan valores numéricos válidos
+      if (typeof snakeCaseData.base_salary !== "number" && snakeCaseData.base_salary !== undefined)
+        snakeCaseData.base_salary = Number.parseFloat(snakeCaseData.base_salary) || 0
+      if (typeof snakeCaseData.bank_salary !== "number" && snakeCaseData.bank_salary !== undefined)
+        snakeCaseData.bank_salary = Number.parseFloat(snakeCaseData.bank_salary) || 0
+      if (typeof snakeCaseData.total_salary !== "number" && snakeCaseData.total_salary !== undefined)
+        snakeCaseData.total_salary = Number.parseFloat(snakeCaseData.total_salary) || 0
+
+      // Asegurarse de que el campo status se mantenga correctamente
+      if (snakeCaseData.status) {
+        console.log(`Estado del empleado a actualizar: ${snakeCaseData.status}`)
       }
 
       // Filtrar solo los campos que existen en la tabla
@@ -731,6 +747,7 @@ class DatabaseService {
 
         // Calcular minutos trabajados
         if (updatedAttendance.checkIn && updatedAttendance.checkOut) {
+          const checkIn = new Date(`2000-01-01T${updatedAttendance.checkIn}`)  {
           const checkIn = new Date(`2000-01-01T${updatedAttendance.checkIn}`)
           const checkOut = new Date(`2000-01-01T${updatedAttendance.checkOut}`)
           totalMinutesWorked = Math.floor((checkOut.getTime() - checkIn.getTime()) / 60000)
