@@ -128,7 +128,12 @@ export default function LocalDetailPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <DatePicker date={selectedDate} onDateChange={setSelectedDate} />
+            <DatePicker
+              date={selectedDate}
+              onDateChange={setSelectedDate}
+              placeholder="Seleccionar fecha"
+              format="dd/MM/yyyy"
+            />
 
             <Button variant="outline" size="icon" onClick={() => loadLocalData(localInfo.id)} disabled={isLoading}>
               <RefreshCcw className="h-4 w-4" />

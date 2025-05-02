@@ -135,7 +135,12 @@ export function DashboardContent() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <DatePicker date={selectedDate} onDateChange={setSelectedDate} />
+          <DatePicker
+            date={selectedDate}
+            onDateChange={setSelectedDate}
+            placeholder="Seleccionar fecha"
+            format="dd/MM/yyyy"
+          />
 
           <div className="border rounded-md">
             <Button variant={dateRange === "day" ? "default" : "ghost"} size="sm" onClick={() => setDateRange("day")}>
