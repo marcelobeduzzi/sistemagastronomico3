@@ -1,365 +1,366 @@
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+// Archivo para implementar el servicio de reconciliación
+// Este archivo debe estar en la ruta que se importa en conciliacion-content.tsx
 
-// Interfaces
-interface StockDiscrepancy {
-  id: string
-  date: string
-  localId: string
-  productId: string
-  productName: string
-  expectedQuantity: number
-  actualQuantity: number
-  difference: number
-  unitCost: number
-  totalValue: number
-  status: "pending" | "reconciled" | "unreconciled"
-  reconciliationId?: string
-}
-
-interface CashDiscrepancy {
-  id: string
-  date: string
-  localId: string
-  paymentMethod: "cash" | "bank" | "card" | "other"
-  expectedAmount: number
-  actualAmount: number
-  difference: number
-  status: "pending" | "reconciled" | "unreconciled"
-  reconciliationId?: string
-}
-
-interface ReconciliationMatch {
-  id: string
-  stockDiscrepancyId: string
-  cashDiscrepancyId: string
-  stockValue: number
-  cashValue: number
-  confidence: number
-}
-
-export class ReconciliationService {
+export const ReconciliationService = {
   // Obtener discrepancias de stock
-  static async getStockDiscrepancies(date: string, localId: string): Promise<StockDiscrepancy[]> {
-    const supabase = createClientComponentClient()
-
+  getStockDiscrepancies: async (date: string, locationId: number | null) => {
     try {
-      // Obtener datos de la tabla stock_matrix_sheets para la fecha y local
-      const { data: sheets, error: sheetsError } = await supabase
-        .from("stock_matrix_sheets")
-        .select("id, date")
-        .eq("date", date)
-        .eq("location_id", localId)
-        .eq("status", "completado")
-
-      if (sheetsError) throw sheetsError
-
-      if (!sheets || sheets.length === 0) {
+      // Validar que la fecha no esté vacía
+      if (!date) {
+        console.error("Fecha no proporcionada para la consulta de discrepancias de stock")
         return []
       }
 
-      // Obtener los detalles de stock para las planillas encontradas
-      const sheetIds = sheets.map((sheet) => sheet.id)
+      // Validar que el locationId sea un número
+      if (locationId === null) {
+        console.error("ID de local no proporcionado para la consulta de discrepancias de stock")
+        return []
+      }
 
-      const { data: details, error: detailsError } = await supabase
-        .from("stock_matrix_details")
+      console.log(`Consultando discrepancias de stock para fecha: ${date}, local: ${locationId}`)
+
+      // Importar supabase
+      const { createClientComponentClient } = await import("@supabase/auth-helpers-nextjs")
+      const supabase = createClientComponentClient()
+
+      // Consultar la tabla stock_discrepancies
+      const { data, error } = await supabase
+        .from("stock_discrepancies")
         .select("*")
-        .in("stock_sheet_id", sheetIds)
-        .not("difference", "is", null)
-        .not("difference", "eq", 0)
+        .eq("date", date)
+        .eq("location_id", locationId)
+        .order("product_name")
 
-      if (detailsError) throw detailsError
-
-      if (!details || details.length === 0) {
-        return []
+      if (error) {
+        console.error("Error al obtener discrepancias de stock:", error)
+        throw error
       }
 
-      // Transformar los datos al formato requerido
-      const stockDiscrepancies: StockDiscrepancy[] = details.map((detail) => ({
-        id: detail.id,
-        date,
-        localId,
-        productId: detail.product_id,
-        productName: detail.product_name,
-        expectedQuantity: this.calculateExpectedQuantity(detail),
-        actualQuantity: detail.closing_quantity || 0,
-        difference: detail.difference,
-        unitCost: detail.unit_value || 0,
-        totalValue: (detail.difference || 0) * (detail.unit_value || 0),
-        status: "pending",
+      // Transformar los datos de snake_case a camelCase
+      return (data || []).map((item) => ({
+        id: item.id,
+        date: item.date,
+        localId: item.location_id,
+        productId: item.product_id,
+        productName: item.product_name,
+        expectedQuantity: item.expected_quantity,
+        actualQuantity: item.actual_quantity,
+        difference: item.difference,
+        unitCost: item.unit_cost,
+        totalValue: item.total_value,
+        status: item.status,
+        reconciliationId: item.reconciliation_id,
       }))
-
-      return stockDiscrepancies
     } catch (error) {
       console.error("Error al obtener discrepancias de stock:", error)
-      throw error
+      // Si hay un error, devolver un array vacío para no romper la aplicación
+      return []
     }
-  }
-
-  // Calcular cantidad esperada de stock
-  private static calculateExpectedQuantity(detail: any): number {
-    // Fórmula: Cierre + Venta + Consumos + Decomisados - Ingresos - Apertura
-    // Por lo tanto: Esperado = Apertura + Ingresos - Consumos - Decomisados - Vendidas
-    const opening = detail.opening_quantity || 0
-    const incoming = detail.incoming_quantity || 0
-    const sold = detail.units_sold || 0
-    const discarded = detail.discarded_quantity || 0
-    const consumption = detail.internal_consumption || 0
-
-    return opening + incoming - consumption - discarded - sold
-  }
+  },
 
   // Obtener discrepancias de caja
-  static async getCashDiscrepancies(date: string, localId: string): Promise<CashDiscrepancy[]> {
-    const supabase = createClientComponentClient()
-
+  getCashDiscrepancies: async (date: string, locationId: number | null) => {
     try {
-      // Obtener datos de la tabla cash_register_closings para la fecha y local
-      const { data: closings, error: closingsError } = await supabase
-        .from("cash_register_closings")
+      // Validar que la fecha no esté vacía
+      if (!date) {
+        console.error("Fecha no proporcionada para la consulta de discrepancias de caja")
+        return []
+      }
+
+      // Validar que el locationId sea un número
+      if (locationId === null) {
+        console.error("ID de local no proporcionado para la consulta de discrepancias de caja")
+        return []
+      }
+
+      console.log(`Consultando discrepancias de caja para fecha: ${date}, local: ${locationId}`)
+
+      // Importar supabase
+      const { createClientComponentClient } = await import("@supabase/auth-helpers-nextjs")
+      const supabase = createClientComponentClient()
+
+      // Consultar la tabla cash_discrepancies
+      const { data, error } = await supabase
+        .from("cash_discrepancies")
         .select("*")
         .eq("date", date)
-        .eq("local_id", localId)
-        .not("status", "eq", "pendiente")
+        .eq("location_id", locationId)
+        .order("payment_method")
 
-      if (closingsError) throw closingsError
-
-      if (!closings || closings.length === 0) {
-        return []
+      if (error) {
+        console.error("Error al obtener discrepancias de caja:", error)
+        throw error
       }
 
-      // Transformar los datos al formato requerido
-      const cashDiscrepancies: CashDiscrepancy[] = []
-
-      for (const closing of closings) {
-        // Discrepancia de efectivo
-        if (closing.difference !== 0) {
-          cashDiscrepancies.push({
-            id: `cash-${closing.id}`,
-            date,
-            localId,
-            paymentMethod: "cash",
-            expectedAmount: closing.expected_balance || 0,
-            actualAmount: closing.actual_balance || 0,
-            difference: closing.difference || 0,
-            status: "pending",
-          })
-        }
-
-        // Discrepancia de posnet
-        if (closing.posnet_difference !== 0) {
-          cashDiscrepancies.push({
-            id: `card-${closing.id}`,
-            date,
-            localId,
-            paymentMethod: "card",
-            expectedAmount: closing.credit_card_sales || 0,
-            actualAmount: closing.posnet_impreso || 0,
-            difference: closing.posnet_difference || 0,
-            status: "pending",
-          })
-        }
-      }
-
-      return cashDiscrepancies
+      // Transformar los datos de snake_case a camelCase
+      return (data || []).map((item) => ({
+        id: item.id,
+        date: item.date,
+        localId: item.location_id,
+        paymentMethod: item.payment_method,
+        expectedAmount: item.expected_amount,
+        actualAmount: item.actual_amount,
+        difference: item.difference,
+        status: item.status,
+        reconciliationId: item.reconciliation_id,
+      }))
     } catch (error) {
       console.error("Error al obtener discrepancias de caja:", error)
-      throw error
+      // Si hay un error, devolver un array vacío para no romper la aplicación
+      return []
     }
-  }
+  },
 
-  // Obtener conciliaciones existentes
-  static async getReconciliations(date: string, localId: string) {
-    const supabase = createClientComponentClient()
-
+  // Obtener conciliaciones
+  getReconciliations: async (date: string, locationId: number | null) => {
     try {
-      // Verificar si existe la tabla de conciliaciones
-      const { data: tableExists, error: tableError } = await supabase
-        .from("reconciliations")
-        .select("id")
-        .limit(1)
-        .maybeSingle()
-
-      // Si la tabla no existe, devolver un array vacío
-      if (tableError && tableError.code === "PGRST116") {
+      // Validar que la fecha no esté vacía
+      if (!date) {
+        console.error("Fecha no proporcionada para la consulta de conciliaciones")
         return []
       }
 
-      if (tableError) throw tableError
+      // Validar que el locationId sea un número
+      if (locationId === null) {
+        console.error("ID de local no proporcionado para la consulta de conciliaciones")
+        return []
+      }
 
-      // Obtener conciliaciones para la fecha y local
-      const { data: reconciliations, error: reconciliationsError } = await supabase
+      console.log(`Consultando conciliaciones para fecha: ${date}, local: ${locationId}`)
+
+      // Importar supabase
+      const { createClientComponentClient } = await import("@supabase/auth-helpers-nextjs")
+      const supabase = createClientComponentClient()
+
+      // Consultar la tabla reconciliations
+      const { data: reconciliationsData, error: reconciliationsError } = await supabase
         .from("reconciliations")
-        .select("*, reconciliation_details(*)")
+        .select("*")
         .eq("date", date)
-        .eq("local_id", localId)
+        .eq("location_id", locationId)
 
-      if (reconciliationsError) throw reconciliationsError
+      if (reconciliationsError) {
+        console.error("Error al obtener conciliaciones:", reconciliationsError)
+        throw reconciliationsError
+      }
 
-      return reconciliations || []
+      // Si no hay conciliaciones, devolver un array vacío
+      if (!reconciliationsData || reconciliationsData.length === 0) {
+        return []
+      }
+
+      // Para cada conciliación, obtener sus detalles
+      const result = []
+      for (const reconciliation of reconciliationsData) {
+        const { data: detailsData, error: detailsError } = await supabase
+          .from("reconciliation_details")
+          .select("*")
+          .eq("reconciliation_id", reconciliation.id)
+
+        if (detailsError) {
+          console.error("Error al obtener detalles de conciliación:", detailsError)
+          continue
+        }
+
+        // Transformar los datos de snake_case a camelCase
+        result.push({
+          id: reconciliation.id,
+          date: reconciliation.date,
+          localId: reconciliation.location_id,
+          totalStockValue: reconciliation.total_stock_value,
+          totalCashValue: reconciliation.total_cash_value,
+          difference: reconciliation.difference,
+          status: reconciliation.status,
+          notes: reconciliation.notes,
+          createdBy: reconciliation.created_by,
+          createdAt: reconciliation.created_at,
+          details: (detailsData || []).map((detail) => ({
+            id: detail.id,
+            reconciliationId: detail.reconciliation_id,
+            stockDiscrepancyId: detail.stock_discrepancy_id,
+            cashDiscrepancyId: detail.cash_discrepancy_id,
+            matchedValue: detail.matched_value,
+            notes: detail.notes,
+          })),
+        })
+      }
+
+      return result
     } catch (error) {
       console.error("Error al obtener conciliaciones:", error)
-      throw error
+      // Si hay un error, devolver un array vacío para no romper la aplicación
+      return []
     }
-  }
+  },
 
-  // Ejecutar conciliación automática
-  static async autoReconcile(stockDiscrepancies: StockDiscrepancy[], cashDiscrepancies: CashDiscrepancy[]) {
+  // Conciliación automática
+  autoReconcile: async (stockDiscrepancies, cashDiscrepancies) => {
     try {
-      // Algoritmo de conciliación automática
-      const matches: ReconciliationMatch[] = []
-      let matchId = 1
+      console.log("Ejecutando conciliación automática")
 
-      // 1. Buscar coincidencias exactas (mismo valor absoluto)
+      // Algoritmo simple de conciliación:
+      // Buscar discrepancias de stock y caja con valores similares
+      const matches = []
+
       for (const stockItem of stockDiscrepancies) {
         for (const cashItem of cashDiscrepancies) {
-          // Si el valor absoluto de ambas discrepancias es igual, es una coincidencia perfecta
-          if (Math.abs(stockItem.totalValue) === Math.abs(cashItem.difference)) {
-            matches.push({
-              id: `match-${matchId++}`,
-              stockDiscrepancyId: stockItem.id,
-              cashDiscrepancyId: cashItem.id,
-              stockValue: stockItem.totalValue,
-              cashValue: cashItem.difference,
-              confidence: 100,
-            })
+          // Si ambos son del mismo día y local
+          if (stockItem.date === cashItem.date && stockItem.localId === cashItem.localId) {
+            // Calcular la similitud entre los valores (valor absoluto de la diferencia)
+            const stockValue = Math.abs(stockItem.totalValue)
+            const cashValue = Math.abs(cashItem.difference)
+            const valueDiff = Math.abs(stockValue - cashValue)
 
-            // Marcar como procesados para no usarlos en otras coincidencias
-            stockItem.status = "reconciled"
-            cashItem.status = "reconciled"
+            // Si la diferencia es menor al 20% del valor mayor, considerarlo una coincidencia
+            const maxValue = Math.max(stockValue, cashValue)
+            const threshold = maxValue * 0.2
+
+            if (valueDiff <= threshold) {
+              // Calcular un porcentaje de confianza
+              const confidence = 100 - (valueDiff / maxValue) * 100
+
+              matches.push({
+                id: `match-${stockItem.id}-${cashItem.id}`,
+                stockDiscrepancyId: stockItem.id,
+                cashDiscrepancyId: cashItem.id,
+                stockValue: stockItem.totalValue,
+                cashValue: cashItem.difference,
+                confidence: Math.round(confidence),
+              })
+            }
           }
         }
       }
-
-      // 2. Buscar coincidencias aproximadas (dentro de un margen de error del 5%)
-      const unprocessedStock = stockDiscrepancies.filter((item) => item.status === "pending")
-      const unprocessedCash = cashDiscrepancies.filter((item) => item.status === "pending")
-
-      for (const stockItem of unprocessedStock) {
-        for (const cashItem of unprocessedCash) {
-          const stockValue = Math.abs(stockItem.totalValue)
-          const cashValue = Math.abs(cashItem.difference)
-
-          // Calcular la diferencia porcentual
-          const maxValue = Math.max(stockValue, cashValue)
-          const minValue = Math.min(stockValue, cashValue)
-
-          if (maxValue === 0) continue
-
-          const percentageDiff = ((maxValue - minValue) / maxValue) * 100
-
-          // Si la diferencia es menor al 5%, considerar como coincidencia
-          if (percentageDiff <= 5) {
-            const confidence = 100 - percentageDiff
-
-            matches.push({
-              id: `match-${matchId++}`,
-              stockDiscrepancyId: stockItem.id,
-              cashDiscrepancyId: cashItem.id,
-              stockValue: stockItem.totalValue,
-              cashValue: cashItem.difference,
-              confidence,
-            })
-
-            // Marcar como procesados
-            stockItem.status = "reconciled"
-            cashItem.status = "reconciled"
-          }
-        }
-      }
-
-      // 3. Buscar combinaciones de discrepancias que puedan coincidir
-      // (Esta parte es más compleja y se implementaría en una versión futura)
 
       return {
-        matches,
-        unprocessedStock: stockDiscrepancies.filter((item) => item.status === "pending"),
-        unprocessedCash: cashDiscrepancies.filter((item) => item.status === "pending"),
+        matches: matches.sort((a, b) => b.confidence - a.confidence), // Ordenar por confianza descendente
       }
     } catch (error) {
       console.error("Error en conciliación automática:", error)
       throw error
     }
-  }
+  },
 
   // Guardar conciliaciones
-  static async saveReconciliations(matches: ReconciliationMatch[], date: string, localId: string, localName: string) {
-    const supabase = createClientComponentClient()
-
+  saveReconciliations: async (matches, date, localId, localName) => {
     try {
-      // 1. Verificar si existen las tablas necesarias
-      try {
-        const { error: tableCheckError } = await supabase.from("reconciliations").select("id").limit(1)
+      console.log(`Guardando conciliaciones para fecha: ${date}, local: ${localId}`)
 
-        // Si la tabla no existe, crearla
-        if (tableCheckError && tableCheckError.code === "PGRST116") {
-          await this.createReconciliationTables()
-        } else if (tableCheckError) {
-          throw tableCheckError
-        }
-      } catch (checkError) {
-        console.error("Error al verificar tablas:", checkError)
-        throw new Error("No se pudo verificar la existencia de las tablas necesarias")
-      }
+      // Importar supabase
+      const { createClientComponentClient } = await import("@supabase/auth-helpers-nextjs")
+      const supabase = createClientComponentClient()
 
-      // 2. Crear una nueva conciliación
+      // 1. Crear una nueva conciliación
       const totalStockValue = matches.reduce((sum, match) => sum + Math.abs(match.stockValue), 0)
       const totalCashValue = matches.reduce((sum, match) => sum + Math.abs(match.cashValue), 0)
 
-      const { data: reconciliation, error: reconciliationError } = await supabase
+      const { data: reconciliationData, error: reconciliationError } = await supabase
         .from("reconciliations")
         .insert({
-          date,
-          local_id: localId,
-          local_name: localName,
+          date: date,
+          location_id: localId,
           total_stock_value: totalStockValue,
           total_cash_value: totalCashValue,
           difference: totalStockValue - totalCashValue,
-          status: "approved",
-          notes: "Conciliación automática",
+          status: "draft",
+          notes: `Conciliación automática para ${localName} del ${date}`,
           created_by: "Sistema",
-          created_at: new Date().toISOString(),
         })
         .select()
-        .single()
 
-      if (reconciliationError) throw reconciliationError
+      if (reconciliationError) {
+        console.error("Error al crear conciliación:", reconciliationError)
+        throw reconciliationError
+      }
 
-      // 3. Crear los detalles de la conciliación
-      const reconciliationId = reconciliation.id
+      if (!reconciliationData || reconciliationData.length === 0) {
+        throw new Error("No se pudo crear la conciliación")
+      }
 
+      const reconciliationId = reconciliationData[0].id
+
+      // 2. Crear los detalles de la conciliación
       for (const match of matches) {
         const { error: detailError } = await supabase.from("reconciliation_details").insert({
           reconciliation_id: reconciliationId,
           stock_discrepancy_id: match.stockDiscrepancyId,
           cash_discrepancy_id: match.cashDiscrepancyId,
-          matched_value: Math.abs(match.stockValue),
-          notes: `Confianza: ${match.confidence.toFixed(1)}%`,
+          matched_value: Math.min(Math.abs(match.stockValue), Math.abs(match.cashValue)),
+          notes: `Coincidencia con confianza del ${match.confidence}%`,
         })
 
         if (detailError) {
-          console.error("Error al insertar detalle:", detailError)
+          console.error("Error al crear detalle de conciliación:", detailError)
+          // Continuar con los demás detalles
         }
       }
 
-      return reconciliation
+      // 3. Actualizar el estado de las discrepancias
+      for (const match of matches) {
+        // Actualizar discrepancia de stock
+        const { error: stockError } = await supabase
+          .from("stock_discrepancies")
+          .update({
+            status: "reconciled",
+            reconciliation_id: reconciliationId,
+          })
+          .eq("id", match.stockDiscrepancyId)
+
+        if (stockError) {
+          console.error("Error al actualizar discrepancia de stock:", stockError)
+        }
+
+        // Actualizar discrepancia de caja
+        const { error: cashError } = await supabase
+          .from("cash_discrepancies")
+          .update({
+            status: "reconciled",
+            reconciliation_id: reconciliationId,
+          })
+          .eq("id", match.cashDiscrepancyId)
+
+        if (cashError) {
+          console.error("Error al actualizar discrepancia de caja:", cashError)
+        }
+      }
+
+      return reconciliationId
     } catch (error) {
       console.error("Error al guardar conciliaciones:", error)
       throw error
     }
-  }
+  },
 
-  // Crear tablas de conciliación si no existen
-  private static async createReconciliationTables() {
-    const supabase = createClientComponentClient()
-
+  // Generar discrepancias a partir de datos reales
+  generateDiscrepancies: async (date: string, locationId: number, shift: string) => {
     try {
-      // Crear tabla de conciliaciones
-      await supabase.rpc("create_reconciliation_tables")
+      // Validar parámetros
+      if (!date || !locationId || !shift) {
+        throw new Error("Fecha, ID de local y turno son obligatorios")
+      }
 
-      console.log("Tablas de conciliación creadas correctamente")
+      console.log(`Generando discrepancias para fecha: ${date}, local: ${locationId}, turno: ${shift}`)
+
+      // Importar supabase
+      const { createClientComponentClient } = await import("@supabase/auth-helpers-nextjs")
+      const supabase = createClientComponentClient()
+
+      // Llamar al procedimiento almacenado
+      const { error } = await supabase.rpc("generate_discrepancies", {
+        p_date: date,
+        p_location_id: locationId,
+        p_shift: shift,
+      })
+
+      if (error) {
+        console.error("Error al generar discrepancias:", error)
+        throw error
+      }
+
+      return true
     } catch (error) {
-      console.error("Error al crear tablas de conciliación:", error)
+      console.error("Error al generar discrepancias:", error)
       throw error
     }
-  }
+  },
 }
