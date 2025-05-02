@@ -18,23 +18,23 @@ import { CashDiscrepancyTable } from "./cash-discrepancy-table"
 import { AutoReconcilePanel } from "./auto-reconcile-panel"
 import { ReconciliationService } from "../../lib/reconciliation-service"
 
-// Lista de locales para seleccionar (igual que en los otros componentes)
+// Cambiar la definición de locales para usar IDs numéricos en lugar de strings
 const locales = [
-  { id: "cabildo", name: "BR Cabildo" },
-  { id: "carranza", name: "BR Carranza" },
-  { id: "pacifico", name: "BR Pacífico" },
-  { id: "lavalle", name: "BR Lavalle" },
-  { id: "rivadavia", name: "BR Rivadavia" },
-  { id: "aguero", name: "BR Aguero" },
-  { id: "dorrego", name: "BR Dorrego" },
-  { id: "dean_dennys", name: "Dean & Dennys" },
+  { id: 1, name: "BR Cabildo" },
+  { id: 2, name: "BR Carranza" },
+  { id: 3, name: "BR Pacífico" },
+  { id: 4, name: "BR Lavalle" },
+  { id: 5, name: "BR Rivadavia" },
+  { id: 6, name: "BR Aguero" },
+  { id: 7, name: "BR Dorrego" },
+  { id: 8, name: "Dean & Dennys" },
 ]
 
 // Interfaces para los datos
 interface StockDiscrepancy {
   id: string
   date: string
-  localId: string
+  localId: number // Cambiado de string a number
   productId: string
   productName: string
   expectedQuantity: number
@@ -49,7 +49,7 @@ interface StockDiscrepancy {
 interface CashDiscrepancy {
   id: string
   date: string
-  localId: string
+  localId: number // Cambiado de string a number
   paymentMethod: "cash" | "bank" | "card" | "other"
   expectedAmount: number
   actualAmount: number
@@ -61,7 +61,7 @@ interface CashDiscrepancy {
 interface Reconciliation {
   id: string
   date: string
-  localId: string
+  localId: number // Cambiado de string a number
   totalStockValue: number
   totalCashValue: number
   difference: number
@@ -87,10 +87,10 @@ export function ConciliacionContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("resumen")
 
-  // Estado para los filtros
+  // Modificar el estado de filtros para que localId sea un número o null
   const [filters, setFilters] = useState({
     date: format(new Date(), "yyyy-MM-dd"),
-    localId: "",
+    localId: null as number | null, // Cambiado de string vacía a null
     localName: "",
   })
 
@@ -117,17 +117,21 @@ export function ConciliacionContent() {
     }
   }, [filters.localId, filters.date])
 
-  // Manejar cambios en los filtros
+  // Modificar la función handleFilterChange para convertir el valor a número cuando es localId
   const handleFilterChange = (name: string, value: string) => {
     setFilters((prev) => {
-      const newFilters = { ...prev, [name]: value }
+      const newFilters = { ...prev }
 
-      // Si cambia el local, actualizar el nombre del local
       if (name === "localId") {
-        const selectedLocal = locales.find((local) => local.id === value)
+        // Convertir a número si es localId
+        newFilters.localId = value ? Number(value) : null
+        const selectedLocal = locales.find((local) => local.id === Number(value))
         if (selectedLocal) {
           newFilters.localName = selectedLocal.name
         }
+      } else {
+        // Para otros campos, usar el valor tal cual
+        newFilters[name] = value
       }
 
       return newFilters
