@@ -192,6 +192,157 @@ export async function updateCashDiscrepancyStatus(
   }
 }
 
+// Función para verificar si existen discrepancias para una fecha, local y turno
+export async function checkDiscrepanciesExist(
+  locationId: number, 
+  date: string, 
+  shift: string
+) {
+  const supabase = createClient();
+  
+  try {
+    // Formatear la fecha si es necesario
+    const formattedDate = date.includes('T') 
+      ? date.split('T')[0] 
+      : date;
+    
+    // Verificar discrepancias de stock
+    const { count: stockCount, error: stockError } = await supabase
+      .from('stock_discrepancies')
+      .select('*', { count: 'exact', head: true })
+      .eq('location_id', locationId)
+      .eq('date', formattedDate)
+      .eq('shift', shift);
+    
+    if (stockError) {
+      console.error('Error al verificar discrepancias de stock:', stockError);
+      return { success: false, error: stockError.message };
+    }
+    
+    // Verificar discrepancias de caja
+    const { count: cashCount, error: cashError } = await supabase
+      .from('cash_discrepancies')
+      .select('*', { count: 'exact', head: true })
+      .eq('location_id', locationId)
+      .eq('date', formattedDate)
+      .eq('shift', shift);
+    
+    if (cashError) {
+      console.error('Error al verificar discrepancias de caja:', cashError);
+      return { success: false, error: cashError.message };
+    }
+    
+    return { 
+      success: true, 
+      exists: (stockCount || 0) > 0 || (cashCount || 0) > 0,
+      stockCount: stockCount || 0,
+      cashCount: cashCount || 0
+    };
+  } catch (error: any) {
+    console.error('Error en checkDiscrepanciesExist:', error);
+    return { 
+      success: false, 
+      error: error.message || 'Error inesperado al verificar discrepancias' 
+    };
+  }
+}
+
+// Función para verificar si existen los datos necesarios para generar discrepancias
+export async function checkRequiredDataForDiscrepancies(
+  locationId: number, 
+  date: string, 
+  shift: string
+) {
+  const supabase = createClient();
+  
+  try {
+    // Formatear la fecha si es necesario
+    const formattedDate = date.includes('T') 
+      ? date.split('T')[0] 
+      : date;
+    
+    // Convertir locationId a string para las consultas de caja
+    const locationIdText = locationId.toString();
+    
+    // Verificar planilla de stock
+    const { count: stockSheetCount, error: stockSheetError } = await supabase
+      .from('stock_matrix_sheets')
+      .select('*', { count: 'exact', head: true })
+      .eq('location_id', locationId)
+      .eq('date', formattedDate)
+      .eq('shift', shift)
+      .eq('status', 'completado');
+    
+    if (stockSheetError) {
+      console.error('Error al verificar planilla de stock:', stockSheetError);
+      return { success: false, error: stockSheetError.message };
+    }
+    
+    // Verificar apertura de caja
+    const { count: openingCount, error: openingError } = await supabase
+      .from('cash_register_openings')
+      .select('*', { count: 'exact', head: true })
+      .eq('local_id', locationIdText)
+      .eq('date', formattedDate)
+      .eq('shift', shift);
+    
+    if (openingError) {
+      console.error('Error al verificar apertura de caja:', openingError);
+      return { success: false, error: openingError.message };
+    }
+    
+    // Verificar cierre de caja
+    const { count: closingCount, error: closingError } = await supabase
+      .from('cash_register_closings')
+      .select('*', { count: 'exact', head: true })
+      .eq('local_id', locationIdText)
+      .eq('date', formattedDate)
+      .eq('shift', shift);
+    
+    if (closingError) {
+      console.error('Error al verificar cierre de caja:', closingError);
+      return { success: false, error: closingError.message };
+    }
+    
+    // Construir mensaje de estado
+    let statusMessage = '';
+    let missingData = [];
+    
+    if (stockSheetCount === 0) {
+      missingData.push('planilla de stock completada');
+    }
+    
+    if (openingCount === 0) {
+      missingData.push('apertura de caja');
+    }
+    
+    if (closingCount === 0) {
+      missingData.push('cierre de caja');
+    }
+    
+    if (missingData.length > 0) {
+      statusMessage = `Faltan datos: ${missingData.join(', ')}`;
+    } else {
+      statusMessage = 'Todos los datos necesarios están disponibles';
+    }
+    
+    return { 
+      success: true, 
+      hasAllData: missingData.length === 0,
+      hasStockSheet: stockSheetCount > 0,
+      hasOpening: openingCount > 0,
+      hasClosing: closingCount > 0,
+      statusMessage
+    };
+  } catch (error: any) {
+    console.error('Error en checkRequiredDataForDiscrepancies:', error);
+    return { 
+      success: false, 
+      error: error.message || 'Error inesperado al verificar datos requeridos' 
+    };
+  }
+}
+
 // Función para obtener resumen de discrepancias por local
 export async function getDiscrepancySummaryByLocation(
   startDate: string, 
@@ -451,153 +602,108 @@ export async function getTopStockDiscrepancies(
   }
 }
 
-// Función para verificar si existen discrepancias para una fecha, local y turno
-export async function checkDiscrepanciesExist(
-  locationId: number, 
-  date: string, 
-  shift: string
+// Función para obtener datos para el dashboard de conciliación
+export async function getReconciliationDashboardData(
+  startDate: string, 
+  endDate: string
 ) {
   const supabase = createClient();
   
   try {
-    // Formatear la fecha si es necesario
-    const formattedDate = date.includes('T') 
-      ? date.split('T')[0] 
-      : date;
+    // Formatear las fechas si es necesario
+    const formattedStartDate = startDate.includes('T') 
+      ? startDate.split('T')[0] 
+      : startDate;
     
-    // Verificar discrepancias de stock
-    const { count: stockCount, error: stockError } = await supabase
+    const formattedEndDate = endDate.includes('T') 
+      ? endDate.split('T')[0] 
+      : endDate;
+    
+    // Obtener total de discrepancias de stock
+    const { data: stockTotal, error: stockError } = await supabase
       .from('stock_discrepancies')
-      .select('*', { count: 'exact', head: true })
-      .eq('location_id', locationId)
-      .eq('date', formattedDate)
-      .eq('shift', shift);
+      .select('count(*), sum(total_value)')
+      .gte('date', formattedStartDate)
+      .lte('date', formattedEndDate);
     
     if (stockError) {
-      console.error('Error al verificar discrepancias de stock:', stockError);
+      console.error('Error al obtener total de discrepancias de stock:', stockError);
       return { success: false, error: stockError.message };
     }
     
-    // Verificar discrepancias de caja
-    const { count: cashCount, error: cashError } = await supabase
+    // Obtener total de discrepancias de caja
+    const { data: cashTotal, error: cashError } = await supabase
       .from('cash_discrepancies')
-      .select('*', { count: 'exact', head: true })
-      .eq('location_id', locationId)
-      .eq('date', formattedDate)
-      .eq('shift', shift);
+      .select('count(*), sum(difference)')
+      .gte('date', formattedStartDate)
+      .lte('date', formattedEndDate);
     
     if (cashError) {
-      console.error('Error al verificar discrepancias de caja:', cashError);
+      console.error('Error al obtener total de discrepancias de caja:', cashError);
       return { success: false, error: cashError.message };
     }
     
-    return { 
-      success: true, 
-      exists: (stockCount || 0) > 0 || (cashCount || 0) > 0,
-      stockCount: stockCount || 0,
-      cashCount: cashCount || 0
-    };
-  } catch (error: any) {
-    console.error('Error en checkDiscrepanciesExist:', error);
-    return { 
-      success: false, 
-      error: error.message || 'Error inesperado al verificar discrepancias' 
-    };
-  }
-}
-
-// Función para verificar si existen los datos necesarios para generar discrepancias
-export async function checkRequiredDataForDiscrepancies(
-  locationId: number, 
-  date: string, 
-  shift: string
-) {
-  const supabase = createClient();
-  
-  try {
-    // Formatear la fecha si es necesario
-    const formattedDate = date.includes('T') 
-      ? date.split('T')[0] 
-      : date;
+    // Obtener discrepancias por categoría
+    const { data: categoryData, error: categoryError } = await supabase
+      .from('stock_discrepancies')
+      .select(`
+        category,
+        sum(total_value) as total_value,
+        count(*) as count
+      `)
+      .gte('date', formattedStartDate)
+      .lte('date', formattedEndDate)
+      .group('category')
+      .order('total_value', { ascending: false });
     
-    // Convertir locationId a string para las consultas de caja
-    const locationIdText = locationId.toString();
-    
-    // Verificar planilla de stock
-    const { count: stockSheetCount, error: stockSheetError } = await supabase
-      .from('stock_matrix_sheets')
-      .select('*', { count: 'exact', head: true })
-      .eq('location_id', locationId)
-      .eq('date', formattedDate)
-      .eq('shift', shift)
-      .eq('status', 'completado');
-    
-    if (stockSheetError) {
-      console.error('Error al verificar planilla de stock:', stockSheetError);
-      return { success: false, error: stockSheetError.message };
+    if (categoryError) {
+      console.error('Error al obtener discrepancias por categoría:', categoryError);
+      return { success: false, error: categoryError.message };
     }
     
-    // Verificar apertura de caja
-    const { count: openingCount, error: openingError } = await supabase
-      .from('cash_register_openings')
-      .select('*', { count: 'exact', head: true })
-      .eq('local_id', locationIdText)
-      .eq('date', formattedDate)
-      .eq('shift', shift);
+    // Obtener discrepancias por estado
+    const { data: statusData, error: statusError } = await supabase
+      .from('stock_discrepancies')
+      .select(`
+        status,
+        count(*) as count
+      `)
+      .gte('date', formattedStartDate)
+      .lte('date', formattedEndDate)
+      .group('status');
     
-    if (openingError) {
-      console.error('Error al verificar apertura de caja:', openingError);
-      return { success: false, error: openingError.message };
-    }
-    
-    // Verificar cierre de caja
-    const { count: closingCount, error: closingError } = await supabase
-      .from('cash_register_closings')
-      .select('*', { count: 'exact', head: true })
-      .eq('local_id', locationIdText)
-      .eq('date', formattedDate)
-      .eq('shift', shift);
-    
-    if (closingError) {
-      console.error('Error al verificar cierre de caja:', closingError);
-      return { success: false, error: closingError.message };
-    }
-    
-    // Construir mensaje de estado
-    let statusMessage = '';
-    let missingData = [];
-    
-    if (stockSheetCount === 0) {
-      missingData.push('planilla de stock completada');
-    }
-    
-    if (openingCount === 0) {
-      missingData.push('apertura de caja');
-    }
-    
-    if (closingCount === 0) {
-      missingData.push('cierre de caja');
-    }
-    
-    if (missingData.length > 0) {
-      statusMessage = `Faltan datos: ${missingData.join(', ')}`;
-    } else {
-      statusMessage = 'Todos los datos necesarios están disponibles';
+    if (statusError) {
+      console.error('Error al obtener discrepancias por estado:', statusError);
+      return { success: false, error: statusError.message };
     }
     
     return { 
       success: true, 
-      hasAllData: missingData.length === 0,
-      hasStockSheet: stockSheetCount > 0,
-      hasOpening: openingCount > 0,
-      hasClosing: closingCount > 0,
-      statusMessage
+      data: {
+        stockDiscrepancies: {
+          count: parseInt(stockTotal?.[0]?.count || '0', 10),
+          totalValue: parseFloat(stockTotal?.[0]?.sum || '0')
+        },
+        cashDiscrepancies: {
+          count: parseInt(cashTotal?.[0]?.count || '0', 10),
+          totalValue: parseFloat(cashTotal?.[0]?.sum || '0')
+        },
+        byCategory: categoryData?.map((item: any) => ({
+          category: item.category,
+          totalValue: parseFloat(item.total_value) || 0,
+          count: parseInt(item.count, 10) || 0
+        })) || [],
+        byStatus: statusData?.map((item: any) => ({
+          status: item.status,
+          count: parseInt(item.count, 10) || 0
+        })) || []
+      }
     };
   } catch (error: any) {
-    console.error('Error en checkRequiredDataForDiscrepancies:', error);
+    console.error('Error en getReconciliationDashboardData:', error);
     return { 
       success: false, 
-      error: error.message || 'Error inesperado al verificar datos requeridos' 
+      error: error.message || 'Error inesperado al obtener datos del dashboard' 
     };
   }
 }
@@ -609,9 +715,10 @@ export default {
   getCashDiscrepancies,
   updateStockDiscrepancyStatus,
   updateCashDiscrepancyStatus,
+  checkDiscrepanciesExist,
+  checkRequiredDataForDiscrepancies,
   getDiscrepancySummaryByLocation,
   getDiscrepancyTrendByDate,
   getTopStockDiscrepancies,
-  checkDiscrepanciesExist,
-  checkRequiredDataForDiscrepancies
+  getReconciliationDashboardData
 };
