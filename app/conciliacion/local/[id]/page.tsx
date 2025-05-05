@@ -7,10 +7,13 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DatePicker } from "@/components/ui/date-picker"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ArrowLeft, Download, RefreshCcw } from "lucide-react"
 import { StockDiscrepancyTable } from "@/components/conciliacion/stock-discrepancy-table"
 import { CashDiscrepancyTable } from "@/components/conciliacion/cash-discrepancy-table"
 import { GenerateDiscrepanciesButton } from "@/components/conciliacion/generate-discrepancies-button"
+import { ReconciliationService } from "@/lib/reconciliation-service"
+import { toast } from "@/components/ui/use-toast"
 
 // Lista fija de locales con IDs numéricos
 const locales = [
@@ -24,11 +27,19 @@ const locales = [
   { id: 8, name: "Dean & Dennys" },
 ]
 
+// Opciones de turno
+const turnos = [
+  { value: "", label: "Todos los turnos" },
+  { value: "mañana", label: "Mañana" },
+  { value: "tarde", label: "Tarde" },
+]
+
 export default function LocalDetailPage() {
   const params = useParams()
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+  const [selectedShift, setSelectedShift] = useState<string>("")
   const [localInfo, setLocalInfo] = useState<any>(null)
   const [stockDiscrepancies, setStockDiscrepancies] = useState<any[]>([])
   const [cashDiscrepancies, setCashDiscrepancies] = useState<any[]>([])
@@ -51,55 +62,58 @@ export default function LocalDetailPage() {
     if (localInfo) {
       loadLocalData(localInfo.id)
     }
-  }, [selectedDate, localInfo])
+  }, [selectedDate, selectedShift, localInfo])
 
   const loadLocalData = async (localId: number) => {
     try {
       setIsLoading(true)
 
-      // Aquí iría la lógica para cargar los datos del local
-      // Esto es un ejemplo, deberías adaptarlo a tu estructura de datos
+      const formattedDate = selectedDate.toISOString().split("T")[0]
 
-      // Simulación de datos para el ejemplo
-      setTimeout(() => {
-        // Datos simulados de discrepancias de stock
-        const mockStockDiscrepancies = Array.from({ length: 10 }, (_, i) => ({
-          id: `stock-${i}`,
-          date: selectedDate.toISOString().split("T")[0],
-          productId: `prod-${i}`,
-          productName: `Producto ${i + 1}`,
-          category: i % 3 === 0 ? "Bebidas" : i % 3 === 1 ? "Comidas" : "Otros",
-          expectedQuantity: Math.floor(Math.random() * 100),
-          actualQuantity: Math.floor(Math.random() * 100),
-          difference: Math.floor(Math.random() * 20) - 10,
-          unitCost: Math.floor(Math.random() * 1000) + 100,
-          totalValue: Math.floor(Math.random() * 10000),
-          status: i % 3 === 0 ? "pending" : i % 3 === 1 ? "reconciled" : "unreconciled",
-        }))
+      // Cargar discrepancias de stock
+      const stockData = await ReconciliationService.getStockDiscrepancies(
+        formattedDate,
+        localId,
+        selectedShift || undefined,
+      )
+      setStockDiscrepancies(stockData)
 
-        // Datos simulados de discrepancias de caja
-        const mockCashDiscrepancies = Array.from({ length: 5 }, (_, i) => ({
-          id: `cash-${i}`,
-          date: selectedDate.toISOString().split("T")[0],
-          paymentMethod: i % 3 === 0 ? "cash" : i % 3 === 1 ? "card" : "transfer",
-          expectedAmount: Math.floor(Math.random() * 50000) + 10000,
-          actualAmount: Math.floor(Math.random() * 50000) + 10000,
-          difference: Math.floor(Math.random() * 5000) - 2500,
-          status: i % 3 === 0 ? "pending" : i % 3 === 1 ? "reconciled" : "unreconciled",
-        }))
+      // Cargar discrepancias de caja
+      const cashData = await ReconciliationService.getCashDiscrepancies(
+        formattedDate,
+        localId,
+        selectedShift || undefined,
+      )
+      setCashDiscrepancies(cashData)
 
-        setStockDiscrepancies(mockStockDiscrepancies)
-        setCashDiscrepancies(mockCashDiscrepancies)
-        setIsLoading(false)
-      }, 500)
+      if (stockData.length === 0 && cashData.length === 0) {
+        toast({
+          title: "Sin datos",
+          description: `No se encontraron discrepancias para ${localInfo.name} en la fecha y turno seleccionados`,
+          variant: "warning",
+        })
+      }
     } catch (error) {
       console.error("Error al cargar datos del local:", error)
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los datos del local",
+        variant: "destructive",
+      })
+    } finally {
       setIsLoading(false)
     }
   }
 
   const handleBack = () => {
     router.push("/conciliacion")
+  }
+
+  const handleExport = () => {
+    toast({
+      title: "Exportando",
+      description: "Función de exportación en desarrollo",
+    })
   }
 
   if (!localInfo) {
@@ -135,11 +149,26 @@ export default function LocalDetailPage() {
               format="dd/MM/yyyy"
             />
 
+            <div className="w-[180px]">
+              <Select value={selectedShift} onValueChange={setSelectedShift}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar turno" />
+                </SelectTrigger>
+                <SelectContent>
+                  {turnos.map((turno) => (
+                    <SelectItem key={turno.value} value={turno.value}>
+                      {turno.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <Button variant="outline" size="icon" onClick={() => loadLocalData(localInfo.id)} disabled={isLoading}>
               <RefreshCcw className="h-4 w-4" />
             </Button>
 
-            <Button variant="outline">
+            <Button variant="outline" onClick={handleExport}>
               <Download className="mr-2 h-4 w-4" />
               Exportar
             </Button>
@@ -190,6 +219,9 @@ export default function LocalDetailPage() {
                     unidades
                   </p>
                 </>
+              )}
+              {stockDiscrepancies.length === 0 && (
+                <div className="text-sm text-muted-foreground">No hay datos disponibles</div>
               )}
             </CardContent>
           </Card>

@@ -18,7 +18,7 @@ import { CashDiscrepancyTable } from "./cash-discrepancy-table"
 import { AutoReconcilePanel } from "./auto-reconcile-panel"
 import { ReconciliationService } from "../../lib/reconciliation-service"
 
-// Cambiar la definición de locales para usar IDs numéricos en lugar de strings
+// Lista fija de locales con IDs numéricos
 const locales = [
   { id: 1, name: "BR Cabildo" },
   { id: 2, name: "BR Carranza" },
@@ -30,11 +30,19 @@ const locales = [
   { id: 8, name: "Dean & Dennys" },
 ]
 
+// Opciones de turno
+const turnos = [
+  { value: "", label: "Todos los turnos" },
+  { value: "mañana", label: "Mañana" },
+  { value: "tarde", label: "Tarde" },
+]
+
 // Interfaces para los datos
 interface StockDiscrepancy {
   id: string
   date: string
-  localId: number // Cambiado de string a number
+  localId: number
+  shift: string
   productId: string
   productName: string
   expectedQuantity: number
@@ -49,7 +57,8 @@ interface StockDiscrepancy {
 interface CashDiscrepancy {
   id: string
   date: string
-  localId: number // Cambiado de string a number
+  localId: number
+  shift: string
   paymentMethod: "cash" | "bank" | "card" | "other"
   expectedAmount: number
   actualAmount: number
@@ -61,7 +70,8 @@ interface CashDiscrepancy {
 interface Reconciliation {
   id: string
   date: string
-  localId: number // Cambiado de string a number
+  localId: number
+  shift: string
   totalStockValue: number
   totalCashValue: number
   difference: number
@@ -87,11 +97,12 @@ export function ConciliacionContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("resumen")
 
-  // Modificar el estado de filtros para que localId sea un número o null
+  // Estado para los filtros
   const [filters, setFilters] = useState({
     date: format(new Date(), "yyyy-MM-dd"),
-    localId: null as number | null, // Cambiado de string vacía a null
+    localId: null as number | null,
     localName: "",
+    shift: "" as string, // Valor vacío significa "todos los turnos"
   })
 
   // Estado para los datos
@@ -112,12 +123,12 @@ export function ConciliacionContent() {
 
   // Cargar datos cuando cambian los filtros
   useEffect(() => {
-    if (filters.localId) {
+    if (filters.date) {
       loadData()
     }
-  }, [filters.localId, filters.date])
+  }, [filters.localId, filters.date, filters.shift])
 
-  // Modificar la función handleFilterChange para convertir el valor a número cuando es localId
+  // Modificar la función handleFilterChange para validar la fecha
   const handleFilterChange = (name: string, value: string) => {
     setFilters((prev) => {
       const newFilters = { ...prev }
@@ -129,6 +140,12 @@ export function ConciliacionContent() {
         if (selectedLocal) {
           newFilters.localName = selectedLocal.name
         }
+      } else if (name === "date") {
+        // Asegurarse de que la fecha no esté vacía
+        newFilters.date = value || format(new Date(), "yyyy-MM-dd")
+      } else if (name === "shift") {
+        // Actualizar el turno
+        newFilters.shift = value
       } else {
         // Para otros campos, usar el valor tal cual
         newFilters[name] = value
@@ -138,25 +155,64 @@ export function ConciliacionContent() {
     })
   }
 
-  // Cargar datos
+  // Cargar datos - Añadir validaciones para evitar consultas con parámetros vacíos
   const loadData = async () => {
     try {
       setIsLoading(true)
 
-      // Cargar discrepancias de stock
-      const stockData = await ReconciliationService.getStockDiscrepancies(filters.date, filters.localId)
-      setStockDiscrepancies(stockData)
+      // Validar que tenemos fecha antes de hacer las consultas
+      if (!filters.date) {
+        toast({
+          title: "Error",
+          description: "Debe seleccionar una fecha para cargar los datos",
+          variant: "destructive",
+        })
+        return
+      }
 
-      // Cargar discrepancias de caja
-      const cashData = await ReconciliationService.getCashDiscrepancies(filters.date, filters.localId)
-      setCashDiscrepancies(cashData)
+      // Si no hay localId seleccionado, cargar datos para todos los locales
+      if (filters.localId === null) {
+        // Cargar discrepancias de stock para todos los locales
+        const stockData = await ReconciliationService.getStockDiscrepanciesAllLocations(
+          filters.date,
+          filters.shift || undefined,
+        )
+        setStockDiscrepancies(stockData)
+
+        // Cargar discrepancias de caja para todos los locales
+        const cashData = await ReconciliationService.getCashDiscrepanciesAllLocations(
+          filters.date,
+          filters.shift || undefined,
+        )
+        setCashDiscrepancies(cashData)
+      } else {
+        // Cargar discrepancias de stock para el local seleccionado
+        const stockData = await ReconciliationService.getStockDiscrepancies(
+          filters.date,
+          filters.localId,
+          filters.shift || undefined,
+        )
+        setStockDiscrepancies(stockData)
+
+        // Cargar discrepancias de caja para el local seleccionado
+        const cashData = await ReconciliationService.getCashDiscrepancies(
+          filters.date,
+          filters.localId,
+          filters.shift || undefined,
+        )
+        setCashDiscrepancies(cashData)
+      }
 
       // Cargar conciliaciones existentes
-      const reconciliationData = await ReconciliationService.getReconciliations(filters.date, filters.localId)
+      const reconciliationData = await ReconciliationService.getReconciliations(
+        filters.date,
+        filters.localId,
+        filters.shift || undefined,
+      )
       setReconciliations(reconciliationData)
 
       // Calcular estadísticas
-      calculateStats(stockData, cashData, reconciliationData)
+      calculateStats(stockDiscrepancies, cashDiscrepancies, reconciliationData)
     } catch (error) {
       console.error("Error al cargar datos:", error)
       toast({
@@ -240,6 +296,7 @@ export function ConciliacionContent() {
         filters.date,
         filters.localId,
         filters.localName,
+        filters.shift,
       )
 
       toast({
@@ -288,10 +345,10 @@ export function ConciliacionContent() {
       <Card className="mb-6">
         <CardHeader>
           <CardTitle>Filtros</CardTitle>
-          <CardDescription>Seleccione fecha y local para la conciliación</CardDescription>
+          <CardDescription>Seleccione fecha, local y turno para la conciliación</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="space-y-2">
               <Label htmlFor="date">Fecha</Label>
               <Input
@@ -304,13 +361,17 @@ export function ConciliacionContent() {
 
             <div className="space-y-2">
               <Label htmlFor="local">Local</Label>
-              <Select value={filters.localId} onValueChange={(value) => handleFilterChange("localId", value)}>
+              <Select
+                value={filters.localId?.toString() || ""}
+                onValueChange={(value) => handleFilterChange("localId", value)}
+              >
                 <SelectTrigger id="local">
                   <SelectValue placeholder="Seleccionar local" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="-1">Todos los locales</SelectItem>
                   {locales.map((local) => (
-                    <SelectItem key={local.id} value={local.id}>
+                    <SelectItem key={local.id} value={local.id.toString()}>
                       {local.name}
                     </SelectItem>
                   ))}
@@ -318,8 +379,24 @@ export function ConciliacionContent() {
               </Select>
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="shift">Turno</Label>
+              <Select value={filters.shift} onValueChange={(value) => handleFilterChange("shift", value)}>
+                <SelectTrigger id="shift">
+                  <SelectValue placeholder="Seleccionar turno" />
+                </SelectTrigger>
+                <SelectContent>
+                  {turnos.map((turno) => (
+                    <SelectItem key={turno.value} value={turno.value}>
+                      {turno.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="flex items-end">
-              <Button onClick={loadData} disabled={!filters.localId || !filters.date || isLoading} className="w-full">
+              <Button onClick={loadData} disabled={!filters.date || isLoading} className="w-full">
                 <Search className="mr-2 h-4 w-4" />
                 Buscar
               </Button>
