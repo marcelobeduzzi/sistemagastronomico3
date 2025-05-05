@@ -1,571 +1,491 @@
 // lib/reconciliation-service.tsx
-import { createClient } from '@/utils/supabase/server';
-import { format } from 'date-fns';
+import { supabase } from "@/lib/supabase/client"
 
 // Tipos para las discrepancias
 export interface StockDiscrepancy {
-  id: number;
-  date: string;
-  location_id: number;
-  shift: string;
-  product_id: number;
-  product_name: string;
-  category: string;
-  expected_quantity: number;
-  actual_quantity: number;
-  difference: number;
-  unit_cost: number;
-  total_value: number;
-  status: string;
-  created_at?: string;
+  id: number
+  date: string
+  location_id: number
+  shift: string
+  product_id: number
+  product_name: string
+  category: string
+  expected_quantity: number
+  actual_quantity: number
+  difference: number
+  unit_cost: number
+  total_value: number
+  status: string
+  created_at?: string
 }
 
 export interface CashDiscrepancy {
-  id: number;
-  date: string;
-  location_id: number;
-  shift: string;
-  payment_method: string;
-  expected_amount: number;
-  actual_amount: number;
-  difference: number;
-  status: string;
-  created_at?: string;
+  id: number
+  date: string
+  location_id: number
+  shift: string
+  payment_method: string
+  expected_amount: number
+  actual_amount: number
+  difference: number
+  status: string
+  created_at?: string
 }
 
 // Función para generar discrepancias
-export async function generateDiscrepancies(
-  locationId: number, 
-  date: string, 
-  shift: string, 
-  overwrite: boolean = false
-) {
-  const supabase = createClient();
-  
+export async function generateDiscrepancies(locationId: number, date: string, shift: string, overwrite = false) {
   try {
     // Formatear la fecha si es necesario
-    const formattedDate = date.includes('T') 
-      ? date.split('T')[0] 
-      : date;
-    
+    const formattedDate = date.includes("T") ? date.split("T")[0] : date
+
     // Llamar al procedimiento almacenado
-    const { data, error } = await supabase.rpc('generate_discrepancies', {
+    const { data, error } = await supabase.rpc("generate_discrepancies", {
       p_location_id: locationId,
       p_date: formattedDate,
       p_shift: shift,
-      p_overwrite: overwrite
-    });
-    
+      p_overwrite: overwrite,
+    })
+
     if (error) {
-      console.error('Error al generar discrepancias:', error);
-      return { 
-        success: false, 
-        error: error.message || 'Error al generar discrepancias' 
-      };
+      console.error("Error al generar discrepancias:", error)
+      return {
+        success: false,
+        error: error.message || "Error al generar discrepancias",
+      }
     }
-    
-    return { success: true, data };
+
+    return { success: true, data }
   } catch (error: any) {
-    console.error('Error en generateDiscrepancies:', error);
-    return { 
-      success: false, 
-      error: error.message || 'Error inesperado al generar discrepancias' 
-    };
+    console.error("Error en generateDiscrepancies:", error)
+    return {
+      success: false,
+      error: error.message || "Error inesperado al generar discrepancias",
+    }
   }
 }
 
 // Función para obtener discrepancias de stock
 export async function getStockDiscrepancies(
-  locationId: number, 
-  date: string, 
-  shift: string
+  locationId: number,
+  date: string,
+  shift: string,
 ): Promise<StockDiscrepancy[]> {
-  const supabase = createClient();
-  
   try {
     // Formatear la fecha si es necesario
-    const formattedDate = date.includes('T') 
-      ? date.split('T')[0] 
-      : date;
-    
+    const formattedDate = date.includes("T") ? date.split("T")[0] : date
+
     const { data, error } = await supabase
-      .from('stock_discrepancies')
-      .select('*')
-      .eq('location_id', locationId)
-      .eq('date', formattedDate)
-      .eq('shift', shift)
-      .order('total_value', { ascending: false });
-    
+      .from("stock_discrepancies")
+      .select("*")
+      .eq("location_id", locationId)
+      .eq("date", formattedDate)
+      .eq("shift", shift)
+      .order("total_value", { ascending: false })
+
     if (error) {
-      console.error('Error al obtener discrepancias de stock:', error);
-      return [];
+      console.error("Error al obtener discrepancias de stock:", error)
+      return []
     }
-    
-    return data || [];
+
+    return data || []
   } catch (error) {
-    console.error('Error en getStockDiscrepancies:', error);
-    return [];
+    console.error("Error en getStockDiscrepancies:", error)
+    return []
   }
 }
 
 // Función para obtener discrepancias de caja
 export async function getCashDiscrepancies(
-  locationId: number, 
-  date: string, 
-  shift: string
+  locationId: number,
+  date: string,
+  shift: string,
 ): Promise<CashDiscrepancy[]> {
-  const supabase = createClient();
-  
   try {
     // Formatear la fecha si es necesario
-    const formattedDate = date.includes('T') 
-      ? date.split('T')[0] 
-      : date;
-    
+    const formattedDate = date.includes("T") ? date.split("T")[0] : date
+
     const { data, error } = await supabase
-      .from('cash_discrepancies')
-      .select('*')
-      .eq('location_id', locationId)
-      .eq('date', formattedDate)
-      .eq('shift', shift)
-      .order('payment_method', { ascending: true });
-    
+      .from("cash_discrepancies")
+      .select("*")
+      .eq("location_id", locationId)
+      .eq("date", formattedDate)
+      .eq("shift", shift)
+      .order("payment_method", { ascending: true })
+
     if (error) {
-      console.error('Error al obtener discrepancias de caja:', error);
-      return [];
+      console.error("Error al obtener discrepancias de caja:", error)
+      return []
     }
-    
-    return data || [];
+
+    return data || []
   } catch (error) {
-    console.error('Error en getCashDiscrepancies:', error);
-    return [];
+    console.error("Error en getCashDiscrepancies:", error)
+    return []
   }
 }
 
 // Función para actualizar el estado de una discrepancia de stock
-export async function updateStockDiscrepancyStatus(
-  id: number, 
-  status: string
-) {
-  const supabase = createClient();
-  
+export async function updateStockDiscrepancyStatus(id: number, status: string) {
   try {
-    const { data, error } = await supabase
-      .from('stock_discrepancies')
-      .update({ status })
-      .eq('id', id);
-    
+    const { data, error } = await supabase.from("stock_discrepancies").update({ status }).eq("id", id)
+
     if (error) {
-      console.error('Error al actualizar estado de discrepancia de stock:', error);
-      return { success: false, error: error.message };
+      console.error("Error al actualizar estado de discrepancia de stock:", error)
+      return { success: false, error: error.message }
     }
-    
-    return { success: true, data };
+
+    return { success: true, data }
   } catch (error: any) {
-    console.error('Error en updateStockDiscrepancyStatus:', error);
-    return { success: false, error: error.message };
+    console.error("Error en updateStockDiscrepancyStatus:", error)
+    return { success: false, error: error.message }
   }
 }
 
 // Función para actualizar el estado de una discrepancia de caja
-export async function updateCashDiscrepancyStatus(
-  id: number, 
-  status: string
-) {
-  const supabase = createClient();
-  
+export async function updateCashDiscrepancyStatus(id: number, status: string) {
   try {
-    const { data, error } = await supabase
-      .from('cash_discrepancies')
-      .update({ status })
-      .eq('id', id);
-    
+    const { data, error } = await supabase.from("cash_discrepancies").update({ status }).eq("id", id)
+
     if (error) {
-      console.error('Error al actualizar estado de discrepancia de caja:', error);
-      return { success: false, error: error.message };
+      console.error("Error al actualizar estado de discrepancia de caja:", error)
+      return { success: false, error: error.message }
     }
-    
-    return { success: true, data };
+
+    return { success: true, data }
   } catch (error: any) {
-    console.error('Error en updateCashDiscrepancyStatus:', error);
-    return { success: false, error: error.message };
+    console.error("Error en updateCashDiscrepancyStatus:", error)
+    return { success: false, error: error.message }
   }
 }
 
 // Función para verificar si existen discrepancias para una fecha, local y turno
-export async function checkDiscrepanciesExist(
-  locationId: number, 
-  date: string, 
-  shift: string
-) {
-  const supabase = createClient();
-  
+export async function checkDiscrepanciesExist(locationId: number, date: string, shift: string) {
   try {
     // Formatear la fecha si es necesario
-    const formattedDate = date.includes('T') 
-      ? date.split('T')[0] 
-      : date;
-    
+    const formattedDate = date.includes("T") ? date.split("T")[0] : date
+
     // Verificar discrepancias de stock
     const { count: stockCount, error: stockError } = await supabase
-      .from('stock_discrepancies')
-      .select('*', { count: 'exact', head: true })
-      .eq('location_id', locationId)
-      .eq('date', formattedDate)
-      .eq('shift', shift);
-    
+      .from("stock_discrepancies")
+      .select("*", { count: "exact", head: true })
+      .eq("location_id", locationId)
+      .eq("date", formattedDate)
+      .eq("shift", shift)
+
     if (stockError) {
-      console.error('Error al verificar discrepancias de stock:', stockError);
-      return { success: false, error: stockError.message };
+      console.error("Error al verificar discrepancias de stock:", stockError)
+      return { success: false, error: stockError.message }
     }
-    
+
     // Verificar discrepancias de caja
     const { count: cashCount, error: cashError } = await supabase
-      .from('cash_discrepancies')
-      .select('*', { count: 'exact', head: true })
-      .eq('location_id', locationId)
-      .eq('date', formattedDate)
-      .eq('shift', shift);
-    
+      .from("cash_discrepancies")
+      .select("*", { count: "exact", head: true })
+      .eq("location_id", locationId)
+      .eq("date", formattedDate)
+      .eq("shift", shift)
+
     if (cashError) {
-      console.error('Error al verificar discrepancias de caja:', cashError);
-      return { success: false, error: cashError.message };
+      console.error("Error al verificar discrepancias de caja:", cashError)
+      return { success: false, error: cashError.message }
     }
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       exists: (stockCount || 0) > 0 || (cashCount || 0) > 0,
       stockCount: stockCount || 0,
-      cashCount: cashCount || 0
-    };
+      cashCount: cashCount || 0,
+    }
   } catch (error: any) {
-    console.error('Error en checkDiscrepanciesExist:', error);
-    return { 
-      success: false, 
-      error: error.message || 'Error inesperado al verificar discrepancias' 
-    };
+    console.error("Error en checkDiscrepanciesExist:", error)
+    return {
+      success: false,
+      error: error.message || "Error inesperado al verificar discrepancias",
+    }
   }
 }
 
 // Función para verificar si existen los datos necesarios para generar discrepancias
-export async function checkRequiredDataForDiscrepancies(
-  locationId: number, 
-  date: string, 
-  shift: string
-) {
-  const supabase = createClient();
-  
+export async function checkRequiredDataForDiscrepancies(locationId: number, date: string, shift: string) {
   try {
     // Formatear la fecha si es necesario
-    const formattedDate = date.includes('T') 
-      ? date.split('T')[0] 
-      : date;
-    
+    const formattedDate = date.includes("T") ? date.split("T")[0] : date
+
     // Convertir locationId a string para las consultas de caja
-    const locationIdText = locationId.toString();
-    
+    const locationIdText = locationId.toString()
+
     // Verificar planilla de stock
     const { count: stockSheetCount, error: stockSheetError } = await supabase
-      .from('stock_matrix_sheets')
-      .select('*', { count: 'exact', head: true })
-      .eq('location_id', locationId)
-      .eq('date', formattedDate)
-      .eq('shift', shift)
-      .eq('status', 'completado');
-    
+      .from("stock_matrix_sheets")
+      .select("*", { count: "exact", head: true })
+      .eq("location_id", locationId)
+      .eq("date", formattedDate)
+      .eq("shift", shift)
+      .eq("status", "completado")
+
     if (stockSheetError) {
-      console.error('Error al verificar planilla de stock:', stockSheetError);
-      return { success: false, error: stockSheetError.message };
+      console.error("Error al verificar planilla de stock:", stockSheetError)
+      return { success: false, error: stockSheetError.message }
     }
-    
+
     // Verificar apertura de caja
     const { count: openingCount, error: openingError } = await supabase
-      .from('cash_register_openings')
-      .select('*', { count: 'exact', head: true })
-      .eq('local_id', locationIdText)
-      .eq('date', formattedDate)
-      .eq('shift', shift);
-    
+      .from("cash_register_openings")
+      .select("*", { count: "exact", head: true })
+      .eq("local_id", locationIdText)
+      .eq("date", formattedDate)
+      .eq("shift", shift)
+
     if (openingError) {
-      console.error('Error al verificar apertura de caja:', openingError);
-      return { success: false, error: openingError.message };
+      console.error("Error al verificar apertura de caja:", openingError)
+      return { success: false, error: openingError.message }
     }
-    
+
     // Verificar cierre de caja
     const { count: closingCount, error: closingError } = await supabase
-      .from('cash_register_closings')
-      .select('*', { count: 'exact', head: true })
-      .eq('local_id', locationIdText)
-      .eq('date', formattedDate)
-      .eq('shift', shift);
-    
+      .from("cash_register_closings")
+      .select("*", { count: "exact", head: true })
+      .eq("local_id", locationIdText)
+      .eq("date", formattedDate)
+      .eq("shift", shift)
+
     if (closingError) {
-      console.error('Error al verificar cierre de caja:', closingError);
-      return { success: false, error: closingError.message };
+      console.error("Error al verificar cierre de caja:", closingError)
+      return { success: false, error: closingError.message }
     }
-    
+
     // Construir mensaje de estado
-    let statusMessage = '';
-    let missingData = [];
-    
+    let statusMessage = ""
+    const missingData = []
+
     if (stockSheetCount === 0) {
-      missingData.push('planilla de stock completada');
+      missingData.push("planilla de stock completada")
     }
-    
+
     if (openingCount === 0) {
-      missingData.push('apertura de caja');
+      missingData.push("apertura de caja")
     }
-    
+
     if (closingCount === 0) {
-      missingData.push('cierre de caja');
+      missingData.push("cierre de caja")
     }
-    
+
     if (missingData.length > 0) {
-      statusMessage = `Faltan datos: ${missingData.join(', ')}`;
+      statusMessage = `Faltan datos: ${missingData.join(", ")}`
     } else {
-      statusMessage = 'Todos los datos necesarios están disponibles';
+      statusMessage = "Todos los datos necesarios están disponibles"
     }
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       hasAllData: missingData.length === 0,
       hasStockSheet: stockSheetCount > 0,
       hasOpening: openingCount > 0,
       hasClosing: closingCount > 0,
-      statusMessage
-    };
+      statusMessage,
+    }
   } catch (error: any) {
-    console.error('Error en checkRequiredDataForDiscrepancies:', error);
-    return { 
-      success: false, 
-      error: error.message || 'Error inesperado al verificar datos requeridos' 
-    };
+    console.error("Error en checkRequiredDataForDiscrepancies:", error)
+    return {
+      success: false,
+      error: error.message || "Error inesperado al verificar datos requeridos",
+    }
   }
 }
 
 // Función para obtener resumen de discrepancias por local
-export async function getDiscrepancySummaryByLocation(
-  startDate: string, 
-  endDate: string
-) {
-  const supabase = createClient();
-  
+export async function getDiscrepancySummaryByLocation(startDate: string, endDate: string) {
   try {
     // Formatear las fechas si es necesario
-    const formattedStartDate = startDate.includes('T') 
-      ? startDate.split('T')[0] 
-      : startDate;
-    
-    const formattedEndDate = endDate.includes('T') 
-      ? endDate.split('T')[0] 
-      : endDate;
-    
+    const formattedStartDate = startDate.includes("T") ? startDate.split("T")[0] : startDate
+
+    const formattedEndDate = endDate.includes("T") ? endDate.split("T")[0] : endDate
+
     // Obtener resumen de discrepancias de stock
     const { data: stockData, error: stockError } = await supabase
-      .from('stock_discrepancies')
+      .from("stock_discrepancies")
       .select(`
         location_id,
         locations(name),
         count(*),
         sum(total_value)
       `)
-      .gte('date', formattedStartDate)
-      .lte('date', formattedEndDate)
-      .group('location_id, locations(name)');
-    
+      .gte("date", formattedStartDate)
+      .lte("date", formattedEndDate)
+      .group("location_id, locations(name)")
+
     if (stockError) {
-      console.error('Error al obtener resumen de discrepancias de stock:', stockError);
-      return { success: false, error: stockError.message };
+      console.error("Error al obtener resumen de discrepancias de stock:", stockError)
+      return { success: false, error: stockError.message }
     }
-    
+
     // Obtener resumen de discrepancias de caja
     const { data: cashData, error: cashError } = await supabase
-      .from('cash_discrepancies')
+      .from("cash_discrepancies")
       .select(`
         location_id,
         locations(name),
         count(*),
         sum(difference)
       `)
-      .gte('date', formattedStartDate)
-      .lte('date', formattedEndDate)
-      .group('location_id, locations(name)');
-    
+      .gte("date", formattedStartDate)
+      .lte("date", formattedEndDate)
+      .group("location_id, locations(name)")
+
     if (cashError) {
-      console.error('Error al obtener resumen de discrepancias de caja:', cashError);
-      return { success: false, error: cashError.message };
+      console.error("Error al obtener resumen de discrepancias de caja:", cashError)
+      return { success: false, error: cashError.message }
     }
-    
+
     // Combinar los resultados
-    const locations = new Map();
-    
+    const locations = new Map()
+
     stockData?.forEach((item: any) => {
       locations.set(item.location_id, {
         location_id: item.location_id,
         location_name: item.locations?.name || `Local ${item.location_id}`,
-        stock_discrepancies_count: parseInt(item.count, 10) || 0,
-        stock_discrepancies_value: parseFloat(item.sum) || 0,
+        stock_discrepancies_count: Number.parseInt(item.count, 10) || 0,
+        stock_discrepancies_value: Number.parseFloat(item.sum) || 0,
         cash_discrepancies_count: 0,
-        cash_discrepancies_value: 0
-      });
-    });
-    
+        cash_discrepancies_value: 0,
+      })
+    })
+
     cashData?.forEach((item: any) => {
       if (locations.has(item.location_id)) {
-        const location = locations.get(item.location_id);
-        location.cash_discrepancies_count = parseInt(item.count, 10) || 0;
-        location.cash_discrepancies_value = parseFloat(item.sum) || 0;
+        const location = locations.get(item.location_id)
+        location.cash_discrepancies_count = Number.parseInt(item.count, 10) || 0
+        location.cash_discrepancies_value = Number.parseFloat(item.sum) || 0
       } else {
         locations.set(item.location_id, {
           location_id: item.location_id,
           location_name: item.locations?.name || `Local ${item.location_id}`,
           stock_discrepancies_count: 0,
           stock_discrepancies_value: 0,
-          cash_discrepancies_count: parseInt(item.count, 10) || 0,
-          cash_discrepancies_value: parseFloat(item.sum) || 0
-        });
+          cash_discrepancies_count: Number.parseInt(item.count, 10) || 0,
+          cash_discrepancies_value: Number.parseFloat(item.sum) || 0,
+        })
       }
-    });
-    
-    return { 
-      success: true, 
-      data: Array.from(locations.values()) 
-    };
+    })
+
+    return {
+      success: true,
+      data: Array.from(locations.values()),
+    }
   } catch (error: any) {
-    console.error('Error en getDiscrepancySummaryByLocation:', error);
-    return { 
-      success: false, 
-      error: error.message || 'Error inesperado al obtener resumen de discrepancias' 
-    };
+    console.error("Error en getDiscrepancySummaryByLocation:", error)
+    return {
+      success: false,
+      error: error.message || "Error inesperado al obtener resumen de discrepancias",
+    }
   }
 }
 
 // Función para obtener tendencia de discrepancias por fecha
-export async function getDiscrepancyTrendByDate(
-  locationId: number, 
-  startDate: string, 
-  endDate: string
-) {
-  const supabase = createClient();
-  
+export async function getDiscrepancyTrendByDate(locationId: number, startDate: string, endDate: string) {
   try {
     // Formatear las fechas si es necesario
-    const formattedStartDate = startDate.includes('T') 
-      ? startDate.split('T')[0] 
-      : startDate;
-    
-    const formattedEndDate = endDate.includes('T') 
-      ? endDate.split('T')[0] 
-      : endDate;
-    
+    const formattedStartDate = startDate.includes("T") ? startDate.split("T")[0] : startDate
+
+    const formattedEndDate = endDate.includes("T") ? endDate.split("T")[0] : endDate
+
     // Obtener tendencia de discrepancias de stock
     const { data: stockData, error: stockError } = await supabase
-      .from('stock_discrepancies')
+      .from("stock_discrepancies")
       .select(`
         date,
         shift,
         sum(total_value)
       `)
-      .eq('location_id', locationId)
-      .gte('date', formattedStartDate)
-      .lte('date', formattedEndDate)
-      .group('date, shift')
-      .order('date, shift');
-    
+      .eq("location_id", locationId)
+      .gte("date", formattedStartDate)
+      .lte("date", formattedEndDate)
+      .group("date, shift")
+      .order("date, shift")
+
     if (stockError) {
-      console.error('Error al obtener tendencia de discrepancias de stock:', stockError);
-      return { success: false, error: stockError.message };
+      console.error("Error al obtener tendencia de discrepancias de stock:", stockError)
+      return { success: false, error: stockError.message }
     }
-    
+
     // Obtener tendencia de discrepancias de caja
     const { data: cashData, error: cashError } = await supabase
-      .from('cash_discrepancies')
+      .from("cash_discrepancies")
       .select(`
         date,
         shift,
         sum(difference)
       `)
-      .eq('location_id', locationId)
-      .gte('date', formattedStartDate)
-      .lte('date', formattedEndDate)
-      .group('date, shift')
-      .order('date, shift');
-    
+      .eq("location_id", locationId)
+      .gte("date", formattedStartDate)
+      .lte("date", formattedEndDate)
+      .group("date, shift")
+      .order("date, shift")
+
     if (cashError) {
-      console.error('Error al obtener tendencia de discrepancias de caja:', cashError);
-      return { success: false, error: cashError.message };
+      console.error("Error al obtener tendencia de discrepancias de caja:", cashError)
+      return { success: false, error: cashError.message }
     }
-    
+
     // Combinar los resultados
-    const trendMap = new Map();
-    
+    const trendMap = new Map()
+
     stockData?.forEach((item: any) => {
-      const key = `${item.date}-${item.shift}`;
+      const key = `${item.date}-${item.shift}`
       trendMap.set(key, {
         date: item.date,
         shift: item.shift,
-        stock_value: parseFloat(item.sum) || 0,
-        cash_value: 0
-      });
-    });
-    
+        stock_value: Number.parseFloat(item.sum) || 0,
+        cash_value: 0,
+      })
+    })
+
     cashData?.forEach((item: any) => {
-      const key = `${item.date}-${item.shift}`;
+      const key = `${item.date}-${item.shift}`
       if (trendMap.has(key)) {
-        const trend = trendMap.get(key);
-        trend.cash_value = parseFloat(item.sum) || 0;
+        const trend = trendMap.get(key)
+        trend.cash_value = Number.parseFloat(item.sum) || 0
       } else {
         trendMap.set(key, {
           date: item.date,
           shift: item.shift,
           stock_value: 0,
-          cash_value: parseFloat(item.sum) || 0
-        });
+          cash_value: Number.parseFloat(item.sum) || 0,
+        })
       }
-    });
-    
+    })
+
     // Convertir a array y ordenar por fecha y turno
     const trendData = Array.from(trendMap.values()).sort((a, b) => {
       if (a.date !== b.date) {
-        return new Date(a.date).getTime() - new Date(b.date).getTime();
+        return new Date(a.date).getTime() - new Date(b.date).getTime()
       }
-      return a.shift.localeCompare(b.shift);
-    });
-    
-    return { 
-      success: true, 
-      data: trendData 
-    };
+      return a.shift.localeCompare(b.shift)
+    })
+
+    return {
+      success: true,
+      data: trendData,
+    }
   } catch (error: any) {
-    console.error('Error en getDiscrepancyTrendByDate:', error);
-    return { 
-      success: false, 
-      error: error.message || 'Error inesperado al obtener tendencia de discrepancias' 
-    };
+    console.error("Error en getDiscrepancyTrendByDate:", error)
+    return {
+      success: false,
+      error: error.message || "Error inesperado al obtener tendencia de discrepancias",
+    }
   }
 }
 
 // Función para obtener las principales discrepancias de stock
-export async function getTopStockDiscrepancies(
-  locationId: number, 
-  startDate: string, 
-  endDate: string, 
-  limit: number = 10
-) {
-  const supabase = createClient();
-  
+export async function getTopStockDiscrepancies(locationId: number, startDate: string, endDate: string, limit = 10) {
   try {
     // Formatear las fechas si es necesario
-    const formattedStartDate = startDate.includes('T') 
-      ? startDate.split('T')[0] 
-      : startDate;
-    
-    const formattedEndDate = endDate.includes('T') 
-      ? endDate.split('T')[0] 
-      : endDate;
-    
+    const formattedStartDate = startDate.includes("T") ? startDate.split("T")[0] : startDate
+
+    const formattedEndDate = endDate.includes("T") ? endDate.split("T")[0] : endDate
+
     const { data, error } = await supabase
-      .from('stock_discrepancies')
+      .from("stock_discrepancies")
       .select(`
         product_id,
         product_name,
@@ -573,138 +493,131 @@ export async function getTopStockDiscrepancies(
         sum(total_value) as total_value,
         count(*) as occurrence_count
       `)
-      .eq('location_id', locationId)
-      .gte('date', formattedStartDate)
-      .lte('date', formattedEndDate)
-      .group('product_id, product_name, category')
-      .order('total_value', { ascending: false })
-      .limit(limit);
-    
+      .eq("location_id", locationId)
+      .gte("date", formattedStartDate)
+      .lte("date", formattedEndDate)
+      .group("product_id, product_name, category")
+      .order("total_value", { ascending: false })
+      .limit(limit)
+
     if (error) {
-      console.error('Error al obtener principales discrepancias de stock:', error);
-      return { success: false, error: error.message };
+      console.error("Error al obtener principales discrepancias de stock:", error)
+      return { success: false, error: error.message }
     }
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       data: data.map((item: any) => ({
         ...item,
-        total_value: parseFloat(item.total_value) || 0,
-        occurrence_count: parseInt(item.occurrence_count, 10) || 0
-      }))
-    };
+        total_value: Number.parseFloat(item.total_value) || 0,
+        occurrence_count: Number.parseInt(item.occurrence_count, 10) || 0,
+      })),
+    }
   } catch (error: any) {
-    console.error('Error en getTopStockDiscrepancies:', error);
-    return { 
-      success: false, 
-      error: error.message || 'Error inesperado al obtener principales discrepancias de stock' 
-    };
+    console.error("Error en getTopStockDiscrepancies:", error)
+    return {
+      success: false,
+      error: error.message || "Error inesperado al obtener principales discrepancias de stock",
+    }
   }
 }
 
 // Función para obtener datos para el dashboard de conciliación
-export async function getReconciliationDashboardData(
-  startDate: string, 
-  endDate: string
-) {
-  const supabase = createClient();
-  
+export async function getReconciliationDashboardData(startDate: string, endDate: string) {
   try {
     // Formatear las fechas si es necesario
-    const formattedStartDate = startDate.includes('T') 
-      ? startDate.split('T')[0] 
-      : startDate;
-    
-    const formattedEndDate = endDate.includes('T') 
-      ? endDate.split('T')[0] 
-      : endDate;
-    
+    const formattedStartDate = startDate.includes("T") ? startDate.split("T")[0] : startDate
+
+    const formattedEndDate = endDate.includes("T") ? endDate.split("T")[0] : endDate
+
     // Obtener total de discrepancias de stock
     const { data: stockTotal, error: stockError } = await supabase
-      .from('stock_discrepancies')
-      .select('count(*), sum(total_value)')
-      .gte('date', formattedStartDate)
-      .lte('date', formattedEndDate);
-    
+      .from("stock_discrepancies")
+      .select("count(*), sum(total_value)")
+      .gte("date", formattedStartDate)
+      .lte("date", formattedEndDate)
+
     if (stockError) {
-      console.error('Error al obtener total de discrepancias de stock:', stockError);
-      return { success: false, error: stockError.message };
+      console.error("Error al obtener total de discrepancias de stock:", stockError)
+      return { success: false, error: stockError.message }
     }
-    
+
     // Obtener total de discrepancias de caja
     const { data: cashTotal, error: cashError } = await supabase
-      .from('cash_discrepancies')
-      .select('count(*), sum(difference)')
-      .gte('date', formattedStartDate)
-      .lte('date', formattedEndDate);
-    
+      .from("cash_discrepancies")
+      .select("count(*), sum(difference)")
+      .gte("date", formattedStartDate)
+      .lte("date", formattedEndDate)
+
     if (cashError) {
-      console.error('Error al obtener total de discrepancias de caja:', cashError);
-      return { success: false, error: cashError.message };
+      console.error("Error al obtener total de discrepancias de caja:", cashError)
+      return { success: false, error: cashError.message }
     }
-    
+
     // Obtener discrepancias por categoría
     const { data: categoryData, error: categoryError } = await supabase
-      .from('stock_discrepancies')
+      .from("stock_discrepancies")
       .select(`
         category,
         sum(total_value) as total_value,
         count(*) as count
       `)
-      .gte('date', formattedStartDate)
-      .lte('date', formattedEndDate)
-      .group('category')
-      .order('total_value', { ascending: false });
-    
+      .gte("date", formattedStartDate)
+      .lte("date", formattedEndDate)
+      .group("category")
+      .order("total_value", { ascending: false })
+
     if (categoryError) {
-      console.error('Error al obtener discrepancias por categoría:', categoryError);
-      return { success: false, error: categoryError.message };
+      console.error("Error al obtener discrepancias por categoría:", categoryError)
+      return { success: false, error: categoryError.message }
     }
-    
+
     // Obtener discrepancias por estado
     const { data: statusData, error: statusError } = await supabase
-      .from('stock_discrepancies')
+      .from("stock_discrepancies")
       .select(`
         status,
         count(*) as count
       `)
-      .gte('date', formattedStartDate)
-      .lte('date', formattedEndDate)
-      .group('status');
-    
+      .gte("date", formattedStartDate)
+      .lte("date", formattedEndDate)
+      .group("status")
+
     if (statusError) {
-      console.error('Error al obtener discrepancias por estado:', statusError);
-      return { success: false, error: statusError.message };
+      console.error("Error al obtener discrepancias por estado:", statusError)
+      return { success: false, error: statusError.message }
     }
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       data: {
         stockDiscrepancies: {
-          count: parseInt(stockTotal?.[0]?.count || '0', 10),
-          totalValue: parseFloat(stockTotal?.[0]?.sum || '0')
+          count: Number.parseInt(stockTotal?.[0]?.count || "0", 10),
+          totalValue: Number.parseFloat(stockTotal?.[0]?.sum || "0"),
         },
         cashDiscrepancies: {
-          count: parseInt(cashTotal?.[0]?.count || '0', 10),
-          totalValue: parseFloat(cashTotal?.[0]?.sum || '0')
+          count: Number.parseInt(cashTotal?.[0]?.count || "0", 10),
+          totalValue: Number.parseFloat(cashTotal?.[0]?.sum || "0"),
         },
-        byCategory: categoryData?.map((item: any) => ({
-          category: item.category,
-          totalValue: parseFloat(item.total_value) || 0,
-          count: parseInt(item.count, 10) || 0
-        })) || [],
-        byStatus: statusData?.map((item: any) => ({
-          status: item.status,
-          count: parseInt(item.count, 10) || 0
-        })) || []
-      }
-    };
+        byCategory:
+          categoryData?.map((item: any) => ({
+            category: item.category,
+            totalValue: Number.parseFloat(item.total_value) || 0,
+            count: Number.parseInt(item.count, 10) || 0,
+          })) || [],
+        byStatus:
+          statusData?.map((item: any) => ({
+            status: item.status,
+            count: Number.parseInt(item.count, 10) || 0,
+          })) || [],
+      },
+    }
   } catch (error: any) {
-    console.error('Error en getReconciliationDashboardData:', error);
-    return { 
-      success: false, 
-      error: error.message || 'Error inesperado al obtener datos del dashboard' 
-    };
+    console.error("Error en getReconciliationDashboardData:", error)
+    return {
+      success: false,
+      error: error.message || "Error inesperado al obtener datos del dashboard",
+    }
   }
 }
 
@@ -720,5 +633,5 @@ export default {
   getDiscrepancySummaryByLocation,
   getDiscrepancyTrendByDate,
   getTopStockDiscrepancies,
-  getReconciliationDashboardData
-};
+  getReconciliationDashboardData,
+}
