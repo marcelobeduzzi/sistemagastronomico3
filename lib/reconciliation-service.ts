@@ -14,24 +14,29 @@ export const ReconciliationService = {
   // Obtener discrepancias de stock para un local y fecha específicos
   async getStockDiscrepancies(date: string, localId: number, shift?: string) {
     try {
+      if (!date || !localId) {
+        console.error("Fecha o ID de local no proporcionados")
+        return []
+      }
+
       let query = supabase
         .from("stock_discrepancies")
         .select(`
-          id,
-          date,
-          location_id,
-          shift,
-          product_id,
-          product_name,
-          category,
-          expected_quantity,
-          actual_quantity,
-          difference,
-          unit_cost,
-          total_value,
-          status,
-          reconciliation_id
-        `)
+        id,
+        date,
+        location_id,
+        shift,
+        product_id,
+        product_name,
+        category,
+        expected_quantity,
+        actual_quantity,
+        difference,
+        unit_cost,
+        total_value,
+        status,
+        reconciliation_id
+      `)
         .eq("date", date)
         .eq("location_id", localId)
 
@@ -41,7 +46,10 @@ export const ReconciliationService = {
 
       const { data, error } = await query
 
-      if (error) throw error
+      if (error) {
+        console.error("Error en getStockDiscrepancies:", error)
+        return []
+      }
 
       // Mapear los datos a un formato más amigable
       return (data || []).map((item) => ({
@@ -50,14 +58,14 @@ export const ReconciliationService = {
         localId: item.location_id,
         shift: item.shift,
         productId: item.product_id,
-        productName: item.product_name,
-        category: item.category,
-        expectedQuantity: item.expected_quantity,
-        actualQuantity: item.actual_quantity,
-        difference: item.difference,
-        unitCost: item.unit_cost,
-        totalValue: item.total_value,
-        status: item.status,
+        productName: item.product_name || "Producto sin nombre",
+        category: item.category || "Sin categoría",
+        expectedQuantity: item.expected_quantity || 0,
+        actualQuantity: item.actual_quantity || 0,
+        difference: item.difference || 0,
+        unitCost: item.unit_cost || 0,
+        totalValue: item.total_value || 0,
+        status: item.status || "pending",
         reconciliationId: item.reconciliation_id,
       }))
     } catch (error) {
@@ -123,20 +131,25 @@ export const ReconciliationService = {
   // Obtener discrepancias de caja para un local y fecha específicos
   async getCashDiscrepancies(date: string, localId: number, shift?: string) {
     try {
+      if (!date || !localId) {
+        console.error("Fecha o ID de local no proporcionados")
+        return []
+      }
+
       let query = supabase
         .from("cash_discrepancies")
         .select(`
-          id,
-          date,
-          location_id,
-          shift,
-          payment_method,
-          expected_amount,
-          actual_amount,
-          difference,
-          status,
-          reconciliation_id
-        `)
+        id,
+        date,
+        location_id,
+        shift,
+        payment_method,
+        expected_amount,
+        actual_amount,
+        difference,
+        status,
+        reconciliation_id
+      `)
         .eq("date", date)
         .eq("location_id", localId)
 
@@ -146,7 +159,10 @@ export const ReconciliationService = {
 
       const { data, error } = await query
 
-      if (error) throw error
+      if (error) {
+        console.error("Error en getCashDiscrepancies:", error)
+        return []
+      }
 
       // Mapear los datos a un formato más amigable
       return (data || []).map((item) => ({
@@ -154,11 +170,11 @@ export const ReconciliationService = {
         date: item.date,
         localId: item.location_id,
         shift: item.shift,
-        paymentMethod: item.payment_method,
-        expectedAmount: item.expected_amount,
-        actualAmount: item.actual_amount,
-        difference: item.difference,
-        status: item.status,
+        paymentMethod: item.payment_method || "unknown",
+        expectedAmount: item.expected_amount || 0,
+        actualAmount: item.actual_amount || 0,
+        difference: item.difference || 0,
+        status: item.status || "pending",
         reconciliationId: item.reconciliation_id,
       }))
     } catch (error) {

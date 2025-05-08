@@ -7,9 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DatePicker } from "@/components/ui/date-picker"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, Download, RefreshCcw, Plus } from "lucide-react"
+import { ArrowLeft, Download, RefreshCcw } from "lucide-react"
 import { StockDiscrepancyTable } from "@/components/conciliacion/stock-discrepancy-table"
 import { CashDiscrepancyTable } from "@/components/conciliacion/cash-discrepancy-table"
+import { GenerateDiscrepanciesButton } from "@/components/conciliacion/generate-discrepancies-button"
 import { DiscrepancyHistory } from "@/components/conciliacion/discrepancy-history"
 import { ReconciliationService } from "@/lib/reconciliation-service"
 import { toast } from "@/components/ui/use-toast"
@@ -125,6 +126,17 @@ export function LocalDetailContent({ localId, initialLocalName }: LocalDetailCon
     try {
       setIsLoading(true)
 
+      if (!localInfo || !localInfo.id) {
+        console.error("Información del local no disponible")
+        toast({
+          title: "Error",
+          description: "No se pudo cargar la información del local",
+          variant: "destructive",
+        })
+        setIsLoading(false)
+        return
+      }
+
       const formattedDate = selectedDate.toISOString().split("T")[0]
 
       // Cargar discrepancias de stock
@@ -133,7 +145,7 @@ export function LocalDetailContent({ localId, initialLocalName }: LocalDetailCon
         localId,
         selectedShift === "todos" ? undefined : selectedShift,
       )
-      setStockDiscrepancies(stockData)
+      setStockDiscrepancies(stockData || [])
 
       // Cargar discrepancias de caja
       const cashData = await ReconciliationService.getCashDiscrepancies(
@@ -141,12 +153,12 @@ export function LocalDetailContent({ localId, initialLocalName }: LocalDetailCon
         localId,
         selectedShift === "todos" ? undefined : selectedShift,
       )
-      setCashDiscrepancies(cashData)
+      setCashDiscrepancies(cashData || [])
 
-      if (stockData.length === 0 && cashData.length === 0) {
+      if ((stockData?.length || 0) === 0 && (cashData?.length || 0) === 0) {
         toast({
           title: "Sin datos",
-          description: `No se encontraron discrepancias para ${localInfo.name} en la fecha y turno seleccionados`,
+          description: `No se encontraron discrepancias para ${localInfo?.name || `Local ${localId}`} en la fecha y turno seleccionados`,
           variant: "warning",
         })
       }
@@ -171,10 +183,6 @@ export function LocalDetailContent({ localId, initialLocalName }: LocalDetailCon
       title: "Exportando",
       description: "Función de exportación en desarrollo",
     })
-  }
-
-  const handleGenerateDiscrepancies = () => {
-    router.push(`/conciliacion/generar-discrepancias?localId=${localId}`)
   }
 
   return (
@@ -226,11 +234,7 @@ export function LocalDetailContent({ localId, initialLocalName }: LocalDetailCon
             Exportar
           </Button>
 
-          {/* Botón destacado para generar discrepancias */}
-          <Button onClick={handleGenerateDiscrepancies}>
-            <Plus className="mr-2 h-4 w-4" />
-            Generar Discrepancias
-          </Button>
+          <GenerateDiscrepanciesButton localId={localId} />
         </div>
       </div>
 
@@ -266,24 +270,22 @@ export function LocalDetailContent({ localId, initialLocalName }: LocalDetailCon
             <CardTitle className="text-sm font-medium text-muted-foreground">Producto Más Afectado</CardTitle>
           </CardHeader>
           <CardContent>
-            {stockDiscrepancies.length > 0 && (
-              <>
-                <div className="text-2xl font-bold">
-                  {
-                    stockDiscrepancies.sort((a, b) => Math.abs(b.difference || 0) - Math.abs(a.difference || 0))[0]
-                      .productName
-                  }
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Diferencia:{" "}
-                  {
-                    stockDiscrepancies.sort((a, b) => Math.abs(b.difference || 0) - Math.abs(a.difference || 0))[0]
-                      .difference
-                  }{" "}
-                  unidades
-                </p>
-              </>
-            )}
+            {stockDiscrepancies.length > 0 &&
+              (() => {
+                const sortedDiscrepancies = stockDiscrepancies.sort(
+                  (a, b) => Math.abs(b.difference || 0) - Math.abs(a.difference || 0),
+                )
+                const mostAffectedProduct = sortedDiscrepancies[0]
+
+                return (
+                  <>
+                    <div className="text-2xl font-bold">{mostAffectedProduct?.productName || "No disponible"}</div>
+                    <p className="text-xs text-muted-foreground">
+                      Diferencia: {mostAffectedProduct?.difference || 0} unidades
+                    </p>
+                  </>
+                )
+              })()}
             {stockDiscrepancies.length === 0 && (
               <div className="text-sm text-muted-foreground">No hay datos disponibles</div>
             )}
