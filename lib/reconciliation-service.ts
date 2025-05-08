@@ -44,7 +44,7 @@ export const ReconciliationService = {
         .eq("date", date)
         .eq("location_id", localId)
 
-      if (shift) {
+      if (shift && shift !== "todos") {
         query = query.eq("shift", shift)
       }
 
@@ -108,7 +108,7 @@ export const ReconciliationService = {
         `)
         .eq("date", date)
 
-      if (shift) {
+      if (shift && shift !== "todos") {
         query = query.eq("shift", shift)
       }
 
@@ -170,7 +170,7 @@ export const ReconciliationService = {
         .eq("date", date)
         .eq("location_id", localId)
 
-      if (shift) {
+      if (shift && shift !== "todos") {
         query = query.eq("shift", shift)
       }
 
@@ -187,16 +187,18 @@ export const ReconciliationService = {
       if (!data || data.length === 0) {
         console.log("No se encontraron discrepancias de caja, verificando cierres de caja...")
 
-        // Consultar la tabla de cierres de caja
-        const { data: cashClosings, error: cashClosingsError } = await supabase
-          .from("cash_closings")
+        // Consultar la tabla de cierres de caja - Usando el nombre correcto confirmado
+        let closingsQuery = supabase
+          .from("cash_register_closings")
           .select("*")
           .eq("date", date)
           .eq("location_id", localId)
 
-        if (shift) {
-          query = query.eq("shift", shift)
+        if (shift && shift !== "todos") {
+          closingsQuery = closingsQuery.eq("shift", shift)
         }
+
+        const { data: cashClosings, error: cashClosingsError } = await closingsQuery
 
         if (cashClosingsError) {
           console.error("Error al verificar cierres de caja:", cashClosingsError)
@@ -206,6 +208,9 @@ export const ReconciliationService = {
           // Si hay cierres pero no hay discrepancias, podría ser un problema con la generación
           if (cashClosings && cashClosings.length > 0) {
             console.log("ADVERTENCIA: Hay cierres de caja pero no se generaron discrepancias")
+
+            // Podríamos intentar generar discrepancias aquí automáticamente
+            // Pero por ahora solo mostramos un mensaje de advertencia
           }
         }
       }
@@ -253,7 +258,7 @@ export const ReconciliationService = {
         `)
         .eq("date", date)
 
-      if (shift) {
+      if (shift && shift !== "todos") {
         query = query.eq("shift", shift)
       }
 
@@ -280,6 +285,146 @@ export const ReconciliationService = {
     } catch (error) {
       console.error("Error en getCashDiscrepanciesAllLocations:", error)
       return []
+    }
+  },
+
+  // Generar discrepancias de caja manualmente
+  async generateCashDiscrepancies(date: string, localId: number, shift?: string) {
+    try {
+      if (!date || !localId) {
+        console.error("Fecha o ID de local no proporcionados")
+        return { success: false, error: "Datos incompletos" }
+      }
+
+      console.log(`Generando discrepancias de caja para fecha=${date}, localId=${localId}, shift=${shift || "todos"}`)
+
+      // Verificar si ya existen discrepancias para esta fecha/local/turno
+      let existingQuery = supabase.from("cash_discrepancies").select("id").eq("date", date).eq("location_id", localId)
+
+      if (shift && shift !== "todos") {
+        existingQuery = existingQuery.eq("shift", shift)
+      }
+
+      const { data: existingData, error: existingError } = await existingQuery
+
+      if (existingError) {
+        console.error("Error al verificar discrepancias existentes:", existingError)
+        return { success: false, error: existingError.message }
+      }
+
+      if (existingData && existingData.length > 0) {
+        console.log(`Ya existen ${existingData.length} discrepancias de caja para esta fecha/local/turno`)
+        return { success: true, message: "Ya existen discrepancias para esta fecha/local/turno" }
+      }
+
+      // Buscar cierres de caja para esta fecha/local/turno
+      let closingsQuery = supabase
+        .from("cash_register_closings")
+        .select("*")
+        .eq("date", date)
+        .eq("location_id", localId)
+
+      if (shift && shift !== "todos") {
+        closingsQuery = closingsQuery.eq("shift", shift)
+      }
+
+      const { data: cashClosings, error: cashClosingsError } = await closingsQuery
+
+      if (cashClosingsError) {
+        console.error("Error al buscar cierres de caja:", cashClosingsError)
+        return { success: false, error: cashClosingsError.message }
+      }
+
+      if (!cashClosings || cashClosings.length === 0) {
+        console.log("No se encontraron cierres de caja para esta fecha/local/turno")
+        return { success: false, error: "No se encontraron cierres de caja para esta fecha/local/turno" }
+      }
+
+      console.log(`Se encontraron ${cashClosings.length} cierres de caja para esta fecha/local/turno`)
+
+      // Generar discrepancias de caja a partir de los cierres
+      const discrepanciesToInsert = []
+
+      for (const closing of cashClosings) {
+        // Verificar si hay diferencias en efectivo
+        if (closing.expected_cash !== closing.actual_cash) {
+          discrepanciesToInsert.push({
+            date: date,
+            location_id: localId,
+            shift: closing.shift || shift,
+            payment_method: "cash",
+            expected_amount: closing.expected_cash || 0,
+            actual_amount: closing.actual_cash || 0,
+            difference: (closing.actual_cash || 0) - (closing.expected_cash || 0),
+            status: "pending",
+          })
+        }
+
+        // Verificar si hay diferencias en tarjeta
+        if (closing.expected_card !== closing.actual_card) {
+          discrepanciesToInsert.push({
+            date: date,
+            location_id: localId,
+            shift: closing.shift || shift,
+            payment_method: "card",
+            expected_amount: closing.expected_card || 0,
+            actual_amount: closing.actual_card || 0,
+            difference: (closing.actual_card || 0) - (closing.expected_card || 0),
+            status: "pending",
+          })
+        }
+
+        // Verificar si hay diferencias en transferencias
+        if (closing.expected_transfer !== closing.actual_transfer) {
+          discrepanciesToInsert.push({
+            date: date,
+            location_id: localId,
+            shift: closing.shift || shift,
+            payment_method: "transfer",
+            expected_amount: closing.expected_transfer || 0,
+            actual_amount: closing.actual_transfer || 0,
+            difference: (closing.actual_transfer || 0) - (closing.expected_transfer || 0),
+            status: "pending",
+          })
+        }
+
+        // Verificar si hay diferencias en otros métodos de pago
+        if (closing.expected_other !== closing.actual_other) {
+          discrepanciesToInsert.push({
+            date: date,
+            location_id: localId,
+            shift: closing.shift || shift,
+            payment_method: "other",
+            expected_amount: closing.expected_other || 0,
+            actual_amount: closing.actual_other || 0,
+            difference: (closing.actual_other || 0) - (closing.expected_other || 0),
+            status: "pending",
+          })
+        }
+      }
+
+      if (discrepanciesToInsert.length === 0) {
+        console.log("No se encontraron diferencias en los cierres de caja")
+        return { success: true, message: "No se encontraron diferencias en los cierres de caja" }
+      }
+
+      console.log(`Insertando ${discrepanciesToInsert.length} discrepancias de caja`)
+
+      // Insertar las discrepancias en la base de datos
+      const { error: insertError } = await supabase.from("cash_discrepancies").insert(discrepanciesToInsert)
+
+      if (insertError) {
+        console.error("Error al insertar discrepancias de caja:", insertError)
+        return { success: false, error: insertError.message }
+      }
+
+      return {
+        success: true,
+        message: `Se generaron ${discrepanciesToInsert.length} discrepancias de caja correctamente`,
+      }
+    } catch (error: any) {
+      console.error("Error en generateCashDiscrepancies:", error)
+      return { success: false, error: error.message || "Error desconocido" }
     }
   },
 
@@ -313,7 +458,7 @@ export const ReconciliationService = {
         query = query.eq("location_id", localId)
       }
 
-      if (shift) {
+      if (shift && shift !== "todos") {
         query = query.eq("shift", shift)
       }
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { DashboardLayout } from "@/app/dashboard-layout"
 import { Button } from "@/components/ui/button"
@@ -14,6 +14,7 @@ import { CashDiscrepancyTable } from "@/components/conciliacion/cash-discrepancy
 import { DiscrepancyHistory } from "@/components/conciliacion/discrepancy-history"
 import { ReconciliationService } from "@/lib/reconciliation-service"
 import { toast } from "@/components/ui/use-toast"
+import { DateUtils } from "@/lib/date-utils"
 
 // Lista fija de locales con IDs numéricos
 const locales = [
@@ -44,6 +45,12 @@ export default function LocalDetailPage() {
   const [stockDiscrepancies, setStockDiscrepancies] = useState<any[]>([])
   const [cashDiscrepancies, setCashDiscrepancies] = useState<any[]>([])
   const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
+
+  // Función para forzar una recarga de datos
+  const refreshData = useCallback(() => {
+    setRefreshTrigger((prev) => prev + 1)
+  }, [])
 
   // Cargar información del local cuando cambian los parámetros
   useEffect(() => {
@@ -66,12 +73,12 @@ export default function LocalDetailPage() {
     }
   }, [params.id, hasLoadedInitialData])
 
-  // Cargar datos cuando cambian los filtros
+  // Cargar datos cuando cambian los filtros o se solicita una recarga
   useEffect(() => {
     if (localInfo && hasLoadedInitialData) {
       loadLocalData(localInfo.id)
     }
-  }, [selectedDate, selectedShift, localInfo, hasLoadedInitialData])
+  }, [selectedDate, selectedShift, localInfo, hasLoadedInitialData, refreshTrigger])
 
   // Buscar la última fecha con discrepancias
   const loadLastDiscrepancyDate = async (localId: number) => {
@@ -124,7 +131,9 @@ export default function LocalDetailPage() {
         return
       }
 
-      const formattedDate = selectedDate.toISOString().split("T")[0]
+      // Usar DateUtils para normalizar la fecha
+      const formattedDate = DateUtils.normalizeDate(selectedDate)
+      console.log(`Fecha normalizada para consulta: ${formattedDate}`)
 
       // Cargar discrepancias de stock
       const stockData = await ReconciliationService.getStockDiscrepancies(
@@ -231,7 +240,7 @@ export default function LocalDetailPage() {
               </Select>
             </div>
 
-            <Button variant="outline" size="icon" onClick={() => loadLocalData(localInfo.id)} disabled={isLoading}>
+            <Button variant="outline" size="icon" onClick={refreshData} disabled={isLoading}>
               <RefreshCcw className="h-4 w-4" />
             </Button>
 
@@ -331,7 +340,13 @@ export default function LocalDetailPage() {
                 <CardTitle>Discrepancias de Caja</CardTitle>
               </CardHeader>
               <CardContent>
-                <CashDiscrepancyTable discrepancies={cashDiscrepancies} isLoading={isLoading} />
+                <CashDiscrepancyTable
+                  discrepancies={cashDiscrepancies}
+                  isLoading={isLoading}
+                  localId={localInfo.id}
+                  date={DateUtils.normalizeDate(selectedDate)}
+                  shift={selectedShift === "todos" ? undefined : selectedShift}
+                />
               </CardContent>
             </Card>
           </TabsContent>
