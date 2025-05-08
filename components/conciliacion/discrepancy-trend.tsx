@@ -1,11 +1,24 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
+import { Line } from "react-chartjs-2"
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  type ChartData,
+} from "chart.js"
 import { Loader2 } from "lucide-react"
 import { supabase } from "@/lib/supabase/client"
-import { format, subDays, subMonths, subWeeks, isValid, parseISO } from "date-fns"
-import { es } from "date-fns/locale"
+import { format, subDays, eachDayOfInterval } from "date-fns"
+
+// Registrar componentes de Chart.js
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend)
 
 interface DiscrepancyTrendProps {
   type: "stock" | "cash"
@@ -13,22 +26,11 @@ interface DiscrepancyTrendProps {
 }
 
 export function DiscrepancyTrend({ type, dateRange }: DiscrepancyTrendProps) {
-  const [data, setData] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  // Función segura para formatear fechas
-  const safeFormatDate = (date: Date | null | undefined, formatStr = "yyyy-MM-dd"): string => {
-    if (!date || !isValid(date)) {
-      return format(new Date(), formatStr)
-    }
-    try {
-      return format(date, formatStr, { locale: es })
-    } catch (e) {
-      console.error("Error al formatear fecha:", e)
-      return format(new Date(), formatStr, { locale: es })
-    }
-  }
+  const [chartData, setChartData] = useState<ChartData<"line">>({
+    labels: [],
+    datasets: [],
+  })
 
   useEffect(() => {
     loadTrendData()
@@ -37,102 +39,118 @@ export function DiscrepancyTrend({ type, dateRange }: DiscrepancyTrendProps) {
   const loadTrendData = async () => {
     try {
       setIsLoading(true)
-      setError(null)
 
-      // Calcular fechas según el rango seleccionado
+      // Calcular el rango de fechas
       const endDate = new Date()
       let startDate: Date
 
-      if (dateRange === "day") {
-        startDate = subDays(endDate, 1)
-      } else if (dateRange === "week") {
-        startDate = subWeeks(endDate, 1)
-      } else {
-        startDate = subMonths(endDate, 1)
+      switch (dateRange) {
+        case "day":
+          startDate = subDays(endDate, 7) // Últimos 7 días
+          break
+        case "week":
+          startDate = subDays(endDate, 30) // Últimos 30 días
+          break
+        case "month":
+          startDate = subDays(endDate, 90) // Últimos 90 días
+          break
+        default:
+          startDate = subDays(endDate, 7)
       }
 
-      const formattedStartDate = safeFormatDate(startDate)
-      const formattedEndDate = safeFormatDate(endDate)
+      // Generar array de fechas para el intervalo
+      const dateInterval = eachDayOfInterval({ start: startDate, end: endDate })
+      const dateLabels = dateInterval.map((date) => format(date, "dd/MM"))
 
-      console.log(`Consultando tendencia de ${type} desde ${formattedStartDate} hasta ${formattedEndDate}`)
-
-      // Determinar la tabla a consultar según el tipo
+      // Obtener datos de la base de datos
       const tableName = type === "stock" ? "stock_discrepancies" : "cash_discrepancies"
-
-      // Consultar datos de discrepancias
-      const { data: discrepancyData, error: discrepancyError } = await supabase
+      const { data, error } = await supabase
         .from(tableName)
-        .select("date, difference, total_value")
-        .gte("date", formattedStartDate)
-        .lte("date", formattedEndDate)
+        .select("date, count(*)")
+        .gte("date", format(startDate, "yyyy-MM-dd"))
+        .lte("date", format(endDate, "yyyy-MM-dd"))
+        .group("date")
         .order("date")
 
-      if (discrepancyError) {
-        console.error(`Error al obtener tendencia de ${type}:`, discrepancyError)
-        throw discrepancyError
+      if (error) {
+        console.error(`Error al cargar tendencia de ${type}:`, error)
+        throw error
       }
 
-      // Agrupar por fecha
-      const groupedData = new Map<string, { cantidad: number; valor: number }>()
-
-      discrepancyData?.forEach((item) => {
-        try {
-          const dateStr = item.date
-          if (!dateStr) return
-
-          if (!groupedData.has(dateStr)) {
-            groupedData.set(dateStr, { cantidad: 0, valor: 0 })
-          }
-
-          const group = groupedData.get(dateStr)!
-          group.cantidad += 1
-          group.valor += type === "stock" ? Number(item.total_value || 0) : Math.abs(Number(item.difference || 0))
-        } catch (e) {
-          console.error("Error al procesar item:", e, item)
-        }
+      // Crear mapa de fechas a conteos
+      const countMap = new Map()
+      data?.forEach((item) => {
+        countMap.set(item.date, Number.parseInt(item.count))
       })
 
-      // Convertir a array y ordenar por fecha
-      const chartData = Array.from(groupedData.entries())
-        .map(([date, values]) => ({
-          date: safeFormatDate(parseISO(date), "dd/MM"),
-          cantidad: values.cantidad,
-          valor: values.valor,
-        }))
-        .sort((a, b) => a.date.localeCompare(b.date))
+      // Generar datos para el gráfico
+      const chartValues = dateLabels.map((label) => {
+        const dbDate = format(
+          new Date(`${label.split("/")[1]}/${label.split("/")[0]}/${new Date().getFullYear()}`),
+          "yyyy-MM-dd",
+        )
+        return countMap.get(dbDate) || 0
+      })
 
-      // Si no hay datos reales, generar datos de ejemplo
-      if (chartData.length === 0) {
-        generateMockData()
-        return
-      }
-
-      setData(chartData)
-    } catch (error: any) {
+      // Configurar datos del gráfico
+      setChartData({
+        labels: dateLabels,
+        datasets: [
+          {
+            label: type === "stock" ? "Discrepancias de Stock" : "Discrepancias de Caja",
+            data: chartValues,
+            borderColor: type === "stock" ? "rgb(53, 162, 235)" : "rgb(255, 99, 132)",
+            backgroundColor: type === "stock" ? "rgba(53, 162, 235, 0.5)" : "rgba(255, 99, 132, 0.5)",
+            tension: 0.3,
+          },
+        ],
+      })
+    } catch (error) {
       console.error(`Error al cargar tendencia de ${type}:`, error)
-      setError(error.message || `Error al cargar tendencia de ${type}`)
-      // Si hay un error, generar datos de ejemplo
-      generateMockData()
+
+      // Generar datos de ejemplo en caso de error
+      const labels = Array.from({ length: 7 }, (_, i) => format(subDays(new Date(), 6 - i), "dd/MM"))
+      const data = Array.from({ length: 7 }, () => Math.floor(Math.random() * 20))
+
+      setChartData({
+        labels,
+        datasets: [
+          {
+            label:
+              type === "stock"
+                ? "Discrepancias de Stock (Datos de ejemplo)"
+                : "Discrepancias de Caja (Datos de ejemplo)",
+            data,
+            borderColor: type === "stock" ? "rgb(53, 162, 235)" : "rgb(255, 99, 132)",
+            backgroundColor: type === "stock" ? "rgba(53, 162, 235, 0.5)" : "rgba(255, 99, 132, 0.5)",
+            tension: 0.3,
+          },
+        ],
+      })
     } finally {
       setIsLoading(false)
     }
   }
 
-  // Función para generar datos de ejemplo en caso de error
-  const generateMockData = () => {
-    const days = dateRange === "day" ? 1 : dateRange === "week" ? 7 : 30
-    const newData = Array.from({ length: days }, (_, i) => {
-      const date = new Date()
-      date.setDate(date.getDate() - (days - i - 1))
-
-      return {
-        date: safeFormatDate(date, "dd/MM"),
-        cantidad: Math.floor(Math.random() * 20) + 1,
-        valor: Math.floor(Math.random() * 50000) + 5000,
-      }
-    })
-
-    setData(newData)
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: "top" as const,
+      },
+      title: {
+        display: false,
+      },
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: {
+          precision: 0,
+        },
+      },
+    },
   }
 
   if (isLoading) {
@@ -143,35 +161,5 @@ export function DiscrepancyTrend({ type, dateRange }: DiscrepancyTrendProps) {
     )
   }
 
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full">
-        <p className="text-red-500 mb-2">Error al cargar datos</p>
-        <p className="text-sm text-muted-foreground">Mostrando datos de ejemplo</p>
-      </div>
-    )
-  }
-
-  return (
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart
-        data={data}
-        margin={{
-          top: 5,
-          right: 30,
-          left: 20,
-          bottom: 5,
-        }}
-      >
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="date" />
-        <YAxis yAxisId="left" />
-        <YAxis yAxisId="right" orientation="right" />
-        <Tooltip />
-        <Legend />
-        <Line yAxisId="left" type="monotone" dataKey="cantidad" name="Cantidad" stroke="#8884d8" activeDot={{ r: 8 }} />
-        <Line yAxisId="right" type="monotone" dataKey="valor" name="Valor ($)" stroke="#82ca9d" />
-      </LineChart>
-    </ResponsiveContainer>
-  )
+  return <Line data={chartData} options={options} />
 }

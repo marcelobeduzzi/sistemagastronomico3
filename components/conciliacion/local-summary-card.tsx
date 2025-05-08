@@ -2,12 +2,15 @@
 
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { TrendingDown, TrendingUp, AlertTriangle, Store } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { ArrowRight, TrendingDown, TrendingUp } from "lucide-react"
+import { format } from "date-fns"
 
 interface LocalSummaryCardProps {
   local: {
     id: number
     name: string
+    hasTwoCashRegisters?: boolean
     stockDiscrepancies: number
     cashDiscrepancies: number
     stockValue: number
@@ -16,40 +19,36 @@ interface LocalSummaryCardProps {
     totalValue: number
     trend: "up" | "down"
     percentChange: number
+    lastDiscrepancyDate?: Date | null
+    hasData: boolean
   }
   onClick: () => void
 }
 
 export function LocalSummaryCard({ local, onClick }: LocalSummaryCardProps) {
-  const hasCriticalIssue = local.totalValue > 20000 || local.totalDiscrepancies > 15
-
   return (
-    <Card className={hasCriticalIssue ? "border-red-300" : ""}>
+    <Card className="overflow-hidden">
       <CardHeader className="pb-2">
         <div className="flex justify-between items-start">
-          <CardTitle className="text-lg font-medium flex items-center">
-            <Store className="h-4 w-4 mr-2" />
-            {local.name}
-          </CardTitle>
-          {hasCriticalIssue && <AlertTriangle className="h-5 w-5 text-red-500" />}
+          <CardTitle>{local.name}</CardTitle>
+          {local.hasTwoCashRegisters && <Badge variant="outline">2 cajas</Badge>}
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pb-2">
         <div className="grid grid-cols-2 gap-2">
           <div>
             <p className="text-sm text-muted-foreground">Discrepancias Stock</p>
-            <p className="font-medium">{local.stockDiscrepancies}</p>
-            <p className="text-xs text-muted-foreground">${local.stockValue.toLocaleString()}</p>
+            <p className="text-xl font-semibold">{local.stockDiscrepancies}</p>
           </div>
           <div>
             <p className="text-sm text-muted-foreground">Discrepancias Caja</p>
-            <p className="font-medium">{local.cashDiscrepancies}</p>
-            <p className="text-xs text-muted-foreground">${local.cashValue.toLocaleString()}</p>
+            <p className="text-xl font-semibold">{local.cashDiscrepancies}</p>
           </div>
-        </div>
-
-        <div className="mt-4 flex items-center">
-          <div className="flex-1">
+          <div>
+            <p className="text-sm text-muted-foreground">Valor Total</p>
+            <p className="text-xl font-semibold">${local.totalValue.toLocaleString()}</p>
+          </div>
+          <div>
             <p className="text-sm text-muted-foreground">Tendencia</p>
             <div className="flex items-center">
               {local.trend === "up" ? (
@@ -57,20 +56,31 @@ export function LocalSummaryCard({ local, onClick }: LocalSummaryCardProps) {
               ) : (
                 <TrendingDown className="h-4 w-4 text-green-500 mr-1" />
               )}
-              <span className={local.trend === "up" ? "text-red-500" : "text-green-500"}>
-                {local.percentChange}% {local.trend === "up" ? "más" : "menos"}
-              </span>
+              <span className={local.trend === "up" ? "text-red-500" : "text-green-500"}>{local.percentChange}%</span>
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-sm text-muted-foreground">Total</p>
-            <p className="font-bold">${local.totalValue.toLocaleString()}</p>
-          </div>
         </div>
+
+        {local.lastDiscrepancyDate && (
+          <div className="mt-2">
+            <p className="text-xs text-muted-foreground">
+              Última discrepancia: {format(new Date(local.lastDiscrepancyDate), "dd/MM/yyyy")}
+            </p>
+          </div>
+        )}
+
+        {!local.hasData && (
+          <div className="mt-2">
+            <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-200">
+              Sin discrepancias recientes
+            </Badge>
+          </div>
+        )}
       </CardContent>
-      <CardFooter>
+      <CardFooter className="pt-2">
         <Button variant="outline" className="w-full" onClick={onClick}>
-          Ver Detalles
+          Ver Detalle
+          <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
       </CardFooter>
     </Card>

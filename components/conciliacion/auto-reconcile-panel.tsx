@@ -53,6 +53,17 @@ export function AutoReconcilePanel({
 }: AutoReconcilePanelProps) {
   const [selectedMatches, setSelectedMatches] = useState<string[]>([])
 
+  // Inicializar selectedMatches con las coincidencias preseleccionadas
+  useState(() => {
+    if (reconciliationResults && reconciliationResults.matches) {
+      setSelectedMatches(
+        reconciliationResults.matches
+          .filter((match: ReconciliationMatch) => match.selected)
+          .map((match: ReconciliationMatch) => match.id),
+      )
+    }
+  })
+
   // Manejar selección de coincidencias
   const handleToggleMatch = (matchId: string) => {
     setSelectedMatches((prev) => {

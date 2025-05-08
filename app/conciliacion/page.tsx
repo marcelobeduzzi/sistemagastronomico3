@@ -1,10 +1,10 @@
 import { DashboardLayout } from "@/app/dashboard-layout"
-import { DashboardContent } from "@/components/conciliacion/dashboard-content"
+import { ConciliacionDashboard } from "@/components/conciliacion/conciliacion-dashboard"
 
 export default function ConciliacionPage() {
   return (
     <DashboardLayout>
-      <DashboardContent />
+      <ConciliacionDashboard />
     </DashboardLayout>
   )
 }
