@@ -1,24 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Line } from "react-chartjs-2"
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  type ChartData,
-} from "chart.js"
 import { Loader2 } from "lucide-react"
 import { supabase } from "@/lib/supabase/client"
 import { format, subDays, eachDayOfInterval } from "date-fns"
-
-// Registrar componentes de Chart.js
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend)
 
 interface DiscrepancyTrendProps {
   type: "stock" | "cash"
@@ -27,10 +12,7 @@ interface DiscrepancyTrendProps {
 
 export function DiscrepancyTrend({ type, dateRange }: DiscrepancyTrendProps) {
   const [isLoading, setIsLoading] = useState(true)
-  const [chartData, setChartData] = useState<ChartData<"line">>({
-    labels: [],
-    datasets: [],
-  })
+  const [trendData, setTrendData] = useState<any[]>([])
 
   useEffect(() => {
     loadTrendData()
@@ -83,28 +65,19 @@ export function DiscrepancyTrend({ type, dateRange }: DiscrepancyTrendProps) {
         countMap.set(item.date, Number.parseInt(item.count))
       })
 
-      // Generar datos para el gráfico
-      const chartValues = dateLabels.map((label) => {
+      // Generar datos para mostrar
+      const trendItems = dateLabels.map((label) => {
         const dbDate = format(
           new Date(`${label.split("/")[1]}/${label.split("/")[0]}/${new Date().getFullYear()}`),
           "yyyy-MM-dd",
         )
-        return countMap.get(dbDate) || 0
+        return {
+          date: label,
+          count: countMap.get(dbDate) || 0,
+        }
       })
 
-      // Configurar datos del gráfico
-      setChartData({
-        labels: dateLabels,
-        datasets: [
-          {
-            label: type === "stock" ? "Discrepancias de Stock" : "Discrepancias de Caja",
-            data: chartValues,
-            borderColor: type === "stock" ? "rgb(53, 162, 235)" : "rgb(255, 99, 132)",
-            backgroundColor: type === "stock" ? "rgba(53, 162, 235, 0.5)" : "rgba(255, 99, 132, 0.5)",
-            tension: 0.3,
-          },
-        ],
-      })
+      setTrendData(trendItems)
     } catch (error) {
       console.error(`Error al cargar tendencia de ${type}:`, error)
 
@@ -112,45 +85,15 @@ export function DiscrepancyTrend({ type, dateRange }: DiscrepancyTrendProps) {
       const labels = Array.from({ length: 7 }, (_, i) => format(subDays(new Date(), 6 - i), "dd/MM"))
       const data = Array.from({ length: 7 }, () => Math.floor(Math.random() * 20))
 
-      setChartData({
-        labels,
-        datasets: [
-          {
-            label:
-              type === "stock"
-                ? "Discrepancias de Stock (Datos de ejemplo)"
-                : "Discrepancias de Caja (Datos de ejemplo)",
-            data,
-            borderColor: type === "stock" ? "rgb(53, 162, 235)" : "rgb(255, 99, 132)",
-            backgroundColor: type === "stock" ? "rgba(53, 162, 235, 0.5)" : "rgba(255, 99, 132, 0.5)",
-            tension: 0.3,
-          },
-        ],
-      })
+      setTrendData(
+        labels.map((date, index) => ({
+          date,
+          count: data[index],
+        })),
+      )
     } finally {
       setIsLoading(false)
     }
-  }
-
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: "top" as const,
-      },
-      title: {
-        display: false,
-      },
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: {
-          precision: 0,
-        },
-      },
-    },
   }
 
   if (isLoading) {
@@ -161,5 +104,32 @@ export function DiscrepancyTrend({ type, dateRange }: DiscrepancyTrendProps) {
     )
   }
 
-  return <Line data={chartData} options={options} />
+  // Versión simplificada sin gráficos
+  return (
+    <div className="h-full flex flex-col">
+      <div className="text-center mb-4">
+        <h3 className="text-lg font-medium">
+          {type === "stock" ? "Discrepancias de Stock" : "Discrepancias de Caja"} - Últimos días
+        </h3>
+      </div>
+      <div className="flex-1 overflow-auto">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr>
+              <th className="border p-2 text-left">Fecha</th>
+              <th className="border p-2 text-right">Cantidad</th>
+            </tr>
+          </thead>
+          <tbody>
+            {trendData.map((item, index) => (
+              <tr key={index} className={index % 2 === 0 ? "bg-gray-50" : ""}>
+                <td className="border p-2">{item.date}</td>
+                <td className="border p-2 text-right">{item.count}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
 }
