@@ -27,7 +27,7 @@ export function GenerateDiscrepanciesButton({ localId }: GenerateDiscrepanciesBu
 
   return (
     <>
-      <Button onClick={handleClick}>
+      <Button onClick={handleClick} className="ml-auto">
         <Plus className="mr-2 h-4 w-4" />
         Generar Discrepancias
       </Button>

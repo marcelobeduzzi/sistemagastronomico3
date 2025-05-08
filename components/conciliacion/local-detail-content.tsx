@@ -7,10 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DatePicker } from "@/components/ui/date-picker"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, Download, RefreshCcw } from "lucide-react"
+import { ArrowLeft, Download, RefreshCcw, Plus } from "lucide-react"
 import { StockDiscrepancyTable } from "@/components/conciliacion/stock-discrepancy-table"
 import { CashDiscrepancyTable } from "@/components/conciliacion/cash-discrepancy-table"
-import { GenerateDiscrepanciesButton } from "@/components/conciliacion/generate-discrepancies-button"
 import { DiscrepancyHistory } from "@/components/conciliacion/discrepancy-history"
 import { ReconciliationService } from "@/lib/reconciliation-service"
 import { toast } from "@/components/ui/use-toast"
@@ -29,7 +28,7 @@ const locales = [
 
 // Opciones de turno
 const turnos = [
-  { value: "", label: "Todos los turnos" },
+  { value: "todos", label: "Todos los turnos" },
   { value: "mañana", label: "Mañana" },
   { value: "tarde", label: "Tarde" },
 ]
@@ -44,7 +43,7 @@ export function LocalDetailContent({ localId, initialLocalName }: LocalDetailCon
   const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
-  const [selectedShift, setSelectedShift] = useState<string>("")
+  const [selectedShift, setSelectedShift] = useState<string>("todos")
   const [localInfo, setLocalInfo] = useState<any>({ id: localId, name: initialLocalName })
   const [stockDiscrepancies, setStockDiscrepancies] = useState<any[]>([])
   const [cashDiscrepancies, setCashDiscrepancies] = useState<any[]>([])
@@ -132,7 +131,7 @@ export function LocalDetailContent({ localId, initialLocalName }: LocalDetailCon
       const stockData = await ReconciliationService.getStockDiscrepancies(
         formattedDate,
         localId,
-        selectedShift || undefined,
+        selectedShift === "todos" ? undefined : selectedShift,
       )
       setStockDiscrepancies(stockData)
 
@@ -140,7 +139,7 @@ export function LocalDetailContent({ localId, initialLocalName }: LocalDetailCon
       const cashData = await ReconciliationService.getCashDiscrepancies(
         formattedDate,
         localId,
-        selectedShift || undefined,
+        selectedShift === "todos" ? undefined : selectedShift,
       )
       setCashDiscrepancies(cashData)
 
@@ -172,6 +171,10 @@ export function LocalDetailContent({ localId, initialLocalName }: LocalDetailCon
       title: "Exportando",
       description: "Función de exportación en desarrollo",
     })
+  }
+
+  const handleGenerateDiscrepancies = () => {
+    router.push(`/conciliacion/generar-discrepancias?localId=${localId}`)
   }
 
   return (
@@ -223,7 +226,11 @@ export function LocalDetailContent({ localId, initialLocalName }: LocalDetailCon
             Exportar
           </Button>
 
-          <GenerateDiscrepanciesButton localId={localId} />
+          {/* Botón destacado para generar discrepancias */}
+          <Button onClick={handleGenerateDiscrepancies}>
+            <Plus className="mr-2 h-4 w-4" />
+            Generar Discrepancias
+          </Button>
         </div>
       </div>
 
@@ -236,7 +243,7 @@ export function LocalDetailContent({ localId, initialLocalName }: LocalDetailCon
           <CardContent>
             <div className="text-2xl font-bold">{stockDiscrepancies.length}</div>
             <p className="text-xs text-muted-foreground">
-              Valor: ${stockDiscrepancies.reduce((sum, item) => sum + item.totalValue, 0).toLocaleString()}
+              Valor: ${stockDiscrepancies.reduce((sum, item) => sum + (item.totalValue || 0), 0).toLocaleString()}
             </p>
           </CardContent>
         </Card>
@@ -248,7 +255,8 @@ export function LocalDetailContent({ localId, initialLocalName }: LocalDetailCon
           <CardContent>
             <div className="text-2xl font-bold">{cashDiscrepancies.length}</div>
             <p className="text-xs text-muted-foreground">
-              Valor: ${cashDiscrepancies.reduce((sum, item) => sum + Math.abs(item.difference), 0).toLocaleString()}
+              Valor: $
+              {cashDiscrepancies.reduce((sum, item) => sum + Math.abs(item.difference || 0), 0).toLocaleString()}
             </p>
           </CardContent>
         </Card>
@@ -261,11 +269,17 @@ export function LocalDetailContent({ localId, initialLocalName }: LocalDetailCon
             {stockDiscrepancies.length > 0 && (
               <>
                 <div className="text-2xl font-bold">
-                  {stockDiscrepancies.sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference))[0].productName}
+                  {
+                    stockDiscrepancies.sort((a, b) => Math.abs(b.difference || 0) - Math.abs(a.difference || 0))[0]
+                      .productName
+                  }
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Diferencia:{" "}
-                  {stockDiscrepancies.sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference))[0].difference}{" "}
+                  {
+                    stockDiscrepancies.sort((a, b) => Math.abs(b.difference || 0) - Math.abs(a.difference || 0))[0]
+                      .difference
+                  }{" "}
                   unidades
                 </p>
               </>
