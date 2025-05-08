@@ -1,3 +1,4 @@
+// components/fichaje/qr-generator.tsx
 "use client"
 
 import { useState } from "react"
@@ -6,8 +7,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
-import { Download, Printer } from "lucide-react"
-import QRCode from "qrcode.react"
+import { Download, Printer } from 'lucide-react'
+import { QRCodeSVG } from "qrcode.react" // Cambiado de QRCode a QRCodeSVG
 
 // Datos simulados de empleados
 const mockEmployees = [
@@ -140,13 +141,12 @@ export function QrGenerator() {
         <div className="flex flex-col items-center space-y-4">
           <Card className="w-full max-w-xs mx-auto">
             <CardContent className="pt-6 flex flex-col items-center">
-              <QRCode
+              <QRCodeSVG
                 id="employee-qr-code"
                 value={qrValue}
                 size={qrSize}
                 level="H"
                 includeMargin={true}
-                renderAs="canvas"
               />
               <div className="mt-4 text-center">
                 <p className="font-medium">{mockEmployees.find((emp) => emp.id === selectedEmployee)?.name}</p>
@@ -183,3 +183,4 @@ export function QrGenerator() {
   )
 }
 
+export default QrGenerator

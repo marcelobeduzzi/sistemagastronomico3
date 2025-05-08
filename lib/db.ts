@@ -2,6 +2,10 @@ import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { objectToCamelCase, objectToSnakeCase } from "./utils" // Import utility functions
 import type { Employee, Attendance, Payroll, PayrollDetail, Audit, Billing, Balance, Order } from "@/types"
 import type { Liquidation } from "@/types"
+import { supabase as supabaseClient } from "./supabase/client" // Importar el cliente de Supabase
+
+// Exportar supabase directamente para mantener compatibilidad con el código existente
+export { supabaseClient as supabase }
 
 interface AttendanceType {
   [key: string]: any // Define the Attendance interface

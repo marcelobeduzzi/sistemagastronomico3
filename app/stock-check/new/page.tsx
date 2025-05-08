@@ -1,27 +1,10 @@
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { CreateStockSheetForm } from "../create-stock-sheet-form"
-import { DashboardLayout } from "@/app/dashboard-layout"
+import StockCheckForm from '@/components/stock-check-form';
 
-export const metadata = {
-  title: "Nueva Planilla de Stock",
-}
-
-export default function NewStockSheetPage() {
+export default function NewStockCheckPage() {
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold tracking-tight">Nueva Planilla de Stock</h1>
-          <Button variant="outline" asChild>
-            <Link href="/stock-check">Cancelar</Link>
-          </Button>
-        </div>
-
-        <div className="rounded-lg border p-6">
-          <CreateStockSheetForm />
-        </div>
-      </div>
-    </DashboardLayout>
-  )
+    <div className="container mx-auto py-6">
+      <h1 className="text-2xl font-bold mb-6">Nuevo Control de Stock</h1>
+      <StockCheckForm />
+    </div>
+  );
 }

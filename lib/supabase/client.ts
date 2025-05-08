@@ -35,7 +35,12 @@ function createSupabaseClient() {
 // Exportar el cliente Supabase
 export const supabase = createSupabaseClient()
 
+// Exportar createClient para que pueda ser importado por otros archivos
+export { createClient }
+
 // Función para reiniciar el cliente (útil para pruebas)
 export function resetSupabaseClient() {
   supabaseInstance = null
 }
+
+export default supabase
