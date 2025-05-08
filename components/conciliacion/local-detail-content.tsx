@@ -270,9 +270,10 @@ export function LocalDetailContent({ localId, initialLocalName }: LocalDetailCon
             <CardTitle className="text-sm font-medium text-muted-foreground">Producto Más Afectado</CardTitle>
           </CardHeader>
           <CardContent>
-            {stockDiscrepancies.length > 0 &&
+            {stockDiscrepancies.length > 0 ? (
               (() => {
-                const sortedDiscrepancies = stockDiscrepancies.sort(
+                // Ordenar discrepancias por diferencia absoluta (de mayor a menor)
+                const sortedDiscrepancies = [...stockDiscrepancies].sort(
                   (a, b) => Math.abs(b.difference || 0) - Math.abs(a.difference || 0),
                 )
                 const mostAffectedProduct = sortedDiscrepancies[0]
@@ -285,8 +286,8 @@ export function LocalDetailContent({ localId, initialLocalName }: LocalDetailCon
                     </p>
                   </>
                 )
-              })()}
-            {stockDiscrepancies.length === 0 && (
+              })()
+            ) : (
               <div className="text-sm text-muted-foreground">No hay datos disponibles</div>
             )}
           </CardContent>

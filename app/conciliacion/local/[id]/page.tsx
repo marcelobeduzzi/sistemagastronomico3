@@ -8,28 +8,28 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DatePicker } from "@/components/ui/date-picker"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, Download, RefreshCcw } from "lucide-react"
+import { ArrowLeft, Download, RefreshCcw, Plus } from "lucide-react"
 import { StockDiscrepancyTable } from "@/components/conciliacion/stock-discrepancy-table"
 import { CashDiscrepancyTable } from "@/components/conciliacion/cash-discrepancy-table"
-import { GenerateDiscrepanciesButton } from "@/components/conciliacion/generate-discrepancies-button"
+import { DiscrepancyHistory } from "@/components/conciliacion/discrepancy-history"
 import { ReconciliationService } from "@/lib/reconciliation-service"
 import { toast } from "@/components/ui/use-toast"
 
 // Lista fija de locales con IDs numéricos
 const locales = [
-  { id: 1, name: "BR Cabildo" },
-  { id: 2, name: "BR Carranza" },
-  { id: 3, name: "BR Pacífico" },
-  { id: 4, name: "BR Lavalle" },
-  { id: 5, name: "BR Rivadavia" },
-  { id: 6, name: "BR Aguero" },
-  { id: 7, name: "BR Dorrego" },
-  { id: 8, name: "Dean & Dennys" },
+  { id: 1, name: "BR Cabildo", hasTwoCashRegisters: false },
+  { id: 2, name: "BR Carranza", hasTwoCashRegisters: false },
+  { id: 3, name: "BR Pacífico", hasTwoCashRegisters: true },
+  { id: 4, name: "BR Lavalle", hasTwoCashRegisters: true },
+  { id: 5, name: "BR Rivadavia", hasTwoCashRegisters: false },
+  { id: 6, name: "BR Aguero", hasTwoCashRegisters: true },
+  { id: 7, name: "BR Dorrego", hasTwoCashRegisters: false },
+  { id: 8, name: "Dean & Dennys", hasTwoCashRegisters: false },
 ]
 
 // Opciones de turno
 const turnos = [
-  { value: "", label: "Todos los turnos" },
+  { value: "todos", label: "Todos los turnos" },
   { value: "mañana", label: "Mañana" },
   { value: "tarde", label: "Tarde" },
 ]
@@ -39,11 +39,13 @@ export default function LocalDetailPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
-  const [selectedShift, setSelectedShift] = useState<string>("")
+  const [selectedShift, setSelectedShift] = useState<string>("todos")
   const [localInfo, setLocalInfo] = useState<any>(null)
   const [stockDiscrepancies, setStockDiscrepancies] = useState<any[]>([])
   const [cashDiscrepancies, setCashDiscrepancies] = useState<any[]>([])
+  const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false)
 
+  // Cargar información del local cuando cambian los parámetros
   useEffect(() => {
     if (params.id) {
       const localId = Number(params.id)
@@ -51,22 +53,76 @@ export default function LocalDetailPage() {
 
       if (local) {
         setLocalInfo(local)
-        loadLocalData(localId)
+        if (!hasLoadedInitialData) {
+          loadLastDiscrepancyDate(localId)
+        }
       } else {
-        router.push("/conciliacion")
+        // Si no se encuentra el local, usar un nombre genérico
+        setLocalInfo({ id: localId, name: `Local ${localId}` })
+        if (!hasLoadedInitialData) {
+          loadLastDiscrepancyDate(localId)
+        }
       }
     }
-  }, [params.id])
+  }, [params.id, hasLoadedInitialData])
 
+  // Cargar datos cuando cambian los filtros
   useEffect(() => {
-    if (localInfo) {
+    if (localInfo && hasLoadedInitialData) {
       loadLocalData(localInfo.id)
     }
-  }, [selectedDate, selectedShift, localInfo])
+  }, [selectedDate, selectedShift, localInfo, hasLoadedInitialData])
+
+  // Buscar la última fecha con discrepancias
+  const loadLastDiscrepancyDate = async (localId: number) => {
+    try {
+      setIsLoading(true)
+
+      // Buscar la última fecha con discrepanciasias para este local
+      const { data, error } = await ReconciliationService.getLastDiscrepancyDate(localId)
+
+      if (error) {
+        console.error("Error al buscar la última fecha con discrepancias:", error)
+        // Si hay error, usar la fecha actual
+        setSelectedDate(new Date())
+      } else if (data && data.length > 0) {
+        // Usar la última fecha con discrepancias
+        setSelectedDate(new Date(data[0].date))
+
+        // Si hay un turno específico, usarlo también
+        if (data[0].shift) {
+          setSelectedShift(data[0].shift)
+        }
+      } else {
+        // Si no hay discrepancias previas, usar el día anterior
+        const yesterday = new Date()
+        yesterday.setDate(yesterday.getDate() - 1)
+        setSelectedDate(yesterday)
+      }
+
+      setHasLoadedInitialData(true)
+    } catch (error) {
+      console.error("Error al cargar la última fecha con discrepancias:", error)
+      setHasLoadedInitialData(true)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const loadLocalData = async (localId: number) => {
     try {
       setIsLoading(true)
+
+      if (!localId) {
+        console.error("ID de local no disponible")
+        toast({
+          title: "Error",
+          description: "No se pudo cargar la información del local",
+          variant: "destructive",
+        })
+        setIsLoading(false)
+        return
+      }
 
       const formattedDate = selectedDate.toISOString().split("T")[0]
 
@@ -74,22 +130,22 @@ export default function LocalDetailPage() {
       const stockData = await ReconciliationService.getStockDiscrepancies(
         formattedDate,
         localId,
-        selectedShift || undefined,
+        selectedShift === "todos" ? undefined : selectedShift,
       )
-      setStockDiscrepancies(stockData)
+      setStockDiscrepancies(stockData || [])
 
       // Cargar discrepancias de caja
       const cashData = await ReconciliationService.getCashDiscrepancies(
         formattedDate,
         localId,
-        selectedShift || undefined,
+        selectedShift === "todos" ? undefined : selectedShift,
       )
-      setCashDiscrepancies(cashData)
+      setCashDiscrepancies(cashData || [])
 
-      if (stockData.length === 0 && cashData.length === 0) {
+      if ((stockData?.length || 0) === 0 && (cashData?.length || 0) === 0) {
         toast({
           title: "Sin datos",
-          description: `No se encontraron discrepancias para ${localInfo.name} en la fecha y turno seleccionados`,
+          description: `No se encontraron discrepancias para ${localInfo?.name || `Local ${localId}`} en la fecha y turno seleccionados`,
           variant: "warning",
         })
       }
@@ -116,6 +172,14 @@ export default function LocalDetailPage() {
     })
   }
 
+  const handleGenerateDiscrepancies = () => {
+    if (localInfo && localInfo.id) {
+      router.push(`/conciliacion/generar-discrepancias?localId=${localInfo.id}`)
+    } else {
+      router.push("/conciliacion/generar-discrepancias")
+    }
+  }
+
   if (!localInfo) {
     return (
       <DashboardLayout>
@@ -137,7 +201,10 @@ export default function LocalDetailPage() {
             </Button>
             <div>
               <h1 className="text-3xl font-bold">{localInfo.name}</h1>
-              <p className="text-muted-foreground">Detalle de discrepancias</p>
+              <p className="text-muted-foreground">
+                Detalle de discrepancias
+                {localInfo.hasTwoCashRegisters && " (Local con 2 cajas)"}
+              </p>
             </div>
           </div>
 
@@ -173,7 +240,11 @@ export default function LocalDetailPage() {
               Exportar
             </Button>
 
-            <GenerateDiscrepanciesButton />
+            {/* Botón destacado para generar discrepancias */}
+            <Button onClick={handleGenerateDiscrepancies}>
+              <Plus className="mr-2 h-4 w-4" />
+              Generar Discrepancias
+            </Button>
           </div>
         </div>
 
@@ -186,7 +257,7 @@ export default function LocalDetailPage() {
             <CardContent>
               <div className="text-2xl font-bold">{stockDiscrepancies.length}</div>
               <p className="text-xs text-muted-foreground">
-                Valor: ${stockDiscrepancies.reduce((sum, item) => sum + item.totalValue, 0).toLocaleString()}
+                Valor: ${stockDiscrepancies.reduce((sum, item) => sum + (item.totalValue || 0), 0).toLocaleString()}
               </p>
             </CardContent>
           </Card>
@@ -198,7 +269,8 @@ export default function LocalDetailPage() {
             <CardContent>
               <div className="text-2xl font-bold">{cashDiscrepancies.length}</div>
               <p className="text-xs text-muted-foreground">
-                Valor: ${cashDiscrepancies.reduce((sum, item) => sum + Math.abs(item.difference), 0).toLocaleString()}
+                Valor: $
+                {cashDiscrepancies.reduce((sum, item) => sum + Math.abs(item.difference || 0), 0).toLocaleString()}
               </p>
             </CardContent>
           </Card>
@@ -208,19 +280,24 @@ export default function LocalDetailPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">Producto Más Afectado</CardTitle>
             </CardHeader>
             <CardContent>
-              {stockDiscrepancies.length > 0 && (
-                <>
-                  <div className="text-2xl font-bold">
-                    {stockDiscrepancies.sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference))[0].productName}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Diferencia:{" "}
-                    {stockDiscrepancies.sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference))[0].difference}{" "}
-                    unidades
-                  </p>
-                </>
-              )}
-              {stockDiscrepancies.length === 0 && (
+              {stockDiscrepancies.length > 0 ? (
+                (() => {
+                  // Ordenar discrepancias por diferencia absoluta (de mayor a menor)
+                  const sortedDiscrepancies = [...stockDiscrepancies].sort(
+                    (a, b) => Math.abs(b.difference || 0) - Math.abs(a.difference || 0),
+                  )
+                  const mostAffectedProduct = sortedDiscrepancies[0]
+
+                  return (
+                    <>
+                      <div className="text-2xl font-bold">{mostAffectedProduct?.productName || "No disponible"}</div>
+                      <p className="text-xs text-muted-foreground">
+                        Diferencia: {mostAffectedProduct?.difference || 0} unidades
+                      </p>
+                    </>
+                  )
+                })()
+              ) : (
                 <div className="text-sm text-muted-foreground">No hay datos disponibles</div>
               )}
             </CardContent>
@@ -232,6 +309,7 @@ export default function LocalDetailPage() {
           <TabsList>
             <TabsTrigger value="stock">Discrepancias de Stock</TabsTrigger>
             <TabsTrigger value="caja">Discrepancias de Caja</TabsTrigger>
+            <TabsTrigger value="historial">Historial</TabsTrigger>
           </TabsList>
 
           {/* Pestaña de Discrepancias de Stock */}
@@ -254,6 +332,18 @@ export default function LocalDetailPage() {
               </CardHeader>
               <CardContent>
                 <CashDiscrepancyTable discrepancies={cashDiscrepancies} isLoading={isLoading} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Pestaña de Historial */}
+          <TabsContent value="historial">
+            <Card>
+              <CardHeader>
+                <CardTitle>Historial de Discrepancias</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <DiscrepancyHistory localId={localInfo.id} />
               </CardContent>
             </Card>
           </TabsContent>

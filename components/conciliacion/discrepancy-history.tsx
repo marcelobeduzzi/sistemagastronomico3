@@ -42,6 +42,8 @@ export function DiscrepancyHistory({ localId }: DiscrepancyHistoryProps) {
 
       if (error) {
         console.error("Error al cargar historial:", error)
+        setHistoryData([])
+        setIsLoading(false)
         return
       }
 
@@ -49,7 +51,7 @@ export function DiscrepancyHistory({ localId }: DiscrepancyHistoryProps) {
       const { data: localesData } = await supabase.from("locals").select("id, name")
 
       // Mapear los datos para incluir el nombre del local
-      const mappedData = data.map((item) => {
+      const mappedData = (data || []).map((item) => {
         const local = localesData?.find((l) => l.id === item.location_id)
         return {
           ...item,
@@ -60,6 +62,7 @@ export function DiscrepancyHistory({ localId }: DiscrepancyHistoryProps) {
       setHistoryData(mappedData)
     } catch (error) {
       console.error("Error al cargar historial:", error)
+      setHistoryData([])
     } finally {
       setIsLoading(false)
     }
