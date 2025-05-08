@@ -19,6 +19,10 @@ export const ReconciliationService = {
         return []
       }
 
+      console.log(
+        `Consultando discrepancias de stock para fecha=${date}, localId=${localId}, shift=${shift || "todos"}`,
+      )
+
       let query = supabase
         .from("stock_discrepancies")
         .select(`
@@ -50,6 +54,8 @@ export const ReconciliationService = {
         console.error("Error en getStockDiscrepancies:", error)
         return []
       }
+
+      console.log(`Encontradas ${data?.length || 0} discrepancias de stock`)
 
       // Mapear los datos a un formato más amigable
       return (data || []).map((item) => ({
@@ -144,6 +150,9 @@ export const ReconciliationService = {
         return []
       }
 
+      console.log(`Consultando discrepancias de caja para fecha=${date}, localId=${localId}, shift=${shift || "todos"}`)
+
+      // Primero, intentemos obtener directamente de la tabla cash_discrepancies
       let query = supabase
         .from("cash_discrepancies")
         .select(`
@@ -170,6 +179,35 @@ export const ReconciliationService = {
       if (error) {
         console.error("Error en getCashDiscrepancies:", error)
         return []
+      }
+
+      console.log(`Encontradas ${data?.length || 0} discrepancias de caja`)
+
+      // Si no hay discrepancias de caja, intentemos verificar si hay cierres de caja para esta fecha/local/turno
+      if (!data || data.length === 0) {
+        console.log("No se encontraron discrepancias de caja, verificando cierres de caja...")
+
+        // Consultar la tabla de cierres de caja
+        const { data: cashClosings, error: cashClosingsError } = await supabase
+          .from("cash_closings")
+          .select("*")
+          .eq("date", date)
+          .eq("location_id", localId)
+
+        if (shift) {
+          query = query.eq("shift", shift)
+        }
+
+        if (cashClosingsError) {
+          console.error("Error al verificar cierres de caja:", cashClosingsError)
+        } else {
+          console.log(`Se encontraron ${cashClosings?.length || 0} cierres de caja para esta fecha/local`)
+
+          // Si hay cierres pero no hay discrepancias, podría ser un problema con la generación
+          if (cashClosings && cashClosings.length > 0) {
+            console.log("ADVERTENCIA: Hay cierres de caja pero no se generaron discrepancias")
+          }
+        }
       }
 
       // Mapear los datos a un formato más amigable

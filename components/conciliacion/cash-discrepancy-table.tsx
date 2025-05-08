@@ -2,14 +2,35 @@
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Loader2 } from "lucide-react"
+import { Loader2, AlertTriangle } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { useRouter } from "next/navigation"
 
 interface CashDiscrepancyTableProps {
   discrepancies: any[]
   isLoading: boolean
+  localId?: number
+  date?: string
+  shift?: string
 }
 
-export function CashDiscrepancyTable({ discrepancies, isLoading }: CashDiscrepancyTableProps) {
+export function CashDiscrepancyTable({ discrepancies, isLoading, localId, date, shift }: CashDiscrepancyTableProps) {
+  const router = useRouter()
+
+  const handleGenerateDiscrepancies = () => {
+    if (localId) {
+      const queryParams = new URLSearchParams()
+      queryParams.append("localId", localId.toString())
+      if (date) queryParams.append("date", date)
+      if (shift) queryParams.append("shift", shift)
+      queryParams.append("forceCashDiscrepancies", "true")
+
+      router.push(`/conciliacion/generar-discrepancias?${queryParams.toString()}`)
+    } else {
+      router.push("/conciliacion/generar-discrepancias")
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-40">
@@ -19,7 +40,23 @@ export function CashDiscrepancyTable({ discrepancies, isLoading }: CashDiscrepan
   }
 
   if (discrepancies.length === 0) {
-    return <p className="text-center py-4 text-muted-foreground">No hay discrepancias de caja para mostrar</p>
+    return (
+      <div className="text-center py-8 border rounded-md">
+        <AlertTriangle className="mx-auto h-8 w-8 text-amber-500 mb-2" />
+        <p className="text-muted-foreground mb-4">No hay discrepancias de caja para mostrar</p>
+        {localId && (
+          <div className="mt-2">
+            <p className="text-sm text-amber-600 mb-4">
+              Si sabes que hay cierres de caja para esta fecha y turno pero no aparecen discrepancias, puedes intentar
+              forzar la generación de discrepancias de caja.
+            </p>
+            <Button variant="outline" onClick={handleGenerateDiscrepancies}>
+              Forzar generación de discrepancias de caja
+            </Button>
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (

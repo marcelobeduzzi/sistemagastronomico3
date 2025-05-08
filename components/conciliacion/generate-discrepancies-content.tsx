@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { format } from "date-fns"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch"
 import { toast } from "@/components/ui/use-toast"
 import { Loader2, AlertTriangle, ArrowLeft } from "lucide-react"
 import { supabase } from "@/lib/supabase/client"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 
 // Lista fija de locales con IDs numéricos
 const locales = [
@@ -29,13 +29,26 @@ const locales = [
 
 export function GenerateDiscrepanciesContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [formData, setFormData] = useState({
     date: format(new Date(), "yyyy-MM-dd"),
     locationId: "",
     shift: "mañana",
     overwrite: false,
+    forceCashDiscrepancies: false,
   })
+
+  // Cargar parámetros de la URL si existen
+  useEffect(() => {
+    const localIdParam = searchParams.get("localId")
+    if (localIdParam) {
+      setFormData((prev) => ({
+        ...prev,
+        locationId: localIdParam,
+      }))
+    }
+  }, [searchParams])
 
   const handleChange = (field: string, value: any) => {
     setFormData((prev) => ({
@@ -80,6 +93,7 @@ export function GenerateDiscrepanciesContent() {
         p_shift: formData.shift,
         p_overwrite: formData.overwrite,
         p_has_two_registers: hasTwoCashRegisters,
+        p_force_cash_discrepancies: formData.forceCashDiscrepancies,
       })
 
       if (error) {
@@ -188,6 +202,28 @@ export function GenerateDiscrepanciesContent() {
                 <p className="text-sm text-amber-800">
                   Esta opción eliminará todas las discrepancias existentes para la fecha y local seleccionados antes de
                   generar nuevas.
+                </p>
+              </div>
+            )}
+
+            <div className="flex items-center space-x-2 pt-2">
+              <Switch
+                id="forceCashDiscrepancies"
+                checked={formData.forceCashDiscrepancies}
+                onCheckedChange={(checked) => handleChange("forceCashDiscrepancies", checked)}
+                disabled={isLoading}
+              />
+              <Label htmlFor="forceCashDiscrepancies" className="cursor-pointer">
+                Forzar generación de discrepancias de caja
+              </Label>
+            </div>
+
+            {formData.forceCashDiscrepancies && (
+              <div className="bg-blue-50 p-3 rounded-md border border-blue-200 flex items-start">
+                <AlertTriangle className="h-5 w-5 text-blue-600 mr-2 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-blue-800">
+                  Esta opción intentará generar discrepancias de caja incluso si no se detectan automáticamente. Útil si
+                  sabes que hay cierres de caja pero no aparecen discrepancias.
                 </p>
               </div>
             )}
