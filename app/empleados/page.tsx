@@ -261,7 +261,7 @@ export default function EmpleadosPage() {
                     <SelectContent>
                       <SelectItem value="all">Todos los locales</SelectItem>
                       {uniqueLocals.map((local) => (
-                        <SelectItem key={local} value={local}>
+                        <SelectItem key={local} value={local || "_default"}>
                           {local}
                         </SelectItem>
                       ))}
@@ -276,7 +276,7 @@ export default function EmpleadosPage() {
                     <SelectContent>
                       <SelectItem value="all">Todos los puestos</SelectItem>
                       {uniquePositions.map((position) => (
-                        <SelectItem key={position} value={position}>
+                        <SelectItem key={position} value={position || "_default"}>
                           {position}
                         </SelectItem>
                       ))}
@@ -422,7 +422,3 @@ export default function EmpleadosPage() {
     </DashboardLayout>
   )
 }
-
-
-
-
