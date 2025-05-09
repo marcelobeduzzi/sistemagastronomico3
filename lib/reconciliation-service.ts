@@ -1,5 +1,29 @@
 import { supabase } from "@/lib/supabase/client"
 
+// Mapa para convertir entre IDs numéricos y códigos de texto de locales
+const localIdMap: Record<number, string> = {
+  1: "cabildo",
+  2: "carranza",
+  3: "pacifico",
+  4: "lavalle",
+  5: "rivadavia",
+  6: "aguero",
+  7: "dorrego",
+  8: "dean",
+}
+
+// Mapa inverso para convertir de códigos de texto a IDs numéricos
+const localCodeMap: Record<string, number> = {
+  cabildo: 1,
+  carranza: 2,
+  pacifico: 3,
+  lavalle: 4,
+  rivadavia: 5,
+  aguero: 6,
+  dorrego: 7,
+  dean: 8,
+}
+
 export const ReconciliationService = {
   // Obtener la última fecha con discrepancias para un local
   async getLastDiscrepancyDate(localId: number) {
@@ -187,12 +211,22 @@ export const ReconciliationService = {
       if (!data || data.length === 0) {
         console.log("No se encontraron discrepancias de caja, verificando cierres de caja...")
 
-        // Consultar la tabla de cierres de caja - Usando el nombre correcto confirmado
+        // Convertir el ID numérico al código de texto del local
+        const localCode = localIdMap[localId]
+
+        if (!localCode) {
+          console.error(`No se encontró un código de local para el ID ${localId}`)
+          return []
+        }
+
+        console.log(`Buscando cierres de caja para local_id=${localCode}`)
+
+        // Consultar la tabla de cierres de caja con el código de texto del local
         let closingsQuery = supabase
           .from("cash_register_closings")
           .select("*")
           .eq("date", date)
-          .eq("location_id", localId)
+          .eq("local_id", localCode)
 
         if (shift && shift !== "todos") {
           closingsQuery = closingsQuery.eq("shift", shift)
@@ -208,9 +242,6 @@ export const ReconciliationService = {
           // Si hay cierres pero no hay discrepancias, podría ser un problema con la generación
           if (cashClosings && cashClosings.length > 0) {
             console.log("ADVERTENCIA: Hay cierres de caja pero no se generaron discrepancias")
-
-            // Podríamos intentar generar discrepancias aquí automáticamente
-            // Pero por ahora solo mostramos un mensaje de advertencia
           }
         }
       }
@@ -317,12 +348,18 @@ export const ReconciliationService = {
         return { success: true, message: "Ya existen discrepancias para esta fecha/local/turno" }
       }
 
+      // Convertir el ID numérico al código de texto del local
+      const localCode = localIdMap[localId]
+
+      if (!localCode) {
+        console.error(`No se encontró un código de local para el ID ${localId}`)
+        return { success: false, error: `No se encontró un código de local para el ID ${localId}` }
+      }
+
+      console.log(`Buscando cierres de caja para local_id=${localCode}`)
+
       // Buscar cierres de caja para esta fecha/local/turno
-      let closingsQuery = supabase
-        .from("cash_register_closings")
-        .select("*")
-        .eq("date", date)
-        .eq("location_id", localId)
+      let closingsQuery = supabase.from("cash_register_closings").select("*").eq("date", date).eq("local_id", localCode)
 
       if (shift && shift !== "todos") {
         closingsQuery = closingsQuery.eq("shift", shift)
@@ -347,57 +384,99 @@ export const ReconciliationService = {
 
       for (const closing of cashClosings) {
         // Verificar si hay diferencias en efectivo
-        if (closing.expected_cash !== closing.actual_cash) {
+        const expectedCash = closing.cash_sales || 0
+        const actualCash = closing.actual_balance || 0
+
+        if (expectedCash !== actualCash) {
           discrepanciesToInsert.push({
             date: date,
             location_id: localId,
             shift: closing.shift || shift,
             payment_method: "cash",
-            expected_amount: closing.expected_cash || 0,
-            actual_amount: closing.actual_cash || 0,
-            difference: (closing.actual_cash || 0) - (closing.expected_cash || 0),
+            expected_amount: expectedCash,
+            actual_amount: actualCash,
+            difference: actualCash - expectedCash,
             status: "pending",
           })
         }
 
-        // Verificar si hay diferencias en tarjeta
-        if (closing.expected_card !== closing.actual_card) {
+        // Verificar si hay diferencias en tarjeta de crédito
+        const expectedCreditCard = closing.credit_card_sales || 0
+        const actualCreditCard = closing.posnet_impreso || 0
+
+        if (expectedCreditCard !== actualCreditCard && actualCreditCard > 0) {
           discrepanciesToInsert.push({
             date: date,
             location_id: localId,
             shift: closing.shift || shift,
             payment_method: "card",
-            expected_amount: closing.expected_card || 0,
-            actual_amount: closing.actual_card || 0,
-            difference: (closing.actual_card || 0) - (closing.expected_card || 0),
+            expected_amount: expectedCreditCard,
+            actual_amount: actualCreditCard,
+            difference: actualCreditCard - expectedCreditCard,
+            status: "pending",
+          })
+        }
+
+        // Verificar si hay diferencias en tarjeta de débito
+        const expectedDebitCard = closing.debit_card_sales || 0
+
+        if (expectedDebitCard > 0) {
+          discrepanciesToInsert.push({
+            date: date,
+            location_id: localId,
+            shift: closing.shift || shift,
+            payment_method: "debit_card",
+            expected_amount: expectedDebitCard,
+            actual_amount: expectedDebitCard, // Asumimos que es igual ya que no hay columna específica
+            difference: 0,
             status: "pending",
           })
         }
 
         // Verificar si hay diferencias en transferencias
-        if (closing.expected_transfer !== closing.actual_transfer) {
+        const expectedTransfer = closing.transfer_sales || 0
+
+        if (expectedTransfer > 0) {
           discrepanciesToInsert.push({
             date: date,
             location_id: localId,
             shift: closing.shift || shift,
             payment_method: "transfer",
-            expected_amount: closing.expected_transfer || 0,
-            actual_amount: closing.actual_transfer || 0,
-            difference: (closing.actual_transfer || 0) - (closing.expected_transfer || 0),
+            expected_amount: expectedTransfer,
+            actual_amount: expectedTransfer, // Asumimos que es igual ya que no hay columna específica
+            difference: 0,
+            status: "pending",
+          })
+        }
+
+        // Verificar si hay diferencias en Mercado Pago
+        const expectedMercadoPago = closing.mercado_pago_sales || 0
+
+        if (expectedMercadoPago > 0) {
+          discrepanciesToInsert.push({
+            date: date,
+            location_id: localId,
+            shift: closing.shift || shift,
+            payment_method: "mercado_pago",
+            expected_amount: expectedMercadoPago,
+            actual_amount: expectedMercadoPago, // Asumimos que es igual ya que no hay columna específica
+            difference: 0,
             status: "pending",
           })
         }
 
         // Verificar si hay diferencias en otros métodos de pago
-        if (closing.expected_other !== closing.actual_other) {
+        const expectedOther = closing.other_sales || 0
+
+        if (expectedOther > 0) {
           discrepanciesToInsert.push({
             date: date,
             location_id: localId,
             shift: closing.shift || shift,
             payment_method: "other",
-            expected_amount: closing.expected_other || 0,
-            actual_amount: closing.actual_other || 0,
-            difference: (closing.actual_other || 0) - (closing.expected_other || 0),
+            expected_amount: expectedOther,
+            actual_amount: expectedOther, // Asumimos que es igual ya que no hay columna específica
+            difference: 0,
             status: "pending",
           })
         }

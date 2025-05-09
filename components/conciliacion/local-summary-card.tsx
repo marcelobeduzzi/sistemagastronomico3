@@ -10,6 +10,7 @@ interface LocalSummaryCardProps {
   local: {
     id: number
     name: string
+    code?: string // Añadido para almacenar el código de texto del local
     hasTwoCashRegisters?: boolean
     stockDiscrepancies: number
     cashDiscrepancies: number

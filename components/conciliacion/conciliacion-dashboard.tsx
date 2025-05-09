@@ -14,16 +14,16 @@ import { DiscrepancyTrend } from "./discrepancy-trend"
 import { DiscrepancyHistory } from "./discrepancy-history"
 import { supabase } from "@/lib/supabase/client"
 
-// Lista fija de locales con IDs numéricos
+// Lista fija de locales con IDs numéricos y códigos de texto
 const locales = [
-  { id: 1, name: "BR Cabildo", hasTwoCashRegisters: false },
-  { id: 2, name: "BR Carranza", hasTwoCashRegisters: false },
-  { id: 3, name: "BR Pacífico", hasTwoCashRegisters: true },
-  { id: 4, name: "BR Lavalle", hasTwoCashRegisters: true },
-  { id: 5, name: "BR Rivadavia", hasTwoCashRegisters: false },
-  { id: 6, name: "BR Aguero", hasTwoCashRegisters: true },
-  { id: 7, name: "BR Dorrego", hasTwoCashRegisters: false },
-  { id: 8, name: "Dean & Dennys", hasTwoCashRegisters: false },
+  { id: 1, code: "cabildo", name: "BR Cabildo", hasTwoCashRegisters: false },
+  { id: 2, code: "carranza", name: "BR Carranza", hasTwoCashRegisters: false },
+  { id: 3, code: "pacifico", name: "BR Pacífico", hasTwoCashRegisters: true },
+  { id: 4, code: "lavalle", name: "BR Lavalle", hasTwoCashRegisters: true },
+  { id: 5, code: "rivadavia", name: "BR Rivadavia", hasTwoCashRegisters: false },
+  { id: 6, code: "aguero", name: "BR Aguero", hasTwoCashRegisters: true },
+  { id: 7, code: "dorrego", name: "BR Dorrego", hasTwoCashRegisters: false },
+  { id: 8, code: "dean", name: "Dean & Dennys", hasTwoCashRegisters: false },
 ]
 
 export function ConciliacionDashboard() {
@@ -109,6 +109,7 @@ export function ConciliacionDashboard() {
 
           localSummaries.push({
             id: local.id,
+            code: local.code,
             name: local.name,
             hasTwoCashRegisters: local.hasTwoCashRegisters,
             stockDiscrepancies,
