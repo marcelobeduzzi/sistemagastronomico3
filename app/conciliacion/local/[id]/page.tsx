@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
+import { format } from "date-fns"
 import { DashboardLayout } from "@/app/dashboard-layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,7 +15,6 @@ import { CashDiscrepancyTable } from "@/components/conciliacion/cash-discrepancy
 import { DiscrepancyHistory } from "@/components/conciliacion/discrepancy-history"
 import { ReconciliationService } from "@/lib/reconciliation-service"
 import { toast } from "@/components/ui/use-toast"
-import { DateUtils } from "@/lib/date-utils"
 
 // Lista fija de locales con IDs numéricos
 const locales = [
@@ -35,6 +35,31 @@ const turnos = [
   { value: "tarde", label: "Tarde" },
 ]
 
+// Función auxiliar para normalizar fechas
+const normalizeDate = (date: Date | string | null): string => {
+  if (!date) {
+    return format(new Date(), "yyyy-MM-dd")
+  }
+
+  if (typeof date === "string") {
+    // Si ya tiene formato YYYY-MM-DD, devolverlo directamente
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return date
+    }
+
+    try {
+      // Intentar parsear la fecha
+      return format(new Date(date), "yyyy-MM-dd")
+    } catch (error) {
+      console.error("Error al parsear fecha:", error)
+      return format(new Date(), "yyyy-MM-dd")
+    }
+  }
+
+  // Si es un objeto Date
+  return format(date, "yyyy-MM-dd")
+}
+
 export default function LocalDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -45,12 +70,6 @@ export default function LocalDetailPage() {
   const [stockDiscrepancies, setStockDiscrepancies] = useState<any[]>([])
   const [cashDiscrepancies, setCashDiscrepancies] = useState<any[]>([])
   const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false)
-  const [refreshTrigger, setRefreshTrigger] = useState(0)
-
-  // Función para forzar una recarga de datos
-  const refreshData = useCallback(() => {
-    setRefreshTrigger((prev) => prev + 1)
-  }, [])
 
   // Cargar información del local cuando cambian los parámetros
   useEffect(() => {
@@ -73,12 +92,12 @@ export default function LocalDetailPage() {
     }
   }, [params.id, hasLoadedInitialData])
 
-  // Cargar datos cuando cambian los filtros o se solicita una recarga
+  // Cargar datos cuando cambian los filtros
   useEffect(() => {
     if (localInfo && hasLoadedInitialData) {
       loadLocalData(localInfo.id)
     }
-  }, [selectedDate, selectedShift, localInfo, hasLoadedInitialData, refreshTrigger])
+  }, [selectedDate, selectedShift, localInfo, hasLoadedInitialData])
 
   // Buscar la última fecha con discrepancias
   const loadLastDiscrepancyDate = async (localId: number) => {
@@ -131,8 +150,8 @@ export default function LocalDetailPage() {
         return
       }
 
-      // Usar DateUtils para normalizar la fecha
-      const formattedDate = DateUtils.normalizeDate(selectedDate)
+      // Normalizar la fecha para la consulta
+      const formattedDate = normalizeDate(selectedDate)
       console.log(`Fecha normalizada para consulta: ${formattedDate}`)
 
       // Cargar discrepancias de stock
@@ -240,7 +259,7 @@ export default function LocalDetailPage() {
               </Select>
             </div>
 
-            <Button variant="outline" size="icon" onClick={refreshData} disabled={isLoading}>
+            <Button variant="outline" size="icon" onClick={() => loadLocalData(localInfo.id)} disabled={isLoading}>
               <RefreshCcw className="h-4 w-4" />
             </Button>
 
@@ -344,7 +363,7 @@ export default function LocalDetailPage() {
                   discrepancies={cashDiscrepancies}
                   isLoading={isLoading}
                   localId={localInfo.id}
-                  date={DateUtils.normalizeDate(selectedDate)}
+                  date={normalizeDate(selectedDate)}
                   shift={selectedShift === "todos" ? undefined : selectedShift}
                 />
               </CardContent>

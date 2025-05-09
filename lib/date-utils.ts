@@ -142,3 +142,49 @@ export function correctDateOffset(dateString: string | undefined): Date | null {
   }
 }
 
+/**
+ * Normaliza una fecha a formato ISO (YYYY-MM-DD) para usar en consultas a la base de datos
+ * @param date Fecha a normalizar (puede ser Date, string o null)
+ * @returns Fecha normalizada en formato YYYY-MM-DD
+ */
+export function normalizeDate(date: Date | string | null): string {
+  if (!date) {
+    return format(new Date(), "yyyy-MM-dd")
+  }
+
+  if (typeof date === "string") {
+    // Si ya tiene formato YYYY-MM-DD, devolverlo directamente
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return date
+    }
+
+    try {
+      // Si la fecha incluye tiempo (T), puede haber problemas de zona horaria
+      if (date.includes("T")) {
+        // Extraer solo la parte de fecha
+        const [year, month, day] = date.split("T")[0].split("-").map(Number)
+        // Crear fecha usando el constructor Date con hora del mediodía para evitar problemas de zona horaria
+        const dateObj = new Date(year, month - 1, day, 12, 0, 0)
+        return format(dateObj, "yyyy-MM-dd")
+      }
+
+      // Intentar parsear la fecha
+      return format(parseISO(date), "yyyy-MM-dd")
+    } catch (error) {
+      console.error("Error al parsear fecha:", error)
+      return format(new Date(), "yyyy-MM-dd")
+    }
+  }
+
+  // Si es un objeto Date
+  return format(date, "yyyy-MM-dd")
+}
+
+// Exportar el objeto DateUtils para mantener compatibilidad con código existente
+export const DateUtils = {
+  formatDisplayDate,
+  prepareForDatabase,
+  dbDateToLocal,
+  correctDateOffset,
+  normalizeDate,
+}
