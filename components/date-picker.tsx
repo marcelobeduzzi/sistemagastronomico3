@@ -9,18 +9,29 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils"
 import { Calendar } from "@/components/ui/calendar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import type { Locale } from "date-fns"
 
 interface DatePickerProps {
-  date: Date
-  setDate: (date: Date) => void
-  className?: string
+  date: Date | undefined
+  onDateChange: (date: Date) => void
+  placeholder?: string
+  format?: string
+  disabled?: boolean
+  locale?: Locale
 }
 
-export function DatePicker({ date, setDate, className }: DatePickerProps) {
+export function DatePicker({
+  date,
+  onDateChange,
+  placeholder = "Seleccionar fecha",
+  format: dateFormat = "PPP",
+  disabled = false,
+  locale = es,
+}: DatePickerProps) {
   // Estado local para manejar la fecha
-  const [selectedDate, setSelectedDate] = useState<Date>(date)
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(date)
   // Estado para controlar el mes que se muestra en el calendario
-  const [currentMonth, setCurrentMonth] = useState<Date>(date)
+  const [currentMonth, setCurrentMonth] = useState<Date>(date || new Date())
 
   // Generar años para el selector (5 años antes y después del actual)
   const currentYear = new Date().getFullYear()
@@ -45,7 +56,9 @@ export function DatePicker({ date, setDate, className }: DatePickerProps) {
   // Actualizar el estado local cuando cambia la prop date
   useEffect(() => {
     setSelectedDate(date)
-    setCurrentMonth(date)
+    if (date) {
+      setCurrentMonth(date)
+    }
   }, [date])
 
   // Función para manejar el cambio de fecha de manera segura
@@ -59,12 +72,8 @@ export function DatePicker({ date, setDate, className }: DatePickerProps) {
       // Crear la fecha con la hora fija a mediodía
       const correctedDate = new Date(year, month, day, 12, 0, 0)
 
-      console.log("Fecha seleccionada (original):", newDate.toISOString())
-      console.log("Fecha corregida:", correctedDate.toISOString())
-      console.log("Fecha local:", correctedDate.toLocaleString())
-
       setSelectedDate(correctedDate)
-      setDate(correctedDate)
+      onDateChange(correctedDate)
     }
   }
 
@@ -93,16 +102,17 @@ export function DatePicker({ date, setDate, className }: DatePickerProps) {
   }
 
   return (
-    <div className={cn("grid gap-2", className)}>
+    <div className="grid gap-2">
       <Popover>
         <PopoverTrigger asChild>
           <Button
             id="date"
             variant="outline"
             className={cn("w-full justify-start text-left font-normal", !selectedDate && "text-muted-foreground")}
+            disabled={disabled}
           >
             <CalendarIcon className="mr-2 h-4 w-4" />
-            {selectedDate ? format(selectedDate, "PPP", { locale: es }) : <span>Seleccionar fecha</span>}
+            {selectedDate ? format(selectedDate, dateFormat, { locale }) : <span>{placeholder}</span>}
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0 z-50" align="start">
@@ -150,7 +160,7 @@ export function DatePicker({ date, setDate, className }: DatePickerProps) {
             onSelect={handleDateSelect}
             month={currentMonth}
             onMonthChange={setCurrentMonth}
-            locale={es}
+            locale={locale}
             captionLayout="buttons-only" // Ocultar la navegación predeterminada
             showOutsideDays={true}
             fixedWeeks={true}
@@ -185,20 +195,3 @@ export function DatePicker({ date, setDate, className }: DatePickerProps) {
     </div>
   )
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
