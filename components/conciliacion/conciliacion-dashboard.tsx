@@ -1,68 +1,525 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useState } from "react"
 import { format } from "date-fns"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { DatePicker } from "@/components/ui/date-picker"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "@/components/ui/use-toast"
-import { RefreshCcw, Download } from "lucide-react"
-import { LocalSummaryCard } from "./local-summary-card"
-import { DiscrepancyTrend } from "./discrepancy-trend"
-import { DiscrepancyHistory } from "./discrepancy-history"
+import { CalendarIcon } from 'lucide-react'
 import { supabase } from "@/lib/supabase/client"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
 
-// Lista fija de locales con IDs numéricos y códigos de texto
-const locales = [
-  { id: 1, code: "cabildo", name: "BR Cabildo", hasTwoCashRegisters: false },
-  { id: 2, code: "carranza", name: "BR Carranza", hasTwoCashRegisters: false },
-  { id: 3, code: "pacifico", name: "BR Pacífico", hasTwoCashRegisters: true },
-  { id: 4, code: "lavalle", name: "BR Lavalle", hasTwoCashRegisters: true },
-  { id: 5, code: "rivadavia", name: "BR Rivadavia", hasTwoCashRegisters: false },
-  { id: 6, code: "aguero", name: "BR Aguero", hasTwoCashRegisters: true },
-  { id: 7, code: "dorrego", name: "BR Dorrego", hasTwoCashRegisters: false },
-  { id: 8, code: "dean", name: "Dean & Dennys", hasTwoCashRegisters: false },
-]
+// Componente de Análisis de Conciliación
+function AnalisisConciliacion({
+  stockDiscrepancies,
+  cashDiscrepancies,
+  fecha,
+  local,
+}) {
+  // Calcular totales
+  const totalStockDiscrepancy = stockDiscrepancies.reduce((sum, item) => sum + item.totalValue, 0)
+  const totalCashDiscrepancy = cashDiscrepancies.reduce((sum, item) => sum + item.difference, 0)
+  const balanceTotal = totalStockDiscrepancy + totalCashDiscrepancy
 
-export function ConciliacionDashboard() {
-  const router = useRouter()
-  const [isLoading, setIsLoading] = useState(false)
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
-  const [dateRange, setDateRange] = useState<"day" | "week" | "month">("day")
-  const [localesData, setLocalesData] = useState<any[]>([])
-  const [selectedLocalId, setSelectedLocalId] = useState<number | null>(null)
-  const [activeTab, setActiveTab] = useState("locales")
+  // Determinar el estado de compensación
+  const compensationStatus = getCompensationStatus(totalStockDiscrepancy, totalCashDiscrepancy)
 
-  // Cargar datos cuando cambia la fecha o el rango
-  useEffect(() => {
-    loadDashboardData()
-  }, [selectedDate, dateRange])
+  // Calcular estadísticas
+  const stockItemsCount = stockDiscrepancies.length
+  const cashItemsCount = cashDiscrepancies.length
+  const stockWithDiscrepancy = stockDiscrepancies.filter((item) => item.totalValue !== 0).length
+  const cashWithDiscrepancy = cashDiscrepancies.filter((item) => item.difference !== 0).length
 
-  // Cargar datos del dashboard
-  const loadDashboardData = async () => {
-    try {
-      setIsLoading(true)
+  // Formatear valores monetarios
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat("es-AR", {
+      style: "currency",
+      currency: "ARS",
+      minimumFractionDigits: 2,
+    }).format(value)
+  }
 
-      // Calcular fechas de inicio y fin según el rango seleccionado
-      const startDate = new Date(selectedDate)
-      const endDate = new Date(selectedDate)
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Análisis de Conciliación</CardTitle>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Resumen de valores */}
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Card className="col-span-1">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium">Stock</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex items-center justify-between">
+                        <div className="text-2xl font-bold">{formatCurrency(totalStockDiscrepancy)}</div>
+                        <PackageOpen
+                          className={`h-5 w-5 ${totalStockDiscrepancy < 0 ? "text-red-500" : totalStockDiscrepancy > 0 ? "text-green-500" : "text-gray-500"}`}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {totalStockDiscrepancy < 0
+                          ? "Faltante de stock"
+                          : totalStockDiscrepancy > 0
+                            ? "Sobrante de stock"
+                            : "Sin discrepancias"}
+                      </p>
+                    </CardContent>
+                  </Card>
 
-      if (dateRange === "week") {
-        endDate.setDate(endDate.getDate() + 6) // 7 días en total
-      } else if (dateRange === "month") {
-        endDate.setMonth(endDate.getMonth() + 1)
-        endDate.setDate(endDate.getDate() - 1) // Último día del mes
+                  <Card className="col-span-1">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium">Caja</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex items-center justify-between">
+                        <div className="text-2xl font-bold">{formatCurrency(totalCashDiscrepancy)}</div>
+                        <CircleDollarSign
+                          className={`h-5 w-5 ${totalCashDiscrepancy < 0 ? "text-red-500" : totalCashDiscrepancy > 0 ? "text-green-500" : "text-gray-500"}`}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {totalCashDiscrepancy < 0
+                          ? "Faltante de caja"
+                          : totalCashDiscrepancy > 0
+                            ? "Sobrante de caja"
+                            : "Sin discrepancias"}
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="col-span-1">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium">Balance</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex items-center justify-between">
+                        <div className="text-2xl font-bold">{formatCurrency(balanceTotal)}</div>
+                        <ArrowDownUp
+                          className={`h-5 w-5 ${balanceTotal < 0 ? "text-red-500" : balanceTotal > 0 ? "text-green-500" : "text-blue-500"}`}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">{compensationStatus.message}</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Estadísticas */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Estadísticas</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs">Items de stock con discrepancia</span>
+                        <span className="text-xs font-medium">
+                          {stockWithDiscrepancy} de {stockItemsCount}
+                        </span>
+                      </div>
+                      <Progress
+                        value={(stockWithDiscrepancy / (stockItemsCount || 1)) * 100}
+                        className="h-1 bg-gray-200"
+                        indicatorClassName="bg-blue-500"
+                      />
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs">Items de caja con discrepancia</span>
+                        <span className="text-xs font-medium">
+                          {cashWithDiscrepancy} de {cashItemsCount}
+                        </span>
+                      </div>
+                      <Progress
+                        value={(cashWithDiscrepancy / (cashItemsCount || 1)) * 100}
+                        className="h-1 bg-gray-200"
+                        indicatorClassName="bg-amber-500"
+                      />
+
+                      {compensationStatus.percentage !== undefined && (
+                        <>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs">Nivel de compensación</span>
+                            <span className="text-xs font-medium">{Math.round(compensationStatus.percentage)}%</span>
+                          </div>
+                          <Progress
+                            value={compensationStatus.percentage}
+                            className="h-1 bg-gray-200"
+                            indicatorClassName="bg-green-500"
+                          />
+                        </>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Análisis de compensación */}
+              <div className="col-span-2">
+                <Card className="h-full">
+                  <CardHeader>
+                    <CardTitle className="text-base">Análisis de Compensación</CardTitle>
+                    <CardDescription>Interpretación de la relación entre discrepancias</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {/* Alerta de estado */}
+                      <Alert className={getAlertStyle(compensationStatus.status)}>
+                        {getStatusIcon(compensationStatus.status)}
+                        <AlertTitle>{compensationStatus.title || compensationStatus.message}</AlertTitle>
+                        <AlertDescription>
+                          {compensationStatus.description}
+                          {compensationStatus.percentage !== undefined && (
+                            <span className="block mt-1 font-medium">
+                              Nivel de compensación: {Math.round(compensationStatus.percentage)}%
+                            </span>
+                          )}
+                        </AlertDescription>
+                      </Alert>
+
+                      {/* Recomendaciones */}
+                      <div className="mt-4">
+                        <h3 className="text-sm font-medium mb-2">Recomendaciones</h3>
+                        <div className="space-y-2">
+                          {getRecommendations(compensationStatus.status).map((rec, index) => (
+                            <div key={index} className="flex items-start">
+                              <div className="flex-shrink-0 mt-0.5">
+                                <ArrowRight className="h-4 w-4 text-primary" />
+                              </div>
+                              <div className="ml-2">
+                                <p className="text-sm">{rec}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Explicación */}
+                      <div className="mt-4 p-4 bg-muted/50 rounded-md">
+                        <h3 className="text-sm font-medium mb-2 flex items-center">
+                          <FileBarChart className="h-4 w-4 mr-2" />
+                          Interpretación de Resultados
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          {getExplanation(compensationStatus.status, totalStockDiscrepancy, totalCashDiscrepancy)}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </CardContent>
+        </CardHeader>
+      </Card>
+    </div>
+  )
+}
+
+// Función para determinar si hay compensación entre stock y caja
+function getCompensationStatus(stockValue, cashValue) {
+  // Si ambos son cercanos a cero (dentro de un margen de error)
+  const margin = 0.1 // 10 centavos de margen
+  if (Math.abs(stockValue) < margin && Math.abs(cashValue) < margin) {
+    return {
+      status: "balanced",
+      message: "Balanceado",
+      title: "Sin Discrepancias Significativas",
+      description: "No hay discrepancias significativas en stock ni en caja.",
+    }
+  }
+
+  // Si los valores son de signo opuesto y cercanos en magnitud (compensación)
+  if ((stockValue < 0 && cashValue > 0) || (stockValue > 0 && cashValue < 0)) {
+    const diff = Math.abs(stockValue + cashValue)
+    const maxValue = Math.max(Math.abs(stockValue), Math.abs(cashValue))
+
+    // Si la diferencia es menor al 5% del valor máximo, consideramos que hay compensación perfecta
+    if (diff / maxValue < 0.05) {
+      return {
+        status: "compensated",
+        message: "Compensado",
+        title: "Compensación Perfecta",
+        description:
+          "Las discrepancias de stock y caja se compensan casi perfectamente. Esto sugiere que los productos faltantes fueron vendidos pero no registrados correctamente, y el dinero está en caja (o viceversa).",
+        difference: diff,
+        percentage: 100 - (diff / maxValue) * 100,
+      }
+    }
+
+    // Si la diferencia es menor al 20% del valor máximo, consideramos que hay compensación parcial
+    if (diff / maxValue < 0.2) {
+      return {
+        status: "partially_compensated",
+        message: "Parcialmente compensado",
+        title: "Compensación Parcial",
+        description:
+          "Hay una compensación parcial entre stock y caja. Esto puede indicar descuentos no registrados, errores parciales de registro o posibles problemas con los precios.",
+        difference: diff,
+        percentage: 100 - (diff / maxValue) * 100,
+      }
+    }
+
+    // Compensación débil
+    return {
+      status: "weakly_compensated",
+      message: "Débilmente compensado",
+      title: "Compensación Débil",
+      description:
+        "Hay una compensación débil entre stock y caja. Las discrepancias van en direcciones opuestas pero con magnitudes muy diferentes.",
+      difference: diff,
+      percentage: 100 - (diff / maxValue) * 100,
+    }
+  }
+
+  // Si ambos son del mismo signo (ambos faltantes o ambos sobrantes)
+  if ((stockValue < 0 && cashValue < 0) || (stockValue > 0 && cashValue > 0)) {
+    return {
+      status: "same_direction",
+      message: "Sin compensación",
+      title: "Discrepancias en la Misma Dirección",
+      description:
+        "Las discrepancias van en la misma dirección (ambos faltantes o ambos sobrantes). Esto puede indicar problemas más serios como pérdidas, robos o errores significativos de registro.",
+    }
+  }
+
+  // Uno es cero y el otro no
+  if (Math.abs(stockValue) < margin && Math.abs(cashValue) >= margin) {
+    return {
+      status: "cash_only",
+      message: "Solo discrepancia en caja",
+      title: "Solo Discrepancia en Caja",
+      description:
+        "Solo hay discrepancia en caja, sin afectación en el stock. Esto puede indicar errores en el manejo de efectivo o en el registro de pagos.",
+    }
+  }
+
+  if (Math.abs(cashValue) < margin && Math.abs(stockValue) >= margin) {
+    return {
+      status: "stock_only",
+      message: "Solo discrepancia en stock",
+      title: "Solo Discrepancia en Stock",
+      description:
+        "Solo hay discrepancia en stock, sin afectación en caja. Esto puede indicar errores de inventario, pérdidas o problemas en el registro de productos.",
+    }
+  }
+
+  return {
+    status: "unknown",
+    message: "Estado desconocido",
+    title: "Estado Indeterminado",
+    description: "No se puede determinar un patrón claro en las discrepancias.",
+  }
+}
+
+// Función para obtener el estilo de la alerta según el estado
+function getAlertStyle(status) {
+  switch (status) {
+    case "compensated":
+      return "bg-green-50 text-green-800 border-green-200"
+    case "partially_compensated":
+      return "bg-yellow-50 text-yellow-800 border-yellow-200"
+    case "weakly_compensated":
+      return "bg-amber-50 text-amber-800 border-amber-200"
+    case "same_direction":
+      return "bg-red-50 text-red-800 border-red-200"
+    case "balanced":
+      return "bg-blue-50 text-blue-800 border-blue-200"
+    case "cash_only":
+    case "stock_only":
+      return "bg-purple-50 text-purple-800 border-purple-200"
+    default:
+      return "bg-gray-50 text-gray-800 border-gray-200"
+  }
+}
+
+// Función para obtener el ícono según el estado
+function getStatusIcon(status) {
+  switch (status) {
+    case "compensated":
+      return <CheckCircle2 className="h-4 w-4 text-green-500" />
+    case "partially_compensated":
+    case "weakly_compensated":
+      return <AlertCircle className="h-4 w-4 text-yellow-500" />
+    case "same_direction":
+      return <XCircle className="h-4 w-4 text-red-500" />
+    case "balanced":
+      return <CheckCircle2 className="h-4 w-4 text-blue-500" />
+    case "cash_only":
+      return <CircleDollarSign className="h-4 w-4 text-purple-500" />
+    case "stock_only":
+      return <PackageOpen className="h-4 w-4 text-purple-500" />
+    default:
+      return <AlertCircle className="h-4 w-4 text-gray-500" />
+  }
+}
+
+// Función para obtener recomendaciones según el estado
+function getRecommendations(status) {
+  switch (status) {
+    case "compensated":
+      return [
+        "Verificar los procedimientos de registro de ventas.",
+        "Capacitar al personal sobre la importancia de registrar correctamente todas las transacciones.",
+        "Revisar si hay productos que se están vendiendo sin registrar en el sistema.",
+      ]
+    case "partially_compensated":
+    case "weakly_compensated":
+      return [
+        "Investigar las posibles causas de la diferencia parcial.",
+        "Revisar descuentos, promociones o errores de precio.",
+        "Verificar si hay productos que se venden por debajo del precio registrado.",
+        "Comprobar si hay transacciones que no se están registrando correctamente.",
+      ]
+    case "same_direction":
+      if (status === "same_direction_negative") {
+        return [
+          "Investigar posibles pérdidas o robos.",
+          "Revisar los procedimientos de seguridad y control de inventario.",
+          "Considerar implementar medidas adicionales de supervisión.",
+          "Verificar si hay errores en el registro de ventas o en el conteo de inventario.",
+        ]
+      } else {
+        return [
+          "Revisar los procedimientos de registro de compras e ingresos.",
+          "Verificar si hay productos o ingresos que no se están registrando correctamente.",
+          "Comprobar si hay errores en el conteo de inventario o en el cierre de caja.",
+        ]
+      }
+    case "balanced":
+      return [
+        "Mantener los procedimientos actuales de control.",
+        "Realizar verificaciones periódicas para asegurar que se mantiene el balance.",
+        "Documentar las buenas prácticas que han llevado a este resultado.",
+      ]
+    case "cash_only":
+      return [
+        "Revisar los procedimientos de manejo de efectivo.",
+        "Verificar si hay errores en el registro de pagos o en el cierre de caja.",
+        "Comprobar si hay transacciones que no están siendo registradas correctamente.",
+      ]
+    case "stock_only":
+      return [
+        "Revisar los procedimientos de control de inventario.",
+        "Verificar si hay errores en el conteo o registro de productos.",
+        "Comprobar si hay productos que se están perdiendo o dañando sin registro.",
+      ]
+    default:
+      return [
+        "Realizar un análisis más detallado de las discrepancias.",
+        "Revisar los procedimientos de registro de ventas, inventario y manejo de efectivo.",
+        "Considerar implementar controles adicionales para identificar la causa de las discrepancias.",
+      ]
+  }
+}
+
+// Función para obtener una explicación detallada según el estado
+function getExplanation(status, stockValue, cashValue) {
+  // Formatear valores monetarios
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat("es-AR", {
+      style: "currency",
+      currency: "ARS",
+      minimumFractionDigits: 2,
+    }).format(Math.abs(value))
+  }
+
+  switch (status) {
+    case "compensated":
+      if (stockValue < 0 && cashValue > 0) {
+        return `El faltante de stock valorizado en ${formatCurrency(stockValue)} se compensa casi perfectamente con el sobrante en caja de ${formatCurrency(cashValue)}. Esto sugiere que se vendieron productos sin registrar la venta en el sistema, pero el dinero sí ingresó a la caja.`
+      } else {
+        return `El sobrante de stock valorizado en ${formatCurrency(stockValue)} se compensa casi perfectamente con el faltante en caja de ${formatCurrency(cashValue)}. Esto podría indicar devoluciones o ajustes de inventario que no fueron registrados correctamente.`
       }
 
-      const formattedStartDate = format(startDate, "yyyy-MM-dd")
-      const formattedEndDate = format(endDate, "yyyy-MM-dd")
+    case "partially_compensated":
+    case "weakly_compensated":
+      if (stockValue < 0 && cashValue > 0) {
+        return `El faltante de stock valorizado en ${formatCurrency(stockValue)} se compensa parcialmente con el sobrante en caja de ${formatCurrency(cashValue)}. Esto podría indicar ventas no registradas con descuentos, o una combinación de problemas de registro.`
+      } else {
+        return `El sobrante de stock valorizado en ${formatCurrency(stockValue)} se compensa parcialmente con el faltante en caja de ${formatCurrency(cashValue)}. Esto podría indicar errores en el registro de devoluciones o ajustes de inventario.`
+      }
 
-      // Obtener resumen de discrepancias por local
-      const localSummaries = []
+    case "same_direction":
+      if (stockValue < 0 && cashValue < 0) {
+        return `Hay un faltante tanto en stock (${formatCurrency(stockValue)}) como en caja (${formatCurrency(cashValue)}). Esta situación es preocupante y podría indicar pérdidas, robos o errores significativos de registro.`
+      } else {
+        return `Hay un sobrante tanto en stock (${formatCurrency(stockValue)}) como en caja (${formatCurrency(cashValue)}). Esto podría indicar errores en el registro de compras, ingresos o en el conteo de inventario.`
+      }
 
-      for (const local of locales) {
+    case "balanced":
+      return "No hay discrepancias significativas en stock ni en caja. Los controles y procedimientos actuales están funcionando correctamente."
+
+    case "cash_only":
+      if (cashValue < 0) {
+        return `Solo hay un faltante en caja de ${formatCurrency(cashValue)}, sin discrepancias significativas en stock. Esto podría indicar errores en el manejo de efectivo o en el registro de pagos.`
+      } else {
+        return `Solo hay un sobrante en caja de ${formatCurrency(cashValue)}, sin discrepancias significativas en stock. Esto podría indicar pagos o ingresos no registrados correctamente.`
+      }
+
+    case "stock_only":
+      if (stockValue < 0) {
+        return `Solo hay un faltante en stock valorizado en ${formatCurrency(stockValue)}, sin discrepancias significativas en caja. Esto podría indicar pérdidas, daños o errores en el conteo de inventario.`
+      } else {
+        return `Solo hay un sobrante en stock valorizado en ${formatCurrency(stockValue)}, sin discrepancias significativas en caja. Esto podría indicar errores en el registro de productos o en el conteo de inventario.`
+      }
+
+    default:
+      return "No se puede determinar un patrón claro en las discrepancias. Se recomienda un análisis más detallado."
+  }
+}
+
+export function ConciliacionDashboard() {
+  const [selectedDate, setSelectedDate] = useState(new Date())
+  const [locales, setLocales] = useState([])
+  const [dashboardData, setDashboardData] = useState({})
+  const [isLoading, setIsLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState("locales")
+  const [stockDiscrepancies, setStockDiscrepancies] = useState([])
+  const [cashDiscrepancies, setCashDiscrepancies] = useState([])
+
+  const formattedDate = selectedDate ? format(selectedDate, "dd/MM/yyyy") : "Selecciona una fecha"
+  const formattedStartDate = selectedDate ? format(selectedDate, "yyyy-MM-dd") : ""
+  const formattedEndDate = selectedDate ? format(selectedDate, "yyyy-MM-dd") : ""
+
+  const loadDashboardData = async () => {
+    setIsLoading(true)
+    try {
+      // Obtener todos los locales
+      const { data: localesData, error: localesError } = await supabase.from("locations").select("*")
+
+      if (localesError) {
+        console.error("Error al obtener los locales:", localesError)
+        toast({
+          title: "Error",
+          description: "Error al obtener los locales.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      if (!localesData || localesData.length === 0) {
+        toast({
+          title: "Sin Locales",
+          description: "No se encontraron locales. Por favor, crea un local primero.",
+        })
+        return
+      }
+
+      setLocales(localesData)
+
+      // Recopilar todas las discrepancias para el análisis global
+      let allStockDiscrepancies = []
+      let allCashDiscrepancies = []
+
+      // Recorrer cada local y obtener los datos necesarios
+      const dashboardDataByLocation = {}
+
+      for (const local of localesData) {
         try {
           // Obtener discrepancias de stock para este local
           const { data: stockData, error: stockError } = await supabase
@@ -90,53 +547,66 @@ export function ConciliacionDashboard() {
             continue
           }
 
-          // Calcular totales para este local
-          const stockDiscrepancies = stockData?.length || 0
-          const cashDiscrepancies = cashData?.length || 0
-          const stockValue = stockData?.reduce((sum, item) => sum + Number(item.total_value || 0), 0) || 0
-          const cashValue = cashData?.reduce((sum, item) => sum + Math.abs(Number(item.difference || 0)), 0) || 0
-
-          // Obtener la última fecha con discrepancias
-          let lastDiscrepancyDate = null
-          if (stockData && stockData.length > 0) {
-            const dates = stockData.map((item) => new Date(item.date)).sort((a, b) => b.getTime() - a.getTime())
-            lastDiscrepancyDate = dates[0]
+          // Agregar a las colecciones globales
+          if (stockData) {
+            // Transformar los datos al formato esperado por AnalisisConciliacion
+            const formattedStockData = stockData.map((item) => ({
+              id: item.id,
+              productId: item.product_id,
+              productName: item.product_name,
+              expectedQuantity: item.expected_quantity,
+              actualQuantity: item.actual_quantity,
+              quantityDifference: item.quantity_difference,
+              unitPrice: item.unit_price,
+              totalValue: item.total_value,
+            }))
+            allStockDiscrepancies = [...allStockDiscrepancies, ...formattedStockData]
           }
 
-          // Calcular tendencia (comparando con el período anterior)
-          const trend = Math.random() > 0.5 ? "up" : "down"
-          const percentChange = Math.floor(Math.random() * 30)
+          if (cashData) {
+            // Transformar los datos al formato esperado por AnalisisConciliacion
+            const formattedCashData = cashData.map((item) => ({
+              id: item.id,
+              category: item.payment_method,
+              expectedAmount: item.expected_amount,
+              actualAmount: item.actual_amount,
+              difference: item.difference,
+            }))
+            allCashDiscrepancies = [...allCashDiscrepancies, ...formattedCashData]
+          }
 
-          localSummaries.push({
-            id: local.id,
-            code: local.code,
+          // Calcular totales para este local
+          let totalStockValue = 0
+          let totalCashDifference = 0
+
+          if (stockData) {
+            totalStockValue = stockData.reduce((sum, item) => sum + item.total_value, 0)
+          }
+
+          if (cashData) {
+            totalCashDifference = cashData.reduce((sum, item) => sum + item.difference, 0)
+          }
+
+          dashboardDataByLocation[local.id] = {
             name: local.name,
-            hasTwoCashRegisters: local.hasTwoCashRegisters,
-            stockDiscrepancies,
-            cashDiscrepancies,
-            stockValue,
-            cashValue,
-            totalDiscrepancies: stockDiscrepancies + cashDiscrepancies,
-            totalValue: stockValue + cashValue,
-            trend,
-            percentChange,
-            lastDiscrepancyDate,
-            hasData: stockDiscrepancies > 0 || cashDiscrepancies > 0,
-          })
-        } catch (localError) {
-          console.error(`Error al procesar datos para ${local.name}:`, localError)
-          // Continuar con el siguiente local
+            totalStockValue,
+            totalCashDifference,
+          }
+        } catch (error) {
+          console.error(`Error al procesar datos para ${local.name}:`, error)
         }
       }
 
-      // Ordenar locales por valor total de discrepancias (de mayor a menor)
-      localSummaries.sort((a, b) => b.totalValue - a.totalValue)
-      setLocalesData(localSummaries)
-    } catch (error: any) {
-      console.error("Error al cargar datos del dashboard:", error)
+      setDashboardData(dashboardDataByLocation)
+
+      // Actualizar estados con todas las discrepancias
+      setStockDiscrepancies(allStockDiscrepancies)
+      setCashDiscrepancies(allCashDiscrepancies)
+    } catch (error) {
+      console.error("Error al cargar los datos del dashboard:", error)
       toast({
         title: "Error",
-        description: "No se pudieron cargar los datos del dashboard",
+        description: "Error al cargar los datos del dashboard.",
         variant: "destructive",
       })
     } finally {
@@ -144,177 +614,90 @@ export function ConciliacionDashboard() {
     }
   }
 
-  const handleLocalClick = (localId: number) => {
-    router.push(`/conciliacion/local/${localId}`)
-  }
-
-  const handleExportData = () => {
-    toast({
-      title: "Exportando datos",
-      description: "Los datos se están exportando a Excel",
-    })
-    // Aquí iría la lógica para exportar datos
-  }
-
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      {/* Encabezado y controles */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">Dashboard de Conciliación</h1>
-          <p className="text-muted-foreground">Resumen de discrepancias de stock y caja por local</p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <DatePicker
-            date={selectedDate}
-            onDateChange={setSelectedDate}
-            placeholder="Seleccionar fecha"
-            format="dd/MM/yyyy"
-          />
-
-          <div className="border rounded-md">
-            <Button variant={dateRange === "day" ? "default" : "ghost"} size="sm" onClick={() => setDateRange("day")}>
-              Día
+    <div>
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-2xl font-bold">Conciliación</h1>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant={"outline"} className="h-10 rounded-md px-4">
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              <span>{formattedDate}</span>
             </Button>
-            <Button variant={dateRange === "week" ? "default" : "ghost"} size="sm" onClick={() => setDateRange("week")}>
-              Semana
-            </Button>
-            <Button
-              variant={dateRange === "month" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setDateRange("month")}
-            >
-              Mes
-            </Button>
-          </div>
-
-          <Button variant="outline" size="icon" onClick={loadDashboardData} disabled={isLoading}>
-            <RefreshCcw className="h-4 w-4" />
-          </Button>
-
-          <Button variant="outline" onClick={handleExportData}>
-            <Download className="mr-2 h-4 w-4" />
-            Exportar
-          </Button>
-        </div>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="end">
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={setSelectedDate}
+              disabled={(date) => date > new Date() || date < new Date("2024-01-01")}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
       </div>
 
-      {/* Tarjetas de resumen */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Discrepancias Stock</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {localesData.reduce((sum, local) => sum + local.stockDiscrepancies, 0)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Valor: ${localesData.reduce((sum, local) => sum + local.stockValue, 0).toLocaleString()}
-            </p>
-          </CardContent>
-        </Card>
+      <Button onClick={loadDashboardData} disabled={isLoading}>
+        {isLoading ? "Cargando..." : "Cargar Datos"}
+      </Button>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Discrepancias Caja</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {localesData.reduce((sum, local) => sum + local.cashDiscrepancies, 0)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Valor: ${localesData.reduce((sum, local) => sum + local.cashValue, 0).toLocaleString()}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Local con Más Discrepancias</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {localesData.length > 0 && (
-              <>
-                <div className="text-2xl font-bold">{localesData[0].name}</div>
-                <p className="text-xs text-muted-foreground">{localesData[0].totalDiscrepancies} discrepancias</p>
-              </>
-            )}
-            {localesData.length === 0 && <div className="text-sm text-muted-foreground">No hay datos disponibles</div>}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Mayor Valor en Discrepancias</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {localesData.length > 0 && (
-              <>
-                <div className="text-2xl font-bold">${localesData[0].totalValue.toLocaleString()}</div>
-                <p className="text-xs text-muted-foreground">{localesData[0].name}</p>
-              </>
-            )}
-            {localesData.length === 0 && <div className="text-sm text-muted-foreground">No hay datos disponibles</div>}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Contenido principal */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs defaultValue="locales" className="mt-4">
         <TabsList>
           <TabsTrigger value="locales">Locales</TabsTrigger>
           <TabsTrigger value="tendencias">Tendencias</TabsTrigger>
           <TabsTrigger value="historial">Historial</TabsTrigger>
+          <TabsTrigger value="analisis">Análisis</TabsTrigger>
         </TabsList>
-
-        {/* Pestaña de Locales */}
-        <TabsContent value="locales" className="space-y-6">
-          <h2 className="text-xl font-semibold mt-4">Secciones por Local</h2>
-          <p className="text-muted-foreground">Seleccione un local para ver sus discrepancias y generar nuevas</p>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {localesData.map((local) => (
-              <LocalSummaryCard key={local.id} local={local} onClick={() => handleLocalClick(local.id)} />
+        <TabsContent value="locales">
+          <div className="mt-4 grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+            {locales.map((local) => (
+              <Card key={local.id}>
+                <CardHeader>
+                  <CardTitle>{local.name}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p>Valor Total de Stock: ${dashboardData[local.id]?.totalStockValue || 0}</p>
+                  <p>Diferencia Total de Caja: ${dashboardData[local.id]?.totalCashDifference || 0}</p>
+                </CardContent>
+              </Card>
             ))}
           </div>
         </TabsContent>
 
-        {/* Pestaña de Tendencias */}
-        <TabsContent value="tendencias">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Tendencia de Discrepancias de Stock</CardTitle>
-              </CardHeader>
-              <CardContent className="h-80">
-                <DiscrepancyTrend type="stock" dateRange={dateRange} />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Tendencia de Discrepancias de Caja</CardTitle>
-              </CardHeader>
-              <CardContent className="h-80">
-                <DiscrepancyTrend type="cash" dateRange={dateRange} />
-              </CardContent>
-            </Card>
+        <TabsContent value="analisis">
+          <div className="mt-4">
+            {stockDiscrepancies.length > 0 || cashDiscrepancies.length > 0 ? (
+              <AnalisisConciliacion
+                stockDiscrepancies={stockDiscrepancies}
+                cashDiscrepancies={cashDiscrepancies}
+                fecha={format(selectedDate, "yyyy-MM-dd")}
+              />
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Análisis de Conciliación</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-center py-4 text-muted-foreground">
+                    No hay datos de discrepancias para analizar en el período seleccionado. Seleccione otra fecha o
+                    rango y cargue los datos.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </TabsContent>
 
-        {/* Pestaña de Historial */}
+        <TabsContent value="tendencias">
+          <div>
+            <h2>Tendencias</h2>
+            <p>Contenido de la pestaña de tendencias.</p>
+          </div>
+        </TabsContent>
         <TabsContent value="historial">
-          <div className="mt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Historial de Discrepancias</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <DiscrepancyHistory />
-              </CardContent>
-            </Card>
+          <div>
+            <h2>Historial</h2>
+            <p>Contenido de la pestaña de historial.</p>
           </div>
         </TabsContent>
       </Tabs>
