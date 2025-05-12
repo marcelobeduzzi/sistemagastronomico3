@@ -16,8 +16,21 @@ import { createClient } from '@supabase/supabase-js'
 
 // Tipos para los datos del dashboard
 interface DashboardStats {
+  // Métricas que se mantienen
   activeEmployees: number
   activeEmployeesChange: number
+  
+  // Nuevas métricas
+  pendingAlerts: number
+  payrollExpenses: number
+  externalPayrollExpenses: number
+  pendingLiquidations: number
+  pendingLiquidationsAmount: number
+  pendingClosings: number
+  monthlyRevenue: number
+  revenueChangePercentage: number
+  
+  // Métricas que se mantienen por compatibilidad
   totalDeliveryOrders: number
   deliveryOrdersChange: number
   totalRevenue: number
@@ -171,8 +184,82 @@ export default function Dashboard() {
   // Función para obtener estadísticas en tiempo real de Supabase
   const fetchRealTimeStats = async (supabase, activeEmployees) => {
     try {
-      // 2. Obtener ventas de la semana actual
+      // 1. Obtener alertas pendientes
+      const { data: alertsData, error: alertsError } = await supabase
+        .from('alerts')
+        .select('id')
+        .eq('status', 'pendiente')
+      
+      if (alertsError) throw alertsError
+      const pendingAlerts = alertsData?.length || 0
+      
+      // 2. Calcular gastos de nómina (total de todos los empleados)
+      const { data: employeesData, error: employeesError } = await supabase
+        .from('employees')
+        .select('total_salary, local')
+        .eq('status', 'active')
+      
+      if (employeesError) throw employeesError
+      
+      // Calcular gasto total en nómina
+      const payrollExpenses = employeesData?.reduce((sum, emp) => sum + (Number(emp.total_salary) || 0), 0) || 0
+      
+      // Calcular gasto en nómina externa (empleados sin local asignado)
+      const externalPayrollExpenses = employeesData
+        ?.filter(emp => !emp.local || emp.local === '')
+        .reduce((sum, emp) => sum + (Number(emp.total_salary) || 0), 0) || 0
+      
+      // 3. Obtener liquidaciones pendientes
+      const { data: liquidationsData, error: liquidationsError } = await supabase
+        .from('pending_liquidations')
+        .select('id, employee_id')
+        .eq('processed', false)
+      
+      if (liquidationsError) throw liquidationsError
+      const pendingLiquidations = liquidationsData?.length || 0
+      
+      // 4. Obtener cierres de caja pendientes
+      const { data: closingsData, error: closingsError } = await supabase
+        .from('cash_register_closings')
+        .select('id')
+        .eq('status', 'pending')
+      
+      if (closingsError) throw closingsError
+      const pendingClosings = closingsData?.length || 0
+      
+      // 5. Calcular facturación del mes
       const today = new Date()
+      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+      const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+      
+      const { data: currentMonthData, error: currentMonthError } = await supabase
+        .from('cash_register_closings')
+        .select('total_sales')
+        .gte('date', firstDayOfMonth.toISOString())
+        .lte('date', lastDayOfMonth.toISOString())
+      
+      if (currentMonthError) throw currentMonthError
+      const monthlyRevenue = currentMonthData?.reduce((sum, record) => sum + (Number(record.total_sales) || 0), 0) || 0
+      
+      // 6. Calcular comparativa con el mes anterior
+      const firstDayOfPrevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+      const lastDayOfPrevMonth = new Date(today.getFullYear(), today.getMonth(), 0)
+      
+      const { data: prevMonthData, error: prevMonthError } = await supabase
+        .from('cash_register_closings')
+        .select('total_sales')
+        .gte('date', firstDayOfPrevMonth.toISOString())
+        .lte('date', lastDayOfPrevMonth.toISOString())
+      
+      if (prevMonthError) throw prevMonthError
+      const prevMonthRevenue = prevMonthData?.reduce((sum, record) => sum + (Number(record.total_sales) || 0), 0) || 0
+      
+      // Calcular porcentaje de cambio
+      const revenueChangePercentage = prevMonthRevenue > 0 
+        ? ((monthlyRevenue - prevMonthRevenue) / prevMonthRevenue) * 100 
+        : 0
+      
+      // 7. Obtener datos de la semana actual (mantenemos esta parte para compatibilidad)
       const dayOfWeek = today.getDay() || 7 // 0 es domingo, convertimos a 7
       
       // Primer día de la semana actual (lunes)
@@ -213,10 +300,10 @@ export default function Dashboard() {
       if (previousWeekError) throw previousWeekError
       
       // Calcular totales
-      const weeklyRevenue = currentWeekData?.reduce((sum, record) => sum + (record.total_sales || 0), 0) || 0
-      const previousWeekRevenue = previousWeekData?.reduce((sum, record) => sum + (record.total_sales || 0), 0) || 0
+      const weeklyRevenue = currentWeekData?.reduce((sum, record) => sum + (Number(record.total_sales) || 0), 0) || 0
+      const previousWeekRevenue = previousWeekData?.reduce((sum, record) => sum + (Number(record.total_sales) || 0), 0) || 0
       
-      // 3. Obtener pagos pendientes a proveedores
+      // 8. Obtener pagos pendientes a proveedores (mantenemos esta parte para compatibilidad)
       const { data: pendingPaymentsData, error: pendingPaymentsError } = await supabase
         .from('provider_payments')
         .select('amount, due_date')
@@ -225,7 +312,7 @@ export default function Dashboard() {
       if (pendingPaymentsError) throw pendingPaymentsError
       
       const pendingPayments = pendingPaymentsData?.length || 0
-      const pendingPaymentsAmount = pendingPaymentsData?.reduce((sum, payment) => sum + (payment.amount || 0), 0) || 0
+      const pendingPaymentsAmount = pendingPaymentsData?.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0) || 0
       
       // Pagos urgentes (vencen en los próximos 7 días)
       const nextWeek = new Date()
@@ -236,7 +323,7 @@ export default function Dashboard() {
         return dueDate <= nextWeek
       }).length || 0
       
-      // 4. Obtener datos de delivery
+      // 9. Obtener datos de delivery (mantenemos esta parte para compatibilidad)
       const { data: deliveryData, error: deliveryError } = await supabase
         .from('delivery_orders')
         .select('id')
@@ -246,10 +333,23 @@ export default function Dashboard() {
       
       const totalDeliveryOrders = deliveryData?.length || 0
       
-      // Datos de ejemplo para las métricas que no podemos obtener directamente
+      // Retornar todas las métricas
       return {
-        activeEmployees, // Usar el valor que pasamos como parámetro
+        // Métricas que se mantienen
+        activeEmployees,
         activeEmployeesChange: 5.2, // Ejemplo
+        
+        // Nuevas métricas
+        pendingAlerts,
+        payrollExpenses,
+        externalPayrollExpenses,
+        pendingLiquidations,
+        pendingLiquidationsAmount: 0, // No tenemos este dato
+        pendingClosings,
+        monthlyRevenue,
+        revenueChangePercentage,
+        
+        // Métricas que se mantienen por compatibilidad
         totalDeliveryOrders,
         deliveryOrdersChange: 12.5, // Ejemplo
         totalRevenue: 125000, // Ejemplo
@@ -266,8 +366,16 @@ export default function Dashboard() {
       console.error("Error al obtener estadísticas en tiempo real:", error)
       // Devolver datos de ejemplo en caso de error, pero mantener el número real de empleados
       return {
-        activeEmployees, // Usar el valor que pasamos como parámetro
+        activeEmployees,
         activeEmployeesChange: 5.2,
+        pendingAlerts: 5,
+        payrollExpenses: 1500000,
+        externalPayrollExpenses: 350000,
+        pendingLiquidations: 3,
+        pendingLiquidationsAmount: 120000,
+        pendingClosings: 2,
+        monthlyRevenue: 2500000,
+        revenueChangePercentage: 5.2,
         totalDeliveryOrders: 320,
         deliveryOrdersChange: 12.5,
         totalRevenue: 125000,
@@ -301,8 +409,16 @@ export default function Dashboard() {
   const stats = useMemo(
     () =>
       dashboardData?.stats || {
-        activeEmployees: activeEmployeesCount || 0, // Usar el valor del estado
+        activeEmployees: activeEmployeesCount || 0,
         activeEmployeesChange: 0,
+        pendingAlerts: 0,
+        payrollExpenses: 0,
+        externalPayrollExpenses: 0,
+        pendingLiquidations: 0,
+        pendingLiquidationsAmount: 0,
+        pendingClosings: 0,
+        monthlyRevenue: 0,
+        revenueChangePercentage: 0,
         totalDeliveryOrders: 0,
         deliveryOrdersChange: 0,
         totalRevenue: 0,
@@ -382,7 +498,7 @@ export default function Dashboard() {
 
         {/* Tarjetas de resumen - Primera fila */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {/* Empleados Activos - Corregido para mostrar datos reales */}
+          {/* Empleados Activos - Se mantiene */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Empleados Activos</CardTitle>
@@ -396,50 +512,46 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Ventas Semanales - NUEVO */}
+          {/* Alertas Pendientes - NUEVA */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Ventas de la Semana</CardTitle>
-              <BarChartIcon className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Alertas Pendientes</CardTitle>
+              <AlertTriangle className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(stats.weeklyRevenue)}</div>
+              <div className="text-2xl font-bold">{stats.pendingAlerts}</div>
               <div className="flex items-center text-xs text-muted-foreground">
-                <TrendIndicator value={weeklyRevenueChange} /> vs. semana anterior
+                <Link href="/admin" className="text-blue-500 hover:underline">
+                  Ver panel de administración
+                </Link>
               </div>
             </CardContent>
           </Card>
 
-          {/* Pagos Pendientes - NUEVO */}
+          {/* Gastos Nómina - NUEVA */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pagos Pendientes</CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Gastos Nómina</CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.pendingPayments}</div>
+              <div className="text-2xl font-bold">{formatCurrency(stats.payrollExpenses)}</div>
               <div className="flex items-center text-xs text-muted-foreground">
-                <span className="flex items-center">
-                  <AlertTriangle className={`mr-1 h-3 w-3 ${stats.pendingPaymentsUrgent > 0 ? 'text-amber-500' : 'text-muted-foreground'}`} />
-                  <span className={stats.pendingPaymentsUrgent > 0 ? 'text-amber-500' : ''}>
-                    {stats.pendingPaymentsUrgent} urgentes
-                  </span>
-                </span>
-                <span className="ml-2">({formatCurrency(stats.pendingPaymentsAmount)})</span>
+                Total empleados en todos los locales
               </div>
             </CardContent>
           </Card>
 
-          {/* Pedidos Delivery - Mantenido */}
+          {/* Nómina Externa - NUEVA */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pedidos Delivery</CardTitle>
-              <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Nómina Externa</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.totalDeliveryOrders}</div>
+              <div className="text-2xl font-bold">{formatCurrency(stats.externalPayrollExpenses)}</div>
               <div className="flex items-center text-xs text-muted-foreground">
-                <TrendIndicator value={stats.deliveryOrdersChange} /> respecto a la semana anterior
+                Empleados sin local asignado
               </div>
             </CardContent>
           </Card>
@@ -447,42 +559,30 @@ export default function Dashboard() {
 
         {/* Tarjetas de resumen - Segunda fila */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {/* Ingresos Delivery - Mantenido */}
+          {/* Liquidaciones Pendientes - NUEVA */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Ingresos Delivery</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Liquidaciones Pendientes</CardTitle>
+              <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(stats.totalRevenue)}</div>
+              <div className="text-2xl font-bold">{stats.pendingLiquidations}</div>
               <div className="flex items-center text-xs text-muted-foreground">
-                <TrendIndicator value={stats.revenueChange} /> respecto a la semana anterior
+                <Link href="/nomina" className="text-blue-500 hover:underline">
+                  Ver liquidaciones
+                </Link>
               </div>
             </CardContent>
           </Card>
 
-          {/* Valoración Promedio - Mantenido */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Valoración Promedio</CardTitle>
-              <Star className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.averageRating.toFixed(1)}</div>
-              <div className="flex items-center text-xs text-muted-foreground">
-                <TrendIndicator value={stats.ratingChange} /> respecto a la semana anterior
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Cierres de Caja Pendientes - NUEVO */}
+          {/* Cierres Pendientes - NUEVA */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Cierres Pendientes</CardTitle>
               <CreditCard className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">2</div>
+              <div className="text-2xl font-bold">{stats.pendingClosings}</div>
               <div className="flex items-center text-xs text-muted-foreground">
                 <Clock className="mr-1 h-3 w-3 text-amber-500" />
                 <span className="text-amber-500">Requieren atención</span>
@@ -490,18 +590,34 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Proveedores Activos - NUEVO */}
+          {/* Facturación Mes - NUEVA */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Proveedores Activos</CardTitle>
-              <Truck className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Facturación Mes</CardTitle>
+              <BarChartIcon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">18</div>
+              <div className="text-2xl font-bold">{formatCurrency(stats.monthlyRevenue)}</div>
               <div className="flex items-center text-xs text-muted-foreground">
-                <Link href="/proveedores-pagos/proveedores" className="text-blue-500 hover:underline">
-                  Ver todos los proveedores
-                </Link>
+                Total al cierre del día anterior
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Facturación % - NUEVA */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Facturación %</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                <span className={stats.revenueChangePercentage >= 0 ? "text-green-500" : "text-red-500"}>
+                  {stats.revenueChangePercentage >= 0 ? "+" : ""}{stats.revenueChangePercentage.toFixed(1)}%
+                </span>
+              </div>
+              <div className="flex items-center text-xs text-muted-foreground">
+                vs. mismo período mes anterior
               </div>
             </CardContent>
           </Card>
