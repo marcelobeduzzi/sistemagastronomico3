@@ -176,6 +176,73 @@ export default function Dashboard() {
     } catch (err) {
       console.error("Error al obtener datos del dashboard:", err)
       setError(err instanceof Error ? err.message : "Error desconocido al cargar los datos")
+      
+      // En caso de error, establecer datos de ejemplo para evitar errores en la UI
+      const defaultStats = {
+        activeEmployees: activeEmployeesCount || 0,
+        activeEmployeesChange: 0,
+        pendingAlerts: 0,
+        payrollExpenses: 0,
+        externalPayrollExpenses: 0,
+        pendingLiquidations: 0,
+        pendingLiquidationsAmount: 0,
+        pendingClosings: 0,
+        monthlyRevenue: 0,
+        revenueChangePercentage: 0,
+        totalDeliveryOrders: 0,
+        deliveryOrdersChange: 0,
+        totalRevenue: 0,
+        revenueChange: 0,
+        averageRating: 0,
+        ratingChange: 0,
+        weeklyRevenue: 0,
+        previousWeekRevenue: 0,
+        pendingPayments: 0,
+        pendingPaymentsAmount: 0,
+        pendingPaymentsUrgent: 0
+      };
+      
+      const mockChartData = {
+        salesData: {
+          labels: ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"],
+          datasets: [
+            {
+              label: "Ventas",
+              data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+              backgroundColor: "rgba(59, 130, 246, 0.5)",
+              borderColor: "rgb(59, 130, 246)",
+              borderWidth: 1
+            }
+          ]
+        },
+        deliveryData: {
+          labels: ["PedidosYa", "Rappi", "Propio", "MercadoPago"],
+          datasets: [
+            {
+              data: [0, 0, 0, 0],
+              backgroundColor: ["#FF5A5F", "#FF9500", "#00C2B8", "#3483FA"],
+              borderWidth: 1
+            }
+          ]
+        },
+        attendanceData: {
+          labels: Array.from({ length: 30 }, (_, i) => (i + 1).toString()),
+          datasets: [
+            {
+              label: "Asistencias",
+              data: Array.from({ length: 30 }, () => 0),
+              borderColor: "rgb(75, 192, 192)",
+              tension: 0.1,
+              fill: false
+            }
+          ]
+        }
+      };
+      
+      setDashboardData({
+        stats: defaultStats,
+        charts: mockChartData
+      });
     } finally {
       setIsLoading(false)
     }
@@ -184,154 +251,213 @@ export default function Dashboard() {
   // Función para obtener estadísticas en tiempo real de Supabase
   const fetchRealTimeStats = async (supabase, activeEmployees) => {
     try {
-      // 1. Obtener alertas pendientes
-      const { data: alertsData, error: alertsError } = await supabase
-        .from('alerts')
-        .select('id')
-        .eq('status', 'pendiente')
+      // Valores por defecto para evitar errores
+      let pendingAlerts = 0;
+      let payrollExpenses = 0;
+      let externalPayrollExpenses = 0;
+      let pendingLiquidations = 0;
+      let pendingClosings = 0;
+      let monthlyRevenue = 0;
+      let revenueChangePercentage = 0;
+      let weeklyRevenue = 0;
+      let previousWeekRevenue = 0;
+      let pendingPayments = 0;
+      let pendingPaymentsAmount = 0;
+      let pendingPaymentsUrgent = 0;
+      let totalDeliveryOrders = 0;
       
-      if (alertsError) throw alertsError
-      const pendingAlerts = alertsData?.length || 0
+      // 1. Obtener alertas pendientes
+      try {
+        const { data: alertsData, error: alertsError } = await supabase
+          .from('alerts')
+          .select('id')
+          .eq('status', 'pendiente')
+        
+        if (!alertsError && alertsData) {
+          pendingAlerts = alertsData.length;
+        }
+      } catch (error) {
+        console.error("Error al obtener alertas pendientes:", error);
+      }
       
       // 2. Calcular gastos de nómina (total de todos los empleados)
-      const { data: employeesData, error: employeesError } = await supabase
-        .from('employees')
-        .select('total_salary, local')
-        .eq('status', 'active')
-      
-      if (employeesError) throw employeesError
-      
-      // Calcular gasto total en nómina
-      const payrollExpenses = employeesData?.reduce((sum, emp) => sum + (Number(emp.total_salary) || 0), 0) || 0
-      
-      // Calcular gasto en nómina externa (empleados sin local asignado)
-      const externalPayrollExpenses = employeesData
-        ?.filter(emp => !emp.local || emp.local === '')
-        .reduce((sum, emp) => sum + (Number(emp.total_salary) || 0), 0) || 0
+      try {
+        const { data: employeesData, error: employeesError } = await supabase
+          .from('employees')
+          .select('total_salary, local')
+          .eq('status', 'active')
+        
+        if (!employeesError && employeesData) {
+          payrollExpenses = employeesData.reduce((sum, emp) => sum + (Number(emp.total_salary) || 0), 0);
+          
+          // Calcular gasto en nómina externa (empleados sin local asignado)
+          externalPayrollExpenses = employeesData
+            .filter(emp => !emp.local || emp.local === '')
+            .reduce((sum, emp) => sum + (Number(emp.total_salary) || 0), 0);
+        }
+      } catch (error) {
+        console.error("Error al calcular gastos de nómina:", error);
+      }
       
       // 3. Obtener liquidaciones pendientes
-      const { data: liquidationsData, error: liquidationsError } = await supabase
-        .from('pending_liquidations')
-        .select('id, employee_id')
-        .eq('processed', false)
-      
-      if (liquidationsError) throw liquidationsError
-      const pendingLiquidations = liquidationsData?.length || 0
+      try {
+        const { data: liquidationsData, error: liquidationsError } = await supabase
+          .from('pending_liquidations')
+          .select('id, employee_id')
+          .eq('processed', false)
+        
+        if (!liquidationsError && liquidationsData) {
+          pendingLiquidations = liquidationsData.length;
+        }
+      } catch (error) {
+        console.error("Error al obtener liquidaciones pendientes:", error);
+      }
       
       // 4. Obtener cierres de caja pendientes
-      const { data: closingsData, error: closingsError } = await supabase
-        .from('cash_register_closings')
-        .select('id')
-        .eq('status', 'pending')
-      
-      if (closingsError) throw closingsError
-      const pendingClosings = closingsData?.length || 0
+      try {
+        const { data: closingsData, error: closingsError } = await supabase
+          .from('cash_register_closings')
+          .select('id')
+          .eq('status', 'pending')
+        
+        if (!closingsError && closingsData) {
+          pendingClosings = closingsData.length;
+        }
+      } catch (error) {
+        console.error("Error al obtener cierres de caja pendientes:", error);
+      }
       
       // 5. Calcular facturación del mes
-      const today = new Date()
-      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
-      const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-      
-      const { data: currentMonthData, error: currentMonthError } = await supabase
-        .from('cash_register_closings')
-        .select('total_sales')
-        .gte('date', firstDayOfMonth.toISOString())
-        .lte('date', lastDayOfMonth.toISOString())
-      
-      if (currentMonthError) throw currentMonthError
-      const monthlyRevenue = currentMonthData?.reduce((sum, record) => sum + (Number(record.total_sales) || 0), 0) || 0
-      
-      // 6. Calcular comparativa con el mes anterior
-      const firstDayOfPrevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1)
-      const lastDayOfPrevMonth = new Date(today.getFullYear(), today.getMonth(), 0)
-      
-      const { data: prevMonthData, error: prevMonthError } = await supabase
-        .from('cash_register_closings')
-        .select('total_sales')
-        .gte('date', firstDayOfPrevMonth.toISOString())
-        .lte('date', lastDayOfPrevMonth.toISOString())
-      
-      if (prevMonthError) throw prevMonthError
-      const prevMonthRevenue = prevMonthData?.reduce((sum, record) => sum + (Number(record.total_sales) || 0), 0) || 0
-      
-      // Calcular porcentaje de cambio
-      const revenueChangePercentage = prevMonthRevenue > 0 
-        ? ((monthlyRevenue - prevMonthRevenue) / prevMonthRevenue) * 100 
-        : 0
+      try {
+        const today = new Date()
+        const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+        const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+        
+        const { data: currentMonthData, error: currentMonthError } = await supabase
+          .from('cash_register_closings')
+          .select('total_sales')
+          .gte('date', firstDayOfMonth.toISOString())
+          .lte('date', lastDayOfMonth.toISOString())
+        
+        if (!currentMonthError && currentMonthData) {
+          monthlyRevenue = currentMonthData.reduce((sum, record) => sum + (Number(record.total_sales) || 0), 0);
+        }
+        
+        // 6. Calcular comparativa con el mes anterior
+        const firstDayOfPrevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+        const lastDayOfPrevMonth = new Date(today.getFullYear(), today.getMonth(), 0)
+        
+        const { data: prevMonthData, error: prevMonthError } = await supabase
+          .from('cash_register_closings')
+          .select('total_sales')
+          .gte('date', firstDayOfPrevMonth.toISOString())
+          .lte('date', lastDayOfPrevMonth.toISOString())
+        
+        if (!prevMonthError && prevMonthData) {
+          const prevMonthRevenue = prevMonthData.reduce((sum, record) => sum + (Number(record.total_sales) || 0), 0);
+          
+          // Calcular porcentaje de cambio
+          revenueChangePercentage = prevMonthRevenue > 0 
+            ? ((monthlyRevenue - prevMonthRevenue) / prevMonthRevenue) * 100 
+            : 0;
+        }
+      } catch (error) {
+        console.error("Error al calcular facturación:", error);
+      }
       
       // 7. Obtener datos de la semana actual (mantenemos esta parte para compatibilidad)
-      const dayOfWeek = today.getDay() || 7 // 0 es domingo, convertimos a 7
-      
-      // Primer día de la semana actual (lunes)
-      const currentWeekStart = new Date(today)
-      currentWeekStart.setDate(today.getDate() - dayOfWeek + 1)
-      currentWeekStart.setHours(0, 0, 0, 0)
-      
-      // Primer día de la semana anterior
-      const previousWeekStart = new Date(currentWeekStart)
-      previousWeekStart.setDate(previousWeekStart.getDate() - 7)
-      
-      // Último día de la semana anterior
-      const previousWeekEnd = new Date(currentWeekStart)
-      previousWeekEnd.setDate(previousWeekEnd.getDate() - 1)
-      previousWeekEnd.setHours(23, 59, 59, 999)
-      
-      // Formatear fechas para consultas SQL
-      const currentWeekStartStr = currentWeekStart.toISOString()
-      const previousWeekStartStr = previousWeekStart.toISOString()
-      const previousWeekEndStr = previousWeekEnd.toISOString()
-      
-      // Consulta para ventas de la semana actual
-      const { data: currentWeekData, error: currentWeekError } = await supabase
-        .from('cash_registers')
-        .select('total_sales')
-        .gte('date', currentWeekStartStr)
-        .lte('date', today.toISOString())
-      
-      if (currentWeekError) throw currentWeekError
-      
-      // Consulta para ventas de la semana anterior
-      const { data: previousWeekData, error: previousWeekError } = await supabase
-        .from('cash_registers')
-        .select('total_sales')
-        .gte('date', previousWeekStartStr)
-        .lte('date', previousWeekEndStr)
-      
-      if (previousWeekError) throw previousWeekError
-      
-      // Calcular totales
-      const weeklyRevenue = currentWeekData?.reduce((sum, record) => sum + (Number(record.total_sales) || 0), 0) || 0
-      const previousWeekRevenue = previousWeekData?.reduce((sum, record) => sum + (Number(record.total_sales) || 0), 0) || 0
+      try {
+        const today = new Date()
+        const dayOfWeek = today.getDay() || 7 // 0 es domingo, convertimos a 7
+        
+        // Primer día de la semana actual (lunes)
+        const currentWeekStart = new Date(today)
+        currentWeekStart.setDate(today.getDate() - dayOfWeek + 1)
+        currentWeekStart.setHours(0, 0, 0, 0)
+        
+        // Primer día de la semana anterior
+        const previousWeekStart = new Date(currentWeekStart)
+        previousWeekStart.setDate(previousWeekStart.getDate() - 7)
+        
+        // Último día de la semana anterior
+        const previousWeekEnd = new Date(currentWeekStart)
+        previousWeekEnd.setDate(previousWeekEnd.getDate() - 1)
+        previousWeekEnd.setHours(23, 59, 59, 999)
+        
+        // Formatear fechas para consultas SQL
+        const currentWeekStartStr = currentWeekStart.toISOString()
+        const previousWeekStartStr = previousWeekStart.toISOString()
+        const previousWeekEndStr = previousWeekEnd.toISOString()
+        
+        // Consulta para ventas de la semana actual
+        const { data: currentWeekData, error: currentWeekError } = await supabase
+          .from('cash_registers')
+          .select('total_sales')
+          .gte('date', currentWeekStartStr)
+          .lte('date', today.toISOString())
+        
+        if (!currentWeekError && currentWeekData) {
+          weeklyRevenue = currentWeekData.reduce((sum, record) => sum + (Number(record.total_sales) || 0), 0);
+        }
+        
+        // Consulta para ventas de la semana anterior
+        const { data: previousWeekData, error: previousWeekError } = await supabase
+          .from('cash_registers')
+          .select('total_sales')
+          .gte('date', previousWeekStartStr)
+          .lte('date', previousWeekEndStr)
+        
+        if (!previousWeekError && previousWeekData) {
+          previousWeekRevenue = previousWeekData.reduce((sum, record) => sum + (Number(record.total_sales) || 0), 0);
+        }
+      } catch (error) {
+        console.error("Error al obtener datos de la semana:", error);
+      }
       
       // 8. Obtener pagos pendientes a proveedores (mantenemos esta parte para compatibilidad)
-      const { data: pendingPaymentsData, error: pendingPaymentsError } = await supabase
-        .from('provider_payments')
-        .select('amount, due_date')
-        .eq('status', 'pending')
-      
-      if (pendingPaymentsError) throw pendingPaymentsError
-      
-      const pendingPayments = pendingPaymentsData?.length || 0
-      const pendingPaymentsAmount = pendingPaymentsData?.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0) || 0
-      
-      // Pagos urgentes (vencen en los próximos 7 días)
-      const nextWeek = new Date()
-      nextWeek.setDate(nextWeek.getDate() + 7)
-      
-      const pendingPaymentsUrgent = pendingPaymentsData?.filter(payment => {
-        const dueDate = new Date(payment.due_date)
-        return dueDate <= nextWeek
-      }).length || 0
+      try {
+        const { data: pendingPaymentsData, error: pendingPaymentsError } = await supabase
+          .from('provider_payments')
+          .select('amount, due_date')
+          .eq('status', 'pending')
+        
+        if (!pendingPaymentsError && pendingPaymentsData) {
+          pendingPayments = pendingPaymentsData.length;
+          pendingPaymentsAmount = pendingPaymentsData.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+          
+          // Pagos urgentes (vencen en los próximos 7 días)
+          const nextWeek = new Date()
+          nextWeek.setDate(nextWeek.getDate() + 7)
+          
+          pendingPaymentsUrgent = pendingPaymentsData.filter(payment => {
+            const dueDate = new Date(payment.due_date)
+            return dueDate <= nextWeek
+          }).length;
+        }
+      } catch (error) {
+        console.error("Error al obtener pagos pendientes:", error);
+      }
       
       // 9. Obtener datos de delivery (mantenemos esta parte para compatibilidad)
-      const { data: deliveryData, error: deliveryError } = await supabase
-        .from('delivery_orders')
-        .select('id')
-        .gte('created_at', currentWeekStartStr)
-      
-      if (deliveryError) throw deliveryError
-      
-      const totalDeliveryOrders = deliveryData?.length || 0
+      try {
+        const today = new Date()
+        const dayOfWeek = today.getDay() || 7
+        const currentWeekStart = new Date(today)
+        currentWeekStart.setDate(today.getDate() - dayOfWeek + 1)
+        currentWeekStart.setHours(0, 0, 0, 0)
+        const currentWeekStartStr = currentWeekStart.toISOString()
+        
+        const { data: deliveryData, error: deliveryError } = await supabase
+          .from('delivery_orders')
+          .select('id')
+          .gte('created_at', currentWeekStartStr)
+        
+        if (!deliveryError && deliveryData) {
+          totalDeliveryOrders = deliveryData.length;
+        }
+      } catch (error) {
+        console.error("Error al obtener datos de delivery:", error);
+      }
       
       // Retornar todas las métricas
       return {
@@ -434,24 +560,28 @@ export default function Dashboard() {
     [dashboardData, activeEmployeesCount],
   )
 
-  // Componente para mostrar tendencias
-  const TrendIndicator = ({ value }: { value: number }) =>
-    value > 0 ? (
+  // Componente para mostrar tendencias con manejo seguro de valores nulos
+  const TrendIndicator = ({ value }: { value: number }) => {
+    // Asegurarse de que value sea un número
+    const safeValue = typeof value === 'number' ? value : 0;
+    
+    return safeValue > 0 ? (
       <>
         <TrendingUp className="mr-1 h-3 w-3 text-green-500" />
-        <span className="text-green-500">+{value.toFixed(1)}%</span>
+        <span className="text-green-500">+{safeValue.toFixed(1)}%</span>
       </>
     ) : (
       <>
         <TrendingDown className="mr-1 h-3 w-3 text-red-500" />
-        <span className="text-red-500">{value.toFixed(1)}%</span>
+        <span className="text-red-500">{safeValue.toFixed(1)}%</span>
       </>
-    )
+    );
+  };
 
-  // Calcular el cambio porcentual para ventas semanales
+  // Calcular el cambio porcentual para ventas semanales con manejo seguro de valores nulos
   const weeklyRevenueChange = stats.previousWeekRevenue > 0 
     ? ((stats.weeklyRevenue - stats.previousWeekRevenue) / stats.previousWeekRevenue) * 100 
-    : 0
+    : 0;
 
   // Función para forzar la actualización de los datos
   const handleRefresh = () => {
@@ -613,7 +743,10 @@ export default function Dashboard() {
             <CardContent>
               <div className="text-2xl font-bold">
                 <span className={stats.revenueChangePercentage >= 0 ? "text-green-500" : "text-red-500"}>
-                  {stats.revenueChangePercentage >= 0 ? "+" : ""}{stats.revenueChangePercentage.toFixed(1)}%
+                  {stats.revenueChangePercentage >= 0 ? "+" : ""}
+                  {typeof stats.revenueChangePercentage === 'number' 
+                    ? stats.revenueChangePercentage.toFixed(1) 
+                    : "0.0"}%
                 </span>
               </div>
               <div className="flex items-center text-xs text-muted-foreground">
