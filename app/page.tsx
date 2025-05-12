@@ -256,6 +256,7 @@ export default function Dashboard() {
       let payrollExpenses = 0;
       let externalPayrollExpenses = 0;
       let pendingLiquidations = 0;
+      let pendingLiquidationsAmount = 0;
       let pendingClosings = 0;
       let monthlyRevenue = 0;
       let revenueChangePercentage = 0;
@@ -275,6 +276,7 @@ export default function Dashboard() {
         
         if (!alertsError && alertsData) {
           pendingAlerts = alertsData.length;
+          console.log(`Alertas pendientes encontradas: ${pendingAlerts}`);
         }
       } catch (error) {
         console.error("Error al obtener alertas pendientes:", error);
@@ -282,18 +284,48 @@ export default function Dashboard() {
       
       // 2. Calcular gastos de nómina (total de todos los empleados)
       try {
+        // Consulta detallada para obtener todos los salarios
         const { data: employeesData, error: employeesError } = await supabase
           .from('employees')
-          .select('total_salary, local')
+          .select('id, total_salary, base_salary, local')
           .eq('status', 'active')
         
-        if (!employeesError && employeesData) {
-          payrollExpenses = employeesData.reduce((sum, emp) => sum + (Number(emp.total_salary) || 0), 0);
+        if (!employeesError && employeesData && employeesData.length > 0) {
+          // Log para depuración
+          console.log(`Obtenidos ${employeesData.length} empleados activos con datos de salario`);
+          
+          // Calcular el total sumando el campo total_salary o base_salary según disponibilidad
+          payrollExpenses = employeesData.reduce((sum, emp) => {
+            // Usar total_salary si está disponible, de lo contrario usar base_salary
+            const salary = emp.total_salary !== null && emp.total_salary !== undefined 
+              ? Number(emp.total_salary) 
+              : (emp.base_salary !== null && emp.base_salary !== undefined 
+                ? Number(emp.base_salary) 
+                : 0);
+            
+            // Log para depuración de cada empleado
+            console.log(`Empleado ID ${emp.id}: total_salary=${emp.total_salary}, base_salary=${emp.base_salary}, usado=${salary}`);
+            
+            return sum + salary;
+          }, 0);
+          
+          console.log(`Total gastos nómina calculado: ${payrollExpenses}`);
           
           // Calcular gasto en nómina externa (empleados sin local asignado)
           externalPayrollExpenses = employeesData
             .filter(emp => !emp.local || emp.local === '')
-            .reduce((sum, emp) => sum + (Number(emp.total_salary) || 0), 0);
+            .reduce((sum, emp) => {
+              const salary = emp.total_salary !== null && emp.total_salary !== undefined 
+                ? Number(emp.total_salary) 
+                : (emp.base_salary !== null && emp.base_salary !== undefined 
+                  ? Number(emp.base_salary) 
+                  : 0);
+              return sum + salary;
+            }, 0);
+          
+          console.log(`Total gastos nómina externa calculado: ${externalPayrollExpenses}`);
+        } else {
+          console.log("No se encontraron empleados con datos de salario o hubo un error");
         }
       } catch (error) {
         console.error("Error al calcular gastos de nómina:", error);
@@ -301,13 +333,59 @@ export default function Dashboard() {
       
       // 3. Obtener liquidaciones pendientes
       try {
-        const { data: liquidationsData, error: liquidationsError } = await supabase
+        // Intentar primero en la tabla 'pending_liquidations'
+        let { data: liquidationsData, error: liquidationsError } = await supabase
           .from('pending_liquidations')
-          .select('id, employee_id')
+          .select('id, amount')
           .eq('processed', false)
         
-        if (!liquidationsError && liquidationsData) {
+        // Si no existe esa tabla o hay error, intentar en 'liquidations'
+        if (liquidationsError || !liquidationsData) {
+          console.log("Intentando consultar tabla alternativa 'liquidations'");
+          const { data: altData, error: altError } = await supabase
+            .from('liquidations')
+            .select('id, amount, total_amount')
+            .eq('status', 'pending')
+          
+          if (!altError && altData) {
+            liquidationsData = altData;
+          }
+        }
+        
+        // Si aún no hay datos, intentar en 'employee_liquidations'
+        if (!liquidationsData || liquidationsData.length === 0) {
+          console.log("Intentando consultar tabla alternativa 'employee_liquidations'");
+          const { data: empLiqData, error: empLiqError } = await supabase
+            .from('employee_liquidations')
+            .select('id, amount, total')
+            .eq('status', 'pending')
+          
+          if (!empLiqError && empLiqData) {
+            liquidationsData = empLiqData;
+          }
+        }
+        
+        if (liquidationsData && liquidationsData.length > 0) {
           pendingLiquidations = liquidationsData.length;
+          console.log(`Liquidaciones pendientes encontradas: ${pendingLiquidations}`);
+          
+          // Calcular monto total de liquidaciones pendientes
+          pendingLiquidationsAmount = liquidationsData.reduce((sum, item) => {
+            // Intentar usar amount, total_amount o total según disponibilidad
+            const amount = item.amount !== null && item.amount !== undefined 
+              ? Number(item.amount) 
+              : (item.total_amount !== null && item.total_amount !== undefined 
+                ? Number(item.total_amount) 
+                : (item.total !== null && item.total !== undefined 
+                  ? Number(item.total) 
+                  : 0));
+            
+            return sum + amount;
+          }, 0);
+          
+          console.log(`Monto total de liquidaciones pendientes: ${pendingLiquidationsAmount}`);
+        } else {
+          console.log("No se encontraron liquidaciones pendientes");
         }
       } catch (error) {
         console.error("Error al obtener liquidaciones pendientes:", error);
@@ -322,6 +400,7 @@ export default function Dashboard() {
         
         if (!closingsError && closingsData) {
           pendingClosings = closingsData.length;
+          console.log(`Cierres de caja pendientes encontrados: ${pendingClosings}`);
         }
       } catch (error) {
         console.error("Error al obtener cierres de caja pendientes:", error);
@@ -341,6 +420,7 @@ export default function Dashboard() {
         
         if (!currentMonthError && currentMonthData) {
           monthlyRevenue = currentMonthData.reduce((sum, record) => sum + (Number(record.total_sales) || 0), 0);
+          console.log(`Facturación del mes calculada: ${monthlyRevenue}`);
         }
         
         // 6. Calcular comparativa con el mes anterior
@@ -360,6 +440,8 @@ export default function Dashboard() {
           revenueChangePercentage = prevMonthRevenue > 0 
             ? ((monthlyRevenue - prevMonthRevenue) / prevMonthRevenue) * 100 
             : 0;
+          
+          console.log(`Porcentaje de cambio en facturación: ${revenueChangePercentage}%`);
         }
       } catch (error) {
         console.error("Error al calcular facturación:", error);
@@ -470,7 +552,7 @@ export default function Dashboard() {
         payrollExpenses,
         externalPayrollExpenses,
         pendingLiquidations,
-        pendingLiquidationsAmount: 0, // No tenemos este dato
+        pendingLiquidationsAmount,
         pendingClosings,
         monthlyRevenue,
         revenueChangePercentage,
@@ -665,9 +747,9 @@ export default function Dashboard() {
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(stats.payrollExpenses)}</div>
+              <div className="text-2xl font-bold">{formatCurrency(stats.payrollExpenses || 0)}</div>
               <div className="flex items-center text-xs text-muted-foreground">
-                Total empleados en todos los locales
+                Total salarios de {stats.activeEmployees} empleados
               </div>
             </CardContent>
           </Card>
@@ -679,7 +761,7 @@ export default function Dashboard() {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(stats.externalPayrollExpenses)}</div>
+              <div className="text-2xl font-bold">{formatCurrency(stats.externalPayrollExpenses || 0)}</div>
               <div className="flex items-center text-xs text-muted-foreground">
                 Empleados sin local asignado
               </div>
@@ -696,11 +778,17 @@ export default function Dashboard() {
               <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.pendingLiquidations}</div>
+              <div className="text-2xl font-bold">{stats.pendingLiquidations || 0}</div>
               <div className="flex items-center text-xs text-muted-foreground">
-                <Link href="/nomina" className="text-blue-500 hover:underline">
-                  Ver liquidaciones
-                </Link>
+                {stats.pendingLiquidationsAmount > 0 ? (
+                  <>Monto total: {formatCurrency(stats.pendingLiquidationsAmount)}</>
+                ) : (
+                  <>
+                    <Link href="/nomina" className="text-blue-500 hover:underline">
+                      Ver liquidaciones
+                    </Link>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>
