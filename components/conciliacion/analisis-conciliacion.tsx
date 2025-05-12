@@ -2,7 +2,17 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
-import { AlertCircle, ArrowDownUp, ArrowRight, CheckCircle2, CircleDollarSign, FileBarChart, PackageOpen, XCircle } from 'lucide-react'
+import {
+  AlertCircle,
+  ArrowDownUp,
+  ArrowRight,
+  CheckCircle2,
+  CircleDollarSign,
+  FileBarChart,
+  PackageOpen,
+  XCircle,
+} from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 // Tipos para los datos de conciliación
 interface AnalisisConciliacionProps {
@@ -63,6 +73,18 @@ export function AnalisisConciliacion({
     }).format(value)
   }
 
+  // Formatear valores monetarios con notación abreviada
+  const formatAbbreviatedCurrency = (value: number) => {
+    const absValue = Math.abs(value)
+    if (absValue >= 1000000) {
+      return `${(value / 1000000).toFixed(2)}M`
+    } else if (absValue >= 1000) {
+      return `${(value / 1000).toFixed(1)}K`
+    } else {
+      return value.toFixed(2)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <Card>
@@ -84,12 +106,30 @@ export function AnalisisConciliacion({
                     <CardTitle className="text-sm font-medium">Stock</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex items-center justify-between">
-                      <div className="text-2xl font-bold">{formatCurrency(totalStockDiscrepancy)}</div>
-                      <PackageOpen
-                        className={`h-5 w-5 ${totalStockDiscrepancy < 0 ? "text-red-500" : totalStockDiscrepancy > 0 ? "text-green-500" : "text-gray-500"}`}
-                      />
-                    </div>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center justify-between">
+                            <div className="text-2xl font-bold">
+                              {totalStockDiscrepancy < 0 ? "-" : ""}$
+                              {formatAbbreviatedCurrency(Math.abs(totalStockDiscrepancy))}
+                            </div>
+                            <PackageOpen
+                              className={`h-5 w-5 ${
+                                totalStockDiscrepancy < 0
+                                  ? "text-red-500"
+                                  : totalStockDiscrepancy > 0
+                                    ? "text-green-500"
+                                    : "text-gray-500"
+                              }`}
+                            />
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{formatCurrency(totalStockDiscrepancy)}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                     <p className="text-xs text-muted-foreground mt-1">
                       {totalStockDiscrepancy < 0
                         ? "Faltante de stock"
@@ -105,12 +145,30 @@ export function AnalisisConciliacion({
                     <CardTitle className="text-sm font-medium">Caja</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex items-center justify-between">
-                      <div className="text-2xl font-bold">{formatCurrency(totalCashDiscrepancy)}</div>
-                      <CircleDollarSign
-                        className={`h-5 w-5 ${totalCashDiscrepancy < 0 ? "text-red-500" : totalCashDiscrepancy > 0 ? "text-green-500" : "text-gray-500"}`}
-                      />
-                    </div>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center justify-between">
+                            <div className="text-2xl font-bold">
+                              {totalCashDiscrepancy < 0 ? "-" : ""}$
+                              {formatAbbreviatedCurrency(Math.abs(totalCashDiscrepancy))}
+                            </div>
+                            <CircleDollarSign
+                              className={`h-5 w-5 ${
+                                totalCashDiscrepancy < 0
+                                  ? "text-red-500"
+                                  : totalCashDiscrepancy > 0
+                                    ? "text-green-500"
+                                    : "text-gray-500"
+                              }`}
+                            />
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{formatCurrency(totalCashDiscrepancy)}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                     <p className="text-xs text-muted-foreground mt-1">
                       {totalCashDiscrepancy < 0
                         ? "Faltante de caja"
@@ -126,12 +184,29 @@ export function AnalisisConciliacion({
                     <CardTitle className="text-sm font-medium">Balance</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex items-center justify-between">
-                      <div className="text-2xl font-bold">{formatCurrency(balanceTotal)}</div>
-                      <ArrowDownUp
-                        className={`h-5 w-5 ${balanceTotal < 0 ? "text-red-500" : balanceTotal > 0 ? "text-green-500" : "text-blue-500"}`}
-                      />
-                    </div>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center justify-between">
+                            <div className="text-2xl font-bold">
+                              {balanceTotal < 0 ? "-" : ""}${formatAbbreviatedCurrency(Math.abs(balanceTotal))}
+                            </div>
+                            <ArrowDownUp
+                              className={`h-5 w-5 ${
+                                balanceTotal < 0
+                                  ? "text-red-500"
+                                  : balanceTotal > 0
+                                    ? "text-green-500"
+                                    : "text-blue-500"
+                              }`}
+                            />
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{formatCurrency(balanceTotal)}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                     <p className="text-xs text-muted-foreground mt-1">{compensationStatus.message}</p>
                   </CardContent>
                 </Card>
