@@ -12,6 +12,7 @@ import { StockDiscrepancyTable } from "@/components/conciliacion/stock-discrepan
 import { CashDiscrepancyTable } from "@/components/conciliacion/cash-discrepancy-table"
 import { GenerateDiscrepanciesButton } from "@/components/conciliacion/generate-discrepancies-button"
 import { DiscrepancyHistory } from "@/components/conciliacion/discrepancy-history"
+import { AnalisisConciliacion } from "@/components/conciliacion/analisis-conciliacion"
 import { ReconciliationService } from "@/lib/reconciliation-service"
 import { toast } from "@/components/ui/use-toast"
 
@@ -49,11 +50,13 @@ export function LocalDetailContent({ localId, initialLocalName }: LocalDetailCon
   const [stockDiscrepancies, setStockDiscrepancies] = useState<any[]>([])
   const [cashDiscrepancies, setCashDiscrepancies] = useState<any[]>([])
   const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false)
+  const [activeTab, setActiveTab] = useState("stock")
 
   // Cargar parámetros de la URL si existen
   useEffect(() => {
     const dateParam = searchParams.get("date")
     const shiftParam = searchParams.get("shift")
+    const tabParam = searchParams.get("tab")
 
     if (dateParam) {
       setSelectedDate(new Date(dateParam))
@@ -61,6 +64,10 @@ export function LocalDetailContent({ localId, initialLocalName }: LocalDetailCon
 
     if (shiftParam) {
       setSelectedShift(shiftParam)
+    }
+
+    if (tabParam && ["stock", "caja", "historial", "analisis"].includes(tabParam)) {
+      setActiveTab(tabParam)
     }
   }, [searchParams])
 
@@ -185,6 +192,30 @@ export function LocalDetailContent({ localId, initialLocalName }: LocalDetailCon
     })
   }
 
+  // Formatear los datos para el componente de análisis
+  const getFormattedStockDiscrepancies = () => {
+    return stockDiscrepancies.map((item) => ({
+      id: item.id,
+      productId: item.productId,
+      productName: item.productName,
+      expectedQuantity: item.expectedQuantity,
+      actualQuantity: item.actualQuantity,
+      quantityDifference: item.difference,
+      unitPrice: item.unitPrice,
+      totalValue: item.totalValue || item.difference * item.unitPrice,
+    }))
+  }
+
+  const getFormattedCashDiscrepancies = () => {
+    return cashDiscrepancies.map((item) => ({
+      id: item.id,
+      category: item.category || item.paymentMethod,
+      expectedAmount: item.expectedAmount,
+      actualAmount: item.actualAmount,
+      difference: item.difference,
+    }))
+  }
+
   return (
     <div className="container mx-auto py-6 space-y-6">
       {/* Encabezado y controles */}
@@ -295,11 +326,12 @@ export function LocalDetailContent({ localId, initialLocalName }: LocalDetailCon
       </div>
 
       {/* Contenido principal */}
-      <Tabs defaultValue="stock">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="stock">Discrepancias de Stock</TabsTrigger>
           <TabsTrigger value="caja">Discrepancias de Caja</TabsTrigger>
           <TabsTrigger value="historial">Historial</TabsTrigger>
+          <TabsTrigger value="analisis">Análisis</TabsTrigger>
         </TabsList>
 
         {/* Pestaña de Discrepancias de Stock */}
@@ -336,6 +368,32 @@ export function LocalDetailContent({ localId, initialLocalName }: LocalDetailCon
               <DiscrepancyHistory localId={localId} />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Pestaña de Análisis */}
+        <TabsContent value="analisis">
+          <div className="mt-4">
+            {stockDiscrepancies.length > 0 || cashDiscrepancies.length > 0 ? (
+              <AnalisisConciliacion
+                stockDiscrepancies={getFormattedStockDiscrepancies()}
+                cashDiscrepancies={getFormattedCashDiscrepancies()}
+                fecha={selectedDate.toISOString().split("T")[0]}
+                local={localInfo.name}
+                turno={selectedShift}
+              />
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Análisis de Conciliación</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-center py-4 text-muted-foreground">
+                    No hay datos de discrepancias para analizar en la fecha y turno seleccionados.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </TabsContent>
       </Tabs>
     </div>

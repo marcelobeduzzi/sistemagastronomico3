@@ -42,6 +42,9 @@ interface AnalisisConciliacionProps {
 
   // Local (opcional)
   local?: string
+
+  // Turno (opcional)
+  turno?: string
 }
 
 export function AnalisisConciliacion({
@@ -49,6 +52,7 @@ export function AnalisisConciliacion({
   cashDiscrepancies,
   fecha,
   local,
+  turno,
 }: AnalisisConciliacionProps) {
   // Calcular totales
   const totalStockDiscrepancy = stockDiscrepancies.reduce((sum, item) => sum + item.totalValue, 0)
@@ -85,15 +89,26 @@ export function AnalisisConciliacion({
     }
   }
 
+  // Construir título contextualizado
+  const buildContextTitle = () => {
+    let title = "Análisis de Conciliación"
+    if (local) {
+      title += ` - ${local}`
+    }
+    if (turno && turno !== "todos") {
+      title += ` - Turno ${turno}`
+    }
+    return title
+  }
+
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Análisis de Conciliación</CardTitle>
+          <CardTitle>{buildContextTitle()}</CardTitle>
           <CardDescription>
             Relación entre discrepancias de stock y caja
             {fecha && ` - ${new Date(fecha).toLocaleDateString("es-AR")}`}
-            {local && ` - ${local}`}
           </CardDescription>
         </CardHeader>
         <CardContent>
