@@ -66,13 +66,56 @@ function removeDuplicateCashDiscrepancies(cashDiscrepancies: any[]) {
   const uniqueMap = new Map()
 
   cashDiscrepancies.forEach((item) => {
-    const key = `${item.category || item.payment_method || ""}-${item.expectedAmount || item.expected_amount || 0}-${item.actualAmount || item.actual_amount || 0}`
+    const key = `${item.category || item.payment_method || ""}-${item.expectedAmount || item.expected_amount || 0}-${
+      item.actualAmount || item.actual_amount || 0
+    }`
     if (!uniqueMap.has(key)) {
       uniqueMap.set(key, item)
     }
   })
 
   return Array.from(uniqueMap.values())
+}
+
+// Función para eliminar duplicados en las discrepancias de stock
+function removeDuplicateStockDiscrepancies(stockDiscrepancies: any[]) {
+  const uniqueMap = new Map()
+
+  stockDiscrepancies.forEach((item) => {
+    const key = `${item.productName || item.product_name || ""}-${item.expectedQuantity || item.expected_quantity || 0}-${
+      item.actualQuantity || item.actual_quantity || 0
+    }`
+    if (!uniqueMap.has(key)) {
+      uniqueMap.set(key, item)
+    }
+  })
+
+  return Array.from(uniqueMap.values())
+}
+
+// Función para corregir el signo del valor total en las discrepancias de stock
+function correctStockTotalValue(stockDiscrepancies: any[]) {
+  return stockDiscrepancies.map((item) => {
+    const difference = item.difference || item.quantity_difference || 0
+    const unitPrice = item.unitPrice || item.unit_price || 0
+
+    // Si no hay un valor total explícito, calcularlo basado en la diferencia y el precio unitario
+    let totalValue = item.totalValue || item.total_value
+
+    if (totalValue === undefined) {
+      totalValue = difference * unitPrice
+    } else {
+      // Si hay un valor total pero el signo no coincide con la diferencia, corregirlo
+      if ((difference < 0 && totalValue > 0) || (difference > 0 && totalValue < 0)) {
+        totalValue = -totalValue
+      }
+    }
+
+    return {
+      ...item,
+      totalValue,
+    }
+  })
 }
 
 export default function LocalDetailPage() {
@@ -83,6 +126,7 @@ export default function LocalDetailPage() {
   const [selectedShift, setSelectedShift] = useState<string>("todos")
   const [localInfo, setLocalInfo] = useState<any>(null)
   const [stockDiscrepancies, setStockDiscrepancies] = useState<any[]>([])
+  const [uniqueStockDiscrepancies, setUniqueStockDiscrepancies] = useState<any[]>([])
   const [cashDiscrepancies, setCashDiscrepancies] = useState<any[]>([])
   const [uniqueCashDiscrepancies, setUniqueCashDiscrepancies] = useState<any[]>([])
   const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false)
@@ -128,6 +172,20 @@ export default function LocalDetailPage() {
       )
     }
   }, [cashDiscrepancies])
+
+  // Procesar discrepancias de stock para eliminar duplicados y corregir valores
+  useEffect(() => {
+    const uniqueDiscrepancies = removeDuplicateStockDiscrepancies(stockDiscrepancies)
+    const correctedDiscrepancies = correctStockTotalValue(uniqueDiscrepancies)
+    setUniqueStockDiscrepancies(correctedDiscrepancies)
+
+    // Log para depuración
+    if (stockDiscrepancies.length > 0 && uniqueDiscrepancies.length < stockDiscrepancies.length) {
+      console.log(
+        `Se eliminaron ${stockDiscrepancies.length - uniqueDiscrepancies.length} discrepancias de stock duplicadas`,
+      )
+    }
+  }, [stockDiscrepancies])
 
   // Buscar la última fecha con discrepancias
   const loadLastDiscrepancyDate = async (localId: number) => {
@@ -240,7 +298,7 @@ export default function LocalDetailPage() {
 
   // Formatear los datos para el componente de análisis
   const getFormattedStockDiscrepancies = () => {
-    return stockDiscrepancies.map((item) => ({
+    return uniqueStockDiscrepancies.map((item) => ({
       id: item.id,
       productId: item.productId || item.product_id,
       productName: item.productName || item.product_name,
@@ -248,7 +306,7 @@ export default function LocalDetailPage() {
       actualQuantity: item.actualQuantity || item.actual_quantity,
       quantityDifference: item.quantityDifference || item.quantity_difference || item.difference,
       unitPrice: item.unitPrice || item.unit_price,
-      totalValue: item.totalValue || item.total_value || item.difference * (item.unitPrice || item.unit_price),
+      totalValue: item.totalValue, // Ya está corregido
     }))
   }
 
@@ -263,8 +321,12 @@ export default function LocalDetailPage() {
   }
 
   // Calcular totales con los datos únicos
+  const calculateTotalStockDiscrepancy = () => {
+    return uniqueStockDiscrepancies.reduce((sum, item) => sum + (item.totalValue || 0), 0)
+  }
+
   const calculateTotalCashDiscrepancy = () => {
-    return uniqueCashDiscrepancies.reduce((sum, item) => sum + Math.abs(item.difference || 0), 0)
+    return uniqueCashDiscrepancies.reduce((sum, item) => sum + (item.difference || 0), 0)
   }
 
   if (!localInfo) {
@@ -342,12 +404,15 @@ export default function LocalDetailPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">Total Discrepancias Stock</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stockDiscrepancies.length}</div>
+              <div className="text-2xl font-bold">{uniqueStockDiscrepancies.length}</div>
               <p className="text-xs text-muted-foreground">
-                Valor: $
-                {stockDiscrepancies
-                  .reduce((sum, item) => sum + (item.totalValue || item.total_value || 0), 0)
-                  .toLocaleString()}
+                Valor: ${Math.abs(calculateTotalStockDiscrepancy()).toLocaleString()}
+                {calculateTotalStockDiscrepancy() < 0 ? " (faltante)" : " (sobrante)"}
+                {stockDiscrepancies.length !== uniqueStockDiscrepancies.length && (
+                  <span className="ml-1 text-xs text-amber-600">
+                    (Se eliminaron {stockDiscrepancies.length - uniqueStockDiscrepancies.length} duplicados)
+                  </span>
+                )}
               </p>
             </CardContent>
           </Card>
@@ -359,7 +424,8 @@ export default function LocalDetailPage() {
             <CardContent>
               <div className="text-2xl font-bold">{uniqueCashDiscrepancies.length}</div>
               <p className="text-xs text-muted-foreground">
-                Valor: ${calculateTotalCashDiscrepancy().toLocaleString()}
+                Valor: ${Math.abs(calculateTotalCashDiscrepancy()).toLocaleString()}
+                {calculateTotalCashDiscrepancy() < 0 ? " (faltante)" : " (sobrante)"}
                 {cashDiscrepancies.length !== uniqueCashDiscrepancies.length && (
                   <span className="ml-1 text-xs text-amber-600">
                     (Se eliminaron {cashDiscrepancies.length - uniqueCashDiscrepancies.length} duplicados)
@@ -374,10 +440,10 @@ export default function LocalDetailPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">Producto Más Afectado</CardTitle>
             </CardHeader>
             <CardContent>
-              {stockDiscrepancies.length > 0 ? (
+              {uniqueStockDiscrepancies.length > 0 ? (
                 (() => {
                   // Ordenar discrepancias por diferencia absoluta (de mayor a menor)
-                  const sortedDiscrepancies = [...stockDiscrepancies].sort(
+                  const sortedDiscrepancies = [...uniqueStockDiscrepancies].sort(
                     (a, b) =>
                       Math.abs(b.difference || b.quantity_difference || 0) -
                       Math.abs(a.difference || a.quantity_difference || 0),
@@ -417,9 +483,15 @@ export default function LocalDetailPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Discrepancias de Stock</CardTitle>
+                {stockDiscrepancies.length !== uniqueStockDiscrepancies.length && (
+                  <p className="text-sm text-amber-600 mt-1">
+                    Se detectaron y eliminaron {stockDiscrepancies.length - uniqueStockDiscrepancies.length} registros
+                    duplicados.
+                  </p>
+                )}
               </CardHeader>
               <CardContent>
-                <StockDiscrepancyTable discrepancies={stockDiscrepancies} isLoading={isLoading} />
+                <StockDiscrepancyTable discrepancies={uniqueStockDiscrepancies} isLoading={isLoading} />
               </CardContent>
             </Card>
           </TabsContent>
@@ -463,7 +535,7 @@ export default function LocalDetailPage() {
           {/* Pestaña de Análisis */}
           <TabsContent value="analisis">
             <div className="mt-4">
-              {stockDiscrepancies.length > 0 || uniqueCashDiscrepancies.length > 0 ? (
+              {uniqueStockDiscrepancies.length > 0 || uniqueCashDiscrepancies.length > 0 ? (
                 <AnalisisConciliacion
                   stockDiscrepancies={getFormattedStockDiscrepancies()}
                   cashDiscrepancies={getFormattedCashDiscrepancies()}
