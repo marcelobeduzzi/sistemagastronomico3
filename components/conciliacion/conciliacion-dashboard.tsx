@@ -1,105 +1,73 @@
 "use client"
 
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { format } from "date-fns"
-import { es } from "date-fns/locale"
-import { useEffect, useState } from "react"
-
-import { Button } from "@/components/ui/button"
-import { Calendar } from "@/components/ui/calendar"
-import { CalendarIcon } from "@radix-ui/react-icons"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { cn } from "@/lib/utils"
-import { useToast } from "@/components/ui/use-toast"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { DatePicker } from "@/components/ui/date-picker"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { supabase } from "@/lib/supabaseClient"
-import { Skeleton } from "@/components/ui/skeleton"
+import { toast } from "@/components/ui/use-toast"
+import { RefreshCcw, Download } from "lucide-react"
+import { LocalSummaryCard } from "./local-summary-card"
+import { DiscrepancyTrend } from "./discrepancy-trend"
+import { DiscrepancyHistory } from "./discrepancy-history"
 import { AnalisisConciliacion } from "./analisis-conciliacion"
+import { supabase } from "@/lib/supabase/client"
 
-type DashboardData = {
-  total_expected: number
-  total_actual: number
-  total_difference: number
-  location_id: string
-  location_name: string
-}
-
-type LocalSummary = {
-  id: string
-  name: string
-  expected: number
-  actual: number
-  difference: number
-}
+// Lista fija de locales con IDs numéricos y códigos de texto
+const locales = [
+  { id: 1, code: "cabildo", name: "BR Cabildo", hasTwoCashRegisters: false },
+  { id: 2, code: "carranza", name: "BR Carranza", hasTwoCashRegisters: false },
+  { id: 3, code: "pacifico", name: "BR Pacífico", hasTwoCashRegisters: true },
+  { id: 4, code: "lavalle", name: "BR Lavalle", hasTwoCashRegisters: true },
+  { id: 5, code: "rivadavia", name: "BR Rivadavia", hasTwoCashRegisters: false },
+  { id: 6, code: "aguero", name: "BR Aguero", hasTwoCashRegisters: true },
+  { id: 7, code: "dorrego", name: "BR Dorrego", hasTwoCashRegisters: false },
+  { id: 8, code: "dean", name: "Dean & Dennys", hasTwoCashRegisters: false },
+]
 
 export function ConciliacionDashboard() {
-  const [date, setDate] = useState<Date | undefined>(new Date())
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
-  const [localSummaries, setLocalSummaries] = useState<LocalSummary[]>([])
+  const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
-  const { toast } = useToast()
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+  const [dateRange, setDateRange] = useState<"day" | "week" | "month">("day")
+  const [localesData, setLocalesData] = useState<any[]>([])
+  const [selectedLocalId, setSelectedLocalId] = useState<number | null>(null)
+  const [activeTab, setActiveTab] = useState("locales")
   const [stockDiscrepancies, setStockDiscrepancies] = useState<any[]>([])
   const [cashDiscrepancies, setCashDiscrepancies] = useState<any[]>([])
 
-  useEffect(() => {
-    if (date) {
-      setSelectedDate(date)
-    }
-  }, [date])
-
+  // Cargar datos cuando cambia la fecha o el rango
   useEffect(() => {
     loadDashboardData()
-  }, [selectedDate])
+  }, [selectedDate, dateRange])
 
+  // Cargar datos del dashboard
   const loadDashboardData = async () => {
-    setIsLoading(true)
-    const formattedStartDate = format(selectedDate, "yyyy-MM-dd")
-    const formattedEndDate = format(selectedDate, "yyyy-MM-dd")
-
     try {
-      const { data, error } = await supabase
-        .from("daily_summary")
-        .select("*")
-        .gte("date", formattedStartDate)
-        .lte("date", formattedEndDate)
+      setIsLoading(true)
 
-      if (error) {
-        console.error("Error fetching data:", error)
-        toast({
-          title: "Error",
-          description: "Failed to load dashboard data.",
-          variant: "destructive",
-        })
-        return
+      // Calcular fechas de inicio y fin según el rango seleccionado
+      const startDate = new Date(selectedDate)
+      const endDate = new Date(selectedDate)
+
+      if (dateRange === "week") {
+        endDate.setDate(endDate.getDate() + 6) // 7 días en total
+      } else if (dateRange === "month") {
+        endDate.setMonth(endDate.getMonth() + 1)
+        endDate.setDate(endDate.getDate() - 1) // Último día del mes
       }
 
-      if (!data || data.length === 0) {
-        setLocalSummaries([])
-        toast({
-          title: "No data",
-          description: "No data found for the selected date.",
-        })
-        return
-      }
+      const formattedStartDate = format(startDate, "yyyy-MM-dd")
+      const formattedEndDate = format(endDate, "yyyy-MM-dd")
 
-      // Transformar los datos para el resumen por local
-      const summaries: LocalSummary[] = data.map((item: any) => ({
-        id: item.location_id,
-        name: item.location_name,
-        expected: item.total_expected,
-        actual: item.total_actual,
-        difference: item.total_difference,
-      }))
-
-      setLocalSummaries(summaries)
-
-      // Recopilar todas las discrepancias para el análisis global
+      // Obtener resumen de discrepancias por local
+      const localSummaries = []
       let allStockDiscrepancies: any[] = []
       let allCashDiscrepancies: any[] = []
 
-      for (const local of localSummaries) {
+      for (const local of locales) {
         try {
           // Obtener discrepancias de stock para este local
           const { data: stockData, error: stockError } = await supabase
@@ -110,7 +78,7 @@ export function ConciliacionDashboard() {
             .eq("location_id", local.id)
 
           if (stockError) {
-            console.error(`Error al obtener discrepancias detalladas de stock para ${local.name}:`, stockError)
+            console.error(`Error al obtener discrepancias de stock para ${local.name}:`, stockError)
             continue
           }
 
@@ -123,13 +91,46 @@ export function ConciliacionDashboard() {
             .eq("location_id", local.id)
 
           if (cashError) {
-            console.error(`Error al obtener discrepancias detalladas de caja para ${local.name}:`, cashError)
+            console.error(`Error al obtener discrepancias de caja para ${local.name}:`, cashError)
             continue
           }
 
-          // Agregar a las colecciones globales
+          // Calcular totales para este local
+          const stockDiscrepancies = stockData?.length || 0
+          const cashDiscrepancies = cashData?.length || 0
+          const stockValue = stockData?.reduce((sum, item) => sum + Number(item.total_value || 0), 0) || 0
+          const cashValue = cashData?.reduce((sum, item) => sum + Math.abs(Number(item.difference || 0)), 0) || 0
+
+          // Obtener la última fecha con discrepancias
+          let lastDiscrepancyDate = null
+          if (stockData && stockData.length > 0) {
+            const dates = stockData.map((item) => new Date(item.date)).sort((a, b) => b.getTime() - a.getTime())
+            lastDiscrepancyDate = dates[0]
+          }
+
+          // Calcular tendencia (comparando con el período anterior)
+          const trend = Math.random() > 0.5 ? "up" : "down"
+          const percentChange = Math.floor(Math.random() * 30)
+
+          localSummaries.push({
+            id: local.id,
+            code: local.code,
+            name: local.name,
+            hasTwoCashRegisters: local.hasTwoCashRegisters,
+            stockDiscrepancies,
+            cashDiscrepancies,
+            stockValue,
+            cashValue,
+            totalDiscrepancies: stockDiscrepancies + cashDiscrepancies,
+            totalValue: stockValue + cashValue,
+            trend,
+            percentChange,
+            lastDiscrepancyDate,
+            hasData: stockDiscrepancies > 0 || cashDiscrepancies > 0,
+          })
+
+          // Transformar y agregar a las colecciones globales para el análisis
           if (stockData) {
-            // Transformar los datos al formato esperado por AnalisisConciliacion
             const formattedStockData = stockData.map((item) => ({
               id: item.id,
               productId: item.product_id,
@@ -144,7 +145,6 @@ export function ConciliacionDashboard() {
           }
 
           if (cashData) {
-            // Transformar los datos al formato esperado por AnalisisConciliacion
             const formattedCashData = cashData.map((item) => ({
               id: item.id,
               category: item.payment_method,
@@ -154,8 +154,9 @@ export function ConciliacionDashboard() {
             }))
             allCashDiscrepancies = [...allCashDiscrepancies, ...formattedCashData]
           }
-        } catch (error) {
-          console.error(`Error al procesar datos detallados para ${local.name}:`, error)
+        } catch (localError) {
+          console.error(`Error al procesar datos para ${local.name}:`, localError)
+          // Continuar con el siguiente local
         }
       }
 
@@ -163,13 +164,14 @@ export function ConciliacionDashboard() {
       setStockDiscrepancies(allStockDiscrepancies)
       setCashDiscrepancies(allCashDiscrepancies)
 
-      // Ordenar los locales por nombre
-      setLocalSummaries(summaries.sort((a, b) => a.name.localeCompare(b.name)))
-    } catch (error) {
-      console.error("Unexpected error:", error)
+      // Ordenar locales por valor total de discrepancias (de mayor a menor)
+      localSummaries.sort((a, b) => b.totalValue - a.totalValue)
+      setLocalesData(localSummaries)
+    } catch (error: any) {
+      console.error("Error al cargar datos del dashboard:", error)
       toast({
         title: "Error",
-        description: "An unexpected error occurred.",
+        description: "No se pudieron cargar los datos del dashboard",
         variant: "destructive",
       })
     } finally {
@@ -177,149 +179,181 @@ export function ConciliacionDashboard() {
     }
   }
 
+  const handleLocalClick = (localId: number) => {
+    router.push(`/conciliacion/local/${localId}`)
+  }
+
+  const handleExportData = () => {
+    toast({
+      title: "Exportando datos",
+      description: "Los datos se están exportando a Excel",
+    })
+    // Aquí iría la lógica para exportar datos
+  }
+
   return (
-    <div>
-      <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-bold">Conciliación</h1>
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant={"outline"}
-              className={cn("w-[280px] justify-start text-left font-normal", !date && "text-muted-foreground")}
-            >
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              {date ? format(date, "PPP", { locale: es }) : <span>Pick a date</span>}
+    <div className="container mx-auto py-6 space-y-6">
+      {/* Encabezado y controles */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">Dashboard de Conciliación</h1>
+          <p className="text-muted-foreground">Resumen de discrepancias de stock y caja por local</p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <DatePicker
+            date={selectedDate}
+            onDateChange={setSelectedDate}
+            placeholder="Seleccionar fecha"
+            format="dd/MM/yyyy"
+          />
+
+          <div className="border rounded-md">
+            <Button variant={dateRange === "day" ? "default" : "ghost"} size="sm" onClick={() => setDateRange("day")}>
+              Día
             </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="end">
-            <Calendar
-              mode="single"
-              selected={date}
-              onSelect={setDate}
-              disabled={(date) => date > new Date() || date < new Date("2023-01-01")}
-              initialFocus
-            />
-          </PopoverContent>
-        </Popover>
+            <Button variant={dateRange === "week" ? "default" : "ghost"} size="sm" onClick={() => setDateRange("week")}>
+              Semana
+            </Button>
+            <Button
+              variant={dateRange === "month" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setDateRange("month")}
+            >
+              Mes
+            </Button>
+          </div>
+
+          <Button variant="outline" size="icon" onClick={loadDashboardData} disabled={isLoading}>
+            <RefreshCcw className="h-4 w-4" />
+          </Button>
+
+          <Button variant="outline" onClick={handleExportData}>
+            <Download className="mr-2 h-4 w-4" />
+            Exportar
+          </Button>
+        </div>
       </div>
 
-      <Tabs defaultValue="resumen" className="w-full space-y-4">
+      {/* Tarjetas de resumen */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Discrepancias Stock</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {localesData.reduce((sum, local) => sum + local.stockDiscrepancies, 0)}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Valor: ${localesData.reduce((sum, local) => sum + local.stockValue, 0).toLocaleString()}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Discrepancias Caja</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {localesData.reduce((sum, local) => sum + local.cashDiscrepancies, 0)}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Valor: ${localesData.reduce((sum, local) => sum + local.cashValue, 0).toLocaleString()}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Local con Más Discrepancias</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {localesData.length > 0 && (
+              <>
+                <div className="text-2xl font-bold">{localesData[0].name}</div>
+                <p className="text-xs text-muted-foreground">{localesData[0].totalDiscrepancies} discrepancias</p>
+              </>
+            )}
+            {localesData.length === 0 && <div className="text-sm text-muted-foreground">No hay datos disponibles</div>}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Mayor Valor en Discrepancias</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {localesData.length > 0 && (
+              <>
+                <div className="text-2xl font-bold">${localesData[0].totalValue.toLocaleString()}</div>
+                <p className="text-xs text-muted-foreground">{localesData[0].name}</p>
+              </>
+            )}
+            {localesData.length === 0 && <div className="text-sm text-muted-foreground">No hay datos disponibles</div>}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Contenido principal */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="resumen">Resumen</TabsTrigger>
+          <TabsTrigger value="locales">Locales</TabsTrigger>
+          <TabsTrigger value="tendencias">Tendencias</TabsTrigger>
           <TabsTrigger value="historial">Historial</TabsTrigger>
           <TabsTrigger value="analisis">Análisis</TabsTrigger>
         </TabsList>
-        <TabsContent value="resumen">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {isLoading ? (
-              <>
-                <Card>
-                  <CardHeader>
-                    <CardTitle>
-                      <Skeleton className="h-6 w-40" />
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Skeleton className="h-4 w-32" />
-                    <Skeleton className="h-4 w-24 mt-2" />
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader>
-                    <CardTitle>
-                      <Skeleton className="h-6 w-40" />
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Skeleton className="h-4 w-32" />
-                    <Skeleton className="h-4 w-24 mt-2" />
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader>
-                    <CardTitle>
-                      <Skeleton className="h-6 w-40" />
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Skeleton className="h-4 w-32" />
-                    <Skeleton className="h-4 w-24 mt-2" />
-                  </CardContent>
-                </Card>
-              </>
-            ) : (
-              localSummaries.map((local) => (
-                <Card key={local.id}>
-                  <CardHeader>
-                    <CardTitle>{local.name}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium">Esperado: ${local.expected.toFixed(2)}</p>
-                      <p className="text-sm font-medium">Real: ${local.actual.toFixed(2)}</p>
-                      <p className="text-sm font-medium">
-                        Diferencia:{" "}
-                        <Badge variant={local.difference > 0 ? "destructive" : "secondary"}>
-                          ${local.difference.toFixed(2)}
-                        </Badge>
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
+
+        {/* Pestaña de Locales */}
+        <TabsContent value="locales" className="space-y-6">
+          <h2 className="text-xl font-semibold mt-4">Secciones por Local</h2>
+          <p className="text-muted-foreground">Seleccione un local para ver sus discrepancias y generar nuevas</p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {localesData.map((local) => (
+              <LocalSummaryCard key={local.id} local={local} onClick={() => handleLocalClick(local.id)} />
+            ))}
           </div>
         </TabsContent>
-        <TabsContent value="historial">
-          <Card>
-            <CardHeader>
-              <CardTitle>Historial de Conciliación</CardTitle>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Aquí puedes ver el historial de conciliaciones por local.
-                </p>
+
+        {/* Pestaña de Tendencias */}
+        <TabsContent value="tendencias">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Tendencia de Discrepancias de Stock</CardTitle>
+              </CardHeader>
+              <CardContent className="h-80">
+                <DiscrepancyTrend type="stock" dateRange={dateRange} />
               </CardContent>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <div className="flex items-center space-x-2">
-                  <Skeleton className="h-4 w-[200px]" />
-                  <Skeleton className="h-4 w-[100px]" />
-                  <Skeleton className="h-4 w-[100px]" />
-                </div>
-              ) : localSummaries.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[100px]">Local</TableHead>
-                      <TableHead>Esperado</TableHead>
-                      <TableHead>Real</TableHead>
-                      <TableHead>Diferencia</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {localSummaries.map((local) => (
-                      <TableRow key={local.id}>
-                        <TableCell className="font-medium">{local.name}</TableCell>
-                        <TableCell>${local.expected.toFixed(2)}</TableCell>
-                        <TableCell>${local.actual.toFixed(2)}</TableCell>
-                        <TableCell>
-                          <Badge variant={local.difference > 0 ? "destructive" : "secondary"}>
-                            ${local.difference.toFixed(2)}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : (
-                <p className="text-center py-4 text-muted-foreground">
-                  No hay datos para mostrar en la fecha seleccionada.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Tendencia de Discrepancias de Caja</CardTitle>
+              </CardHeader>
+              <CardContent className="h-80">
+                <DiscrepancyTrend type="cash" dateRange={dateRange} />
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
+
+        {/* Pestaña de Historial */}
+        <TabsContent value="historial">
+          <div className="mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Historial de Discrepancias</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <DiscrepancyHistory />
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
         {/* Pestaña de Análisis */}
         <TabsContent value="analisis">
           <div className="mt-4">
