@@ -61,6 +61,20 @@ const normalizeDate = (date: Date | string | null): string => {
   return format(date, "yyyy-MM-dd")
 }
 
+// Función para eliminar duplicados en las discrepancias de caja
+function removeDuplicateCashDiscrepancies(cashDiscrepancies: any[]) {
+  const uniqueMap = new Map()
+
+  cashDiscrepancies.forEach((item) => {
+    const key = `${item.category || item.payment_method || ""}-${item.expectedAmount || item.expected_amount || 0}-${item.actualAmount || item.actual_amount || 0}`
+    if (!uniqueMap.has(key)) {
+      uniqueMap.set(key, item)
+    }
+  })
+
+  return Array.from(uniqueMap.values())
+}
+
 export default function LocalDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -70,6 +84,7 @@ export default function LocalDetailPage() {
   const [localInfo, setLocalInfo] = useState<any>(null)
   const [stockDiscrepancies, setStockDiscrepancies] = useState<any[]>([])
   const [cashDiscrepancies, setCashDiscrepancies] = useState<any[]>([])
+  const [uniqueCashDiscrepancies, setUniqueCashDiscrepancies] = useState<any[]>([])
   const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false)
   const [activeTab, setActiveTab] = useState("stock")
 
@@ -100,6 +115,19 @@ export default function LocalDetailPage() {
       loadLocalData(localInfo.id)
     }
   }, [selectedDate, selectedShift, localInfo, hasLoadedInitialData])
+
+  // Procesar discrepancias de caja para eliminar duplicados
+  useEffect(() => {
+    const uniqueDiscrepancies = removeDuplicateCashDiscrepancies(cashDiscrepancies)
+    setUniqueCashDiscrepancies(uniqueDiscrepancies)
+
+    // Log para depuración
+    if (cashDiscrepancies.length > 0 && uniqueDiscrepancies.length < cashDiscrepancies.length) {
+      console.log(
+        `Se eliminaron ${cashDiscrepancies.length - uniqueDiscrepancies.length} discrepancias de caja duplicadas`,
+      )
+    }
+  }, [cashDiscrepancies])
 
   // Buscar la última fecha con discrepancias
   const loadLastDiscrepancyDate = async (localId: number) => {
@@ -225,13 +253,18 @@ export default function LocalDetailPage() {
   }
 
   const getFormattedCashDiscrepancies = () => {
-    return cashDiscrepancies.map((item) => ({
+    return uniqueCashDiscrepancies.map((item) => ({
       id: item.id,
       category: item.category || item.paymentMethod || item.payment_method,
       expectedAmount: item.expectedAmount || item.expected_amount,
       actualAmount: item.actualAmount || item.actual_amount,
       difference: item.difference,
     }))
+  }
+
+  // Calcular totales con los datos únicos
+  const calculateTotalCashDiscrepancy = () => {
+    return uniqueCashDiscrepancies.reduce((sum, item) => sum + Math.abs(item.difference || 0), 0)
   }
 
   if (!localInfo) {
@@ -324,10 +357,14 @@ export default function LocalDetailPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">Total Discrepancias Caja</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{cashDiscrepancies.length}</div>
+              <div className="text-2xl font-bold">{uniqueCashDiscrepancies.length}</div>
               <p className="text-xs text-muted-foreground">
-                Valor: $
-                {cashDiscrepancies.reduce((sum, item) => sum + Math.abs(item.difference || 0), 0).toLocaleString()}
+                Valor: ${calculateTotalCashDiscrepancy().toLocaleString()}
+                {cashDiscrepancies.length !== uniqueCashDiscrepancies.length && (
+                  <span className="ml-1 text-xs text-amber-600">
+                    (Se eliminaron {cashDiscrepancies.length - uniqueCashDiscrepancies.length} duplicados)
+                  </span>
+                )}
               </p>
             </CardContent>
           </Card>
@@ -392,10 +429,16 @@ export default function LocalDetailPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Discrepancias de Caja</CardTitle>
+                {cashDiscrepancies.length !== uniqueCashDiscrepancies.length && (
+                  <p className="text-sm text-amber-600 mt-1">
+                    Se detectaron y eliminaron {cashDiscrepancies.length - uniqueCashDiscrepancies.length} registros
+                    duplicados.
+                  </p>
+                )}
               </CardHeader>
               <CardContent>
                 <CashDiscrepancyTable
-                  discrepancies={cashDiscrepancies}
+                  discrepancies={uniqueCashDiscrepancies}
                   isLoading={isLoading}
                   localId={localInfo.id}
                   date={normalizeDate(selectedDate)}
@@ -420,7 +463,7 @@ export default function LocalDetailPage() {
           {/* Pestaña de Análisis */}
           <TabsContent value="analisis">
             <div className="mt-4">
-              {stockDiscrepancies.length > 0 || cashDiscrepancies.length > 0 ? (
+              {stockDiscrepancies.length > 0 || uniqueCashDiscrepancies.length > 0 ? (
                 <AnalisisConciliacion
                   stockDiscrepancies={getFormattedStockDiscrepancies()}
                   cashDiscrepancies={getFormattedCashDiscrepancies()}

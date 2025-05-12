@@ -54,9 +54,12 @@ export function AnalisisConciliacion({
   local,
   turno,
 }: AnalisisConciliacionProps) {
+  // Eliminar duplicados de cashDiscrepancies basados en la combinación de category y difference
+  const uniqueCashDiscrepancies = removeDuplicateCashDiscrepancies(cashDiscrepancies)
+
   // Calcular totales
   const totalStockDiscrepancy = stockDiscrepancies.reduce((sum, item) => sum + item.totalValue, 0)
-  const totalCashDiscrepancy = cashDiscrepancies.reduce((sum, item) => sum + item.difference, 0)
+  const totalCashDiscrepancy = uniqueCashDiscrepancies.reduce((sum, item) => sum + item.difference, 0)
   const balanceTotal = totalStockDiscrepancy + totalCashDiscrepancy
 
   // Determinar el estado de compensación
@@ -64,9 +67,9 @@ export function AnalisisConciliacion({
 
   // Calcular estadísticas
   const stockItemsCount = stockDiscrepancies.length
-  const cashItemsCount = cashDiscrepancies.length
+  const cashItemsCount = uniqueCashDiscrepancies.length
   const stockWithDiscrepancy = stockDiscrepancies.filter((item) => item.totalValue !== 0).length
-  const cashWithDiscrepancy = cashDiscrepancies.filter((item) => item.difference !== 0).length
+  const cashWithDiscrepancy = uniqueCashDiscrepancies.filter((item) => item.difference !== 0).length
 
   // Formatear valores monetarios
   const formatCurrency = (value: number) => {
@@ -303,16 +306,18 @@ export function AnalisisConciliacion({
                     <div className="mt-4">
                       <h3 className="text-sm font-medium mb-2">Recomendaciones</h3>
                       <div className="space-y-2">
-                        {getRecommendations(compensationStatus.status).map((rec, index) => (
-                          <div key={index} className="flex items-start">
-                            <div className="flex-shrink-0 mt-0.5">
-                              <ArrowRight className="h-4 w-4 text-primary" />
+                        {getRecommendations(compensationStatus.status, totalStockDiscrepancy, totalCashDiscrepancy).map(
+                          (rec, index) => (
+                            <div key={index} className="flex items-start">
+                              <div className="flex-shrink-0 mt-0.5">
+                                <ArrowRight className="h-4 w-4 text-primary" />
+                              </div>
+                              <div className="ml-2">
+                                <p className="text-sm">{rec}</p>
+                              </div>
                             </div>
-                            <div className="ml-2">
-                              <p className="text-sm">{rec}</p>
-                            </div>
-                          </div>
-                        ))}
+                          ),
+                        )}
                       </div>
                     </div>
 
@@ -337,6 +342,20 @@ export function AnalisisConciliacion({
   )
 }
 
+// Función para eliminar duplicados en las discrepancias de caja
+function removeDuplicateCashDiscrepancies(cashDiscrepancies: any[]) {
+  const uniqueMap = new Map()
+
+  cashDiscrepancies.forEach((item) => {
+    const key = `${item.category || ""}-${item.expectedAmount || 0}-${item.actualAmount || 0}`
+    if (!uniqueMap.has(key)) {
+      uniqueMap.set(key, item)
+    }
+  })
+
+  return Array.from(uniqueMap.values())
+}
+
 // Función para determinar si hay compensación entre stock y caja
 function getCompensationStatus(stockValue: number, cashValue: number) {
   // Si ambos son cercanos a cero (dentro de un margen de error)
@@ -347,6 +366,20 @@ function getCompensationStatus(stockValue: number, cashValue: number) {
       message: "Balanceado",
       title: "Sin Discrepancias Significativas",
       description: "No hay discrepancias significativas en stock ni en caja.",
+    }
+  }
+
+  // Si ambos son del mismo signo (ambos faltantes o ambos sobrantes)
+  if ((stockValue < 0 && cashValue < 0) || (stockValue > 0 && cashValue > 0)) {
+    const status = stockValue < 0 ? "same_direction_negative" : "same_direction_positive"
+    return {
+      status,
+      message: "Sin compensación",
+      title: "Discrepancias en la Misma Dirección",
+      description:
+        stockValue < 0
+          ? "Hay faltantes tanto en stock como en caja. Esto puede indicar problemas serios como pérdidas, robos o errores significativos de registro."
+          : "Hay sobrantes tanto en stock como en caja. Esto puede indicar errores en el registro de compras, ingresos o en el conteo de inventario.",
     }
   }
 
@@ -393,17 +426,6 @@ function getCompensationStatus(stockValue: number, cashValue: number) {
     }
   }
 
-  // Si ambos son del mismo signo (ambos faltantes o ambos sobrantes)
-  if ((stockValue < 0 && cashValue < 0) || (stockValue > 0 && cashValue > 0)) {
-    return {
-      status: "same_direction",
-      message: "Sin compensación",
-      title: "Discrepancias en la Misma Dirección",
-      description:
-        "Las discrepancias van en la misma dirección (ambos faltantes o ambos sobrantes). Esto puede indicar problemas más serios como pérdidas, robos o errores significativos de registro.",
-    }
-  }
-
   // Uno es cero y el otro no
   if (Math.abs(stockValue) < margin && Math.abs(cashValue) >= margin) {
     return {
@@ -442,8 +464,10 @@ function getAlertStyle(status: string) {
       return "bg-yellow-50 text-yellow-800 border-yellow-200"
     case "weakly_compensated":
       return "bg-amber-50 text-amber-800 border-amber-200"
-    case "same_direction":
+    case "same_direction_negative":
       return "bg-red-50 text-red-800 border-red-200"
+    case "same_direction_positive":
+      return "bg-orange-50 text-orange-800 border-orange-200"
     case "balanced":
       return "bg-blue-50 text-blue-800 border-blue-200"
     case "cash_only":
@@ -462,8 +486,10 @@ function getStatusIcon(status: string) {
     case "partially_compensated":
     case "weakly_compensated":
       return <AlertCircle className="h-4 w-4 text-yellow-500" />
-    case "same_direction":
+    case "same_direction_negative":
       return <XCircle className="h-4 w-4 text-red-500" />
+    case "same_direction_positive":
+      return <AlertCircle className="h-4 w-4 text-orange-500" />
     case "balanced":
       return <CheckCircle2 className="h-4 w-4 text-blue-500" />
     case "cash_only":
@@ -476,55 +502,96 @@ function getStatusIcon(status: string) {
 }
 
 // Función para obtener recomendaciones según el estado
-function getRecommendations(status: string): string[] {
+function getRecommendations(status: string, stockValue: number, cashValue: number): string[] {
   switch (status) {
     case "compensated":
-      return [
-        "Verificar los procedimientos de registro de ventas.",
-        "Capacitar al personal sobre la importancia de registrar correctamente todas las transacciones.",
-        "Revisar si hay productos que se están vendiendo sin registrar en el sistema.",
-      ]
-    case "partially_compensated":
-    case "weakly_compensated":
-      return [
-        "Investigar las posibles causas de la diferencia parcial.",
-        "Revisar descuentos, promociones o errores de precio.",
-        "Verificar si hay productos que se venden por debajo del precio registrado.",
-        "Comprobar si hay transacciones que no se están registrando correctamente.",
-      ]
-    case "same_direction":
-      if (status === "same_direction_negative") {
+      if (stockValue < 0 && cashValue > 0) {
         return [
-          "Investigar posibles pérdidas o robos.",
-          "Revisar los procedimientos de seguridad y control de inventario.",
-          "Considerar implementar medidas adicionales de supervisión.",
-          "Verificar si hay errores en el registro de ventas o en el conteo de inventario.",
+          "Verificar los procedimientos de registro de ventas.",
+          "Capacitar al personal sobre la importancia de registrar correctamente todas las transacciones.",
+          "Revisar si hay productos que se están vendiendo sin registrar en el sistema.",
         ]
       } else {
         return [
-          "Revisar los procedimientos de registro de compras e ingresos.",
-          "Verificar si hay productos o ingresos que no se están registrando correctamente.",
-          "Comprobar si hay errores en el conteo de inventario o en el cierre de caja.",
+          "Verificar los procedimientos de registro de devoluciones y ajustes de inventario.",
+          "Revisar si hay ingresos de caja que no se están registrando correctamente.",
+          "Comprobar si hay errores en el conteo de inventario.",
         ]
       }
+
+    case "partially_compensated":
+    case "weakly_compensated":
+      if (stockValue < 0 && cashValue > 0) {
+        return [
+          "Investigar las posibles causas de la diferencia parcial.",
+          "Revisar descuentos, promociones o errores de precio.",
+          "Verificar si hay productos que se venden por debajo del precio registrado.",
+          "Comprobar si hay transacciones que no se están registrando correctamente.",
+        ]
+      } else {
+        return [
+          "Investigar las posibles causas de la diferencia parcial.",
+          "Revisar los procedimientos de registro de devoluciones y ajustes de inventario.",
+          "Verificar si hay errores en el conteo de inventario o en el registro de pagos.",
+        ]
+      }
+
+    case "same_direction_negative":
+      return [
+        "Investigar posibles pérdidas o robos.",
+        "Revisar los procedimientos de seguridad y control de inventario.",
+        "Considerar implementar medidas adicionales de supervisión.",
+        "Verificar si hay errores en el registro de ventas o en el conteo de inventario.",
+        "Revisar si hay ventas no registradas o dinero no depositado.",
+      ]
+
+    case "same_direction_positive":
+      return [
+        "Revisar los procedimientos de registro de compras e ingresos.",
+        "Verificar si hay productos o ingresos que no se están registrando correctamente.",
+        "Comprobar si hay errores en el conteo de inventario o en el cierre de caja.",
+        "Revisar si hay depósitos duplicados o mercadería no registrada en el sistema.",
+      ]
+
     case "balanced":
       return [
         "Mantener los procedimientos actuales de control.",
         "Realizar verificaciones periódicas para asegurar que se mantiene el balance.",
         "Documentar las buenas prácticas que han llevado a este resultado.",
       ]
+
     case "cash_only":
-      return [
-        "Revisar los procedimientos de manejo de efectivo.",
-        "Verificar si hay errores en el registro de pagos o en el cierre de caja.",
-        "Comprobar si hay transacciones que no están siendo registradas correctamente.",
-      ]
+      if (cashValue < 0) {
+        return [
+          "Revisar los procedimientos de manejo de efectivo.",
+          "Verificar si hay errores en el registro de pagos o en el cierre de caja.",
+          "Comprobar si hay transacciones que no están siendo registradas correctamente.",
+          "Investigar posibles faltantes de caja.",
+        ]
+      } else {
+        return [
+          "Revisar los procedimientos de registro de ingresos.",
+          "Verificar si hay pagos o depósitos duplicados.",
+          "Comprobar si hay transacciones que no están siendo registradas correctamente.",
+        ]
+      }
+
     case "stock_only":
-      return [
-        "Revisar los procedimientos de control de inventario.",
-        "Verificar si hay errores en el conteo o registro de productos.",
-        "Comprobar si hay productos que se están perdiendo o dañando sin registro.",
-      ]
+      if (stockValue < 0) {
+        return [
+          "Revisar los procedimientos de control de inventario.",
+          "Verificar si hay errores en el conteo o registro de productos.",
+          "Comprobar si hay productos que se están perdiendo o dañando sin registro.",
+          "Investigar posibles pérdidas o robos de mercadería.",
+        ]
+      } else {
+        return [
+          "Revisar los procedimientos de registro de inventario.",
+          "Verificar si hay errores en el conteo o registro de productos.",
+          "Comprobar si hay productos que se están recibiendo sin registro adecuado.",
+        ]
+      }
+
     default:
       return [
         "Realizar un análisis más detallado de las discrepancias.",
@@ -561,12 +628,11 @@ function getExplanation(status: string, stockValue: number, cashValue: number): 
         return `El sobrante de stock valorizado en ${formatCurrency(stockValue)} se compensa parcialmente con el faltante en caja de ${formatCurrency(cashValue)}. Esto podría indicar errores en el registro de devoluciones o ajustes de inventario.`
       }
 
-    case "same_direction":
-      if (stockValue < 0 && cashValue < 0) {
-        return `Hay un faltante tanto en stock (${formatCurrency(stockValue)}) como en caja (${formatCurrency(cashValue)}). Esta situación es preocupante y podría indicar pérdidas, robos o errores significativos de registro.`
-      } else {
-        return `Hay un sobrante tanto en stock (${formatCurrency(stockValue)}) como en caja (${formatCurrency(cashValue)}). Esto podría indicar errores en el registro de compras, ingresos o en el conteo de inventario.`
-      }
+    case "same_direction_negative":
+      return `Hay un faltante tanto en stock (${formatCurrency(stockValue)}) como en caja (${formatCurrency(cashValue)}). Esta situación es preocupante y podría indicar pérdidas, robos o errores significativos de registro. Se recomienda una investigación detallada.`
+
+    case "same_direction_positive":
+      return `Hay un sobrante tanto en stock (${formatCurrency(stockValue)}) como en caja (${formatCurrency(cashValue)}). Esto podría indicar errores en el registro de compras, ingresos o en el conteo de inventario.`
 
     case "balanced":
       return "No hay discrepancias significativas en stock ni en caja. Los controles y procedimientos actuales están funcionando correctamente."
