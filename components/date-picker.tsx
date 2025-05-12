@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { format, addMonths, subMonths } from "date-fns"
 import { es } from "date-fns/locale"
-import { CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react"
+import { CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
@@ -32,6 +32,8 @@ export function DatePicker({
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(date)
   // Estado para controlar el mes que se muestra en el calendario
   const [currentMonth, setCurrentMonth] = useState<Date>(date || new Date())
+  // Estado para controlar si el popover está abierto o cerrado
+  const [open, setOpen] = useState(false)
 
   // Generar años para el selector (5 años antes y después del actual)
   const currentYear = new Date().getFullYear()
@@ -74,6 +76,8 @@ export function DatePicker({
 
       setSelectedDate(correctedDate)
       onDateChange(correctedDate)
+      // Cerrar el popover después de seleccionar una fecha
+      setOpen(false)
     }
   }
 
@@ -101,9 +105,19 @@ export function DatePicker({
     setCurrentMonth(newMonth)
   }
 
+  // Función para seleccionar hoy
+  const handleSelectToday = () => {
+    const today = new Date()
+    const correctedToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0, 0)
+    handleDateSelect(correctedToday)
+    setCurrentMonth(correctedToday)
+    // Cerrar el popover después de seleccionar hoy
+    setOpen(false)
+  }
+
   return (
     <div className="grid gap-2">
-      <Popover>
+      <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             id="date"
@@ -180,12 +194,7 @@ export function DatePicker({
             <Button
               variant="outline"
               className="w-full"
-              onClick={() => {
-                const today = new Date()
-                const correctedToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0, 0)
-                handleDateSelect(correctedToday)
-                setCurrentMonth(correctedToday)
-              }}
+              onClick={handleSelectToday}
             >
               Hoy
             </Button>

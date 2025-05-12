@@ -284,48 +284,83 @@ export default function Dashboard() {
       
       // 2. Calcular gastos de nómina (total de todos los empleados)
       try {
-        // Consulta detallada para obtener todos los salarios
+        // CORRECCIÓN: Consulta mejorada para obtener todos los salarios
+        console.log("Consultando salarios de empleados activos...");
+        
+        // Primero intentamos con la tabla employees
         const { data: employeesData, error: employeesError } = await supabase
           .from('employees')
-          .select('id, total_salary, base_salary, local')
-          .eq('status', 'active')
+          .select('id, total_salary, base_salary, local, status')
+          .eq('status', 'active');
         
-        if (!employeesError && employeesData && employeesData.length > 0) {
-          // Log para depuración
+        if (employeesError) {
+          console.error("Error al consultar salarios:", employeesError);
+        } else if (employeesData && employeesData.length > 0) {
           console.log(`Obtenidos ${employeesData.length} empleados activos con datos de salario`);
           
+          // Imprimir todos los datos para depuración
+          console.log("Datos completos de empleados:", JSON.stringify(employeesData));
+          
           // Calcular el total sumando el campo total_salary o base_salary según disponibilidad
-          payrollExpenses = employeesData.reduce((sum, emp) => {
-            // Usar total_salary si está disponible, de lo contrario usar base_salary
-            const salary = emp.total_salary !== null && emp.total_salary !== undefined 
-              ? Number(emp.total_salary) 
-              : (emp.base_salary !== null && emp.base_salary !== undefined 
-                ? Number(emp.base_salary) 
-                : 0);
+          let totalSalary = 0;
+          let externalSalary = 0;
+          
+          employeesData.forEach(emp => {
+            // Convertir explícitamente a número y manejar valores no numéricos
+            let salary = 0;
+            
+            if (emp.total_salary !== null && emp.total_salary !== undefined) {
+              const parsed = parseFloat(emp.total_salary);
+              if (!isNaN(parsed)) {
+                salary = parsed;
+              }
+            } else if (emp.base_salary !== null && emp.base_salary !== undefined) {
+              const parsed = parseFloat(emp.base_salary);
+              if (!isNaN(parsed)) {
+                salary = parsed;
+              }
+            }
             
             // Log para depuración de cada empleado
-            console.log(`Empleado ID ${emp.id}: total_salary=${emp.total_salary}, base_salary=${emp.base_salary}, usado=${salary}`);
+            console.log(`Empleado ID ${emp.id}: total_salary=${emp.total_salary}, base_salary=${emp.base_salary}, local=${emp.local}, usado=${salary}`);
             
-            return sum + salary;
-          }, 0);
+            // Sumar al total correspondiente
+            totalSalary += salary;
+            
+            // Si no tiene local asignado, sumar a nómina externa
+            if (!emp.local || emp.local === '') {
+              externalSalary += salary;
+            }
+          });
+          
+          payrollExpenses = totalSalary;
+          externalPayrollExpenses = externalSalary;
           
           console.log(`Total gastos nómina calculado: ${payrollExpenses}`);
-          
-          // Calcular gasto en nómina externa (empleados sin local asignado)
-          externalPayrollExpenses = employeesData
-            .filter(emp => !emp.local || emp.local === '')
-            .reduce((sum, emp) => {
-              const salary = emp.total_salary !== null && emp.total_salary !== undefined 
-                ? Number(emp.total_salary) 
-                : (emp.base_salary !== null && emp.base_salary !== undefined 
-                  ? Number(emp.base_salary) 
-                  : 0);
-              return sum + salary;
-            }, 0);
-          
           console.log(`Total gastos nómina externa calculado: ${externalPayrollExpenses}`);
         } else {
-          console.log("No se encontraron empleados con datos de salario o hubo un error");
+          console.log("No se encontraron empleados con datos de salario");
+          
+          // Intentar con otra tabla si existe
+          try {
+            const { data: payrollData, error: payrollError } = await supabase
+              .from('payroll')
+              .select('employee_id, salary')
+              .eq('status', 'active');
+            
+            if (!payrollError && payrollData && payrollData.length > 0) {
+              console.log(`Obtenidos ${payrollData.length} registros de nómina activos`);
+              
+              payrollExpenses = payrollData.reduce((sum, record) => {
+                const salary = parseFloat(record.salary);
+                return sum + (isNaN(salary) ? 0 : salary);
+              }, 0);
+              
+              console.log(`Total gastos nómina calculado desde tabla payroll: ${payrollExpenses}`);
+            }
+          } catch (payrollError) {
+            console.error("Error al consultar tabla payroll:", payrollError);
+          }
         }
       } catch (error) {
         console.error("Error al calcular gastos de nómina:", error);
