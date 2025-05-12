@@ -13,6 +13,7 @@ import { ArrowLeft, Download, RefreshCcw, Plus } from "lucide-react"
 import { StockDiscrepancyTable } from "@/components/conciliacion/stock-discrepancy-table"
 import { CashDiscrepancyTable } from "@/components/conciliacion/cash-discrepancy-table"
 import { DiscrepancyHistory } from "@/components/conciliacion/discrepancy-history"
+import { AnalisisConciliacion } from "@/components/conciliacion/analisis-conciliacion"
 import { ReconciliationService } from "@/lib/reconciliation-service"
 import { toast } from "@/components/ui/use-toast"
 
@@ -70,6 +71,7 @@ export default function LocalDetailPage() {
   const [stockDiscrepancies, setStockDiscrepancies] = useState<any[]>([])
   const [cashDiscrepancies, setCashDiscrepancies] = useState<any[]>([])
   const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false)
+  const [activeTab, setActiveTab] = useState("stock")
 
   // Cargar información del local cuando cambian los parámetros
   useEffect(() => {
@@ -208,6 +210,30 @@ export default function LocalDetailPage() {
     }
   }
 
+  // Formatear los datos para el componente de análisis
+  const getFormattedStockDiscrepancies = () => {
+    return stockDiscrepancies.map((item) => ({
+      id: item.id,
+      productId: item.productId || item.product_id,
+      productName: item.productName || item.product_name,
+      expectedQuantity: item.expectedQuantity || item.expected_quantity,
+      actualQuantity: item.actualQuantity || item.actual_quantity,
+      quantityDifference: item.quantityDifference || item.quantity_difference || item.difference,
+      unitPrice: item.unitPrice || item.unit_price,
+      totalValue: item.totalValue || item.total_value || item.difference * (item.unitPrice || item.unit_price),
+    }))
+  }
+
+  const getFormattedCashDiscrepancies = () => {
+    return cashDiscrepancies.map((item) => ({
+      id: item.id,
+      category: item.category || item.paymentMethod || item.payment_method,
+      expectedAmount: item.expectedAmount || item.expected_amount,
+      actualAmount: item.actualAmount || item.actual_amount,
+      difference: item.difference,
+    }))
+  }
+
   if (!localInfo) {
     return (
       <DashboardLayout>
@@ -285,7 +311,10 @@ export default function LocalDetailPage() {
             <CardContent>
               <div className="text-2xl font-bold">{stockDiscrepancies.length}</div>
               <p className="text-xs text-muted-foreground">
-                Valor: ${stockDiscrepancies.reduce((sum, item) => sum + (item.totalValue || 0), 0).toLocaleString()}
+                Valor: $
+                {stockDiscrepancies
+                  .reduce((sum, item) => sum + (item.totalValue || item.total_value || 0), 0)
+                  .toLocaleString()}
               </p>
             </CardContent>
           </Card>
@@ -312,15 +341,20 @@ export default function LocalDetailPage() {
                 (() => {
                   // Ordenar discrepancias por diferencia absoluta (de mayor a menor)
                   const sortedDiscrepancies = [...stockDiscrepancies].sort(
-                    (a, b) => Math.abs(b.difference || 0) - Math.abs(a.difference || 0),
+                    (a, b) =>
+                      Math.abs(b.difference || b.quantity_difference || 0) -
+                      Math.abs(a.difference || a.quantity_difference || 0),
                   )
                   const mostAffectedProduct = sortedDiscrepancies[0]
 
                   return (
                     <>
-                      <div className="text-2xl font-bold">{mostAffectedProduct?.productName || "No disponible"}</div>
+                      <div className="text-2xl font-bold">
+                        {mostAffectedProduct?.productName || mostAffectedProduct?.product_name || "No disponible"}
+                      </div>
                       <p className="text-xs text-muted-foreground">
-                        Diferencia: {mostAffectedProduct?.difference || 0} unidades
+                        Diferencia: {mostAffectedProduct?.difference || mostAffectedProduct?.quantity_difference || 0}{" "}
+                        unidades
                       </p>
                     </>
                   )
@@ -333,11 +367,12 @@ export default function LocalDetailPage() {
         </div>
 
         {/* Contenido principal */}
-        <Tabs defaultValue="stock">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="stock">Discrepancias de Stock</TabsTrigger>
             <TabsTrigger value="caja">Discrepancias de Caja</TabsTrigger>
             <TabsTrigger value="historial">Historial</TabsTrigger>
+            <TabsTrigger value="analisis">Análisis</TabsTrigger>
           </TabsList>
 
           {/* Pestaña de Discrepancias de Stock */}
@@ -380,6 +415,32 @@ export default function LocalDetailPage() {
                 <DiscrepancyHistory localId={localInfo.id} />
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Pestaña de Análisis */}
+          <TabsContent value="analisis">
+            <div className="mt-4">
+              {stockDiscrepancies.length > 0 || cashDiscrepancies.length > 0 ? (
+                <AnalisisConciliacion
+                  stockDiscrepancies={getFormattedStockDiscrepancies()}
+                  cashDiscrepancies={getFormattedCashDiscrepancies()}
+                  fecha={normalizeDate(selectedDate)}
+                  local={localInfo.name}
+                  turno={selectedShift}
+                />
+              ) : (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Análisis de Conciliación</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-center py-4 text-muted-foreground">
+                      No hay datos de discrepancias para analizar en la fecha y turno seleccionados.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           </TabsContent>
         </Tabs>
       </div>
