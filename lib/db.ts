@@ -2176,6 +2176,133 @@ class DatabaseService {
       throw error
     }
   }
+
+  // NUEVAS FUNCIONES PARA SOLUCIONAR LOS ERRORES
+
+  /**
+   * Obtiene una nómina por su ID
+   * @param payrollId ID de la nómina
+   * @returns La nómina encontrada o null si no existe
+   */
+  async getPayrollById(payrollId: string) {
+    try {
+      const query = `
+        SELECT p.*, 
+               e.first_name, e.last_name, e.document_id, e.position, e.local
+        FROM payroll p
+        LEFT JOIN employee e ON p.employee_id = e.id
+        WHERE p.id = $1
+      `
+      const result = await this.supabase.rpc("execute_sql", { sql_query: query, params: [payrollId] })
+
+      if (result.error) {
+        console.error("Error al obtener nómina por ID:", result.error)
+
+        // Intentar con una consulta directa si la RPC falla
+        const { data, error } = await this.supabase
+          .from("payroll")
+          .select("*, employee:employees(*)")
+          .eq("id", payrollId)
+          .single()
+
+        if (error) {
+          console.error("Error en consulta directa:", error)
+          throw error
+        }
+
+        return objectToCamelCase(data)
+      }
+
+      if (!result.data || result.data.length === 0) {
+        return null
+      }
+
+      // Convertir a camelCase para uso en el frontend
+      const payroll = objectToCamelCase(result.data[0])
+
+      // Obtener detalles de la nómina si existen
+      const detailsQuery = `
+        SELECT * FROM payroll_details
+        WHERE payroll_id = $1
+        ORDER BY type, concept
+      `
+      const detailsResult = await this.supabase.rpc("execute_sql", { sql_query: detailsQuery, params: [payrollId] })
+
+      if (detailsResult.error) {
+        console.error("Error al obtener detalles de nómina:", detailsResult.error)
+
+        // Intentar con una consulta directa si la RPC falla
+        const { data, error } = await this.supabase
+          .from("payroll_details")
+          .select("*")
+          .eq("payroll_id", payrollId)
+          .order("type", { ascending: true })
+          .order("concept", { ascending: true })
+
+        if (error) {
+          console.error("Error en consulta directa de detalles:", error)
+        } else if (data && data.length > 0) {
+          payroll.details = data.map((row) => objectToCamelCase(row))
+        }
+      } else if (detailsResult.data && detailsResult.data.length > 0) {
+        payroll.details = detailsResult.data.map((row) => objectToCamelCase(row))
+      }
+
+      return payroll
+    } catch (error) {
+      console.error("Error al obtener nómina por ID:", error)
+      throw new Error("Error al obtener nómina por ID")
+    }
+  }
+
+  /**
+   * Elimina los detalles de una nómina
+   * @param payrollId ID de la nómina
+   * @returns true si se eliminaron correctamente
+   */
+  async deletePayrollDetails(payrollId: string) {
+    try {
+      const { error } = await this.supabase.from("payroll_details").delete().eq("payroll_id", payrollId)
+
+      if (error) {
+        console.error("Error al eliminar detalles de nómina:", error)
+        throw error
+      }
+
+      return true
+    } catch (error) {
+      console.error("Error al eliminar detalles de nómina:", error)
+      throw new Error("Error al eliminar detalles de nómina")
+    }
+  }
+
+  /**
+   * Obtiene nóminas por empleado y período
+   * @param employeeId ID del empleado
+   * @param month Mes
+   * @param year Año
+   * @returns Lista de nóminas
+   */
+  async getPayrollsByEmployeeAndPeriod(employeeId: string, month: number, year: number) {
+    try {
+      const { data, error } = await this.supabase
+        .from("payroll")
+        .select("*")
+        .eq("employee_id", employeeId)
+        .eq("month", month)
+        .eq("year", year)
+
+      if (error) {
+        console.error("Error al obtener nóminas por empleado y período:", error)
+        throw error
+      }
+
+      return data.map((item) => objectToCamelCase(item))
+    } catch (error) {
+      console.error("Error al obtener nóminas por empleado y período:", error)
+      throw new Error("Error al obtener nóminas por empleado y período")
+    }
+  }
 }
 
 // Función auxiliar para calcular la jornada laboral esperada en minutos
