@@ -290,15 +290,18 @@ class DatabaseService {
   // Método para actualizar la lista de columnas conocidas
   async updateEmployeeColumns() {
     try {
-      const { data, error } = await this.supabase.rpc("get_table_columns", { table_name: "employees" })
+      // En lugar de usar RPC, simplemente consultamos una fila de la tabla
+      // y extraemos los nombres de las columnas
+      const { data, error } = await this.supabase.from("employees").select("*").limit(1)
 
       if (error) {
         console.error("Error al obtener columnas:", error)
         return
       }
 
-      if (data && Array.isArray(data)) {
-        this.employeeColumns = data
+      if (data && data.length > 0) {
+        // Extraer los nombres de las columnas del primer registro
+        this.employeeColumns = Object.keys(data[0])
         console.log("Columnas actualizadas:", this.employeeColumns)
       }
     } catch (error) {
