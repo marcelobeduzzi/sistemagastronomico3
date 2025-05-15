@@ -15,7 +15,9 @@ export class PayrollService {
         }
 
         // Verificar si ya existe una nómina para este empleado en el mes/año especificado
-        const existingPayrolls = await dbService.getPayrollsByEmployeeAndPeriod(employeeId, month, year)
+        // Usamos getPayrollsByPeriod y filtramos por employeeId en lugar de usar un método específico
+        const allPayrolls = await dbService.getPayrollsByPeriod(month, year, false)
+        const existingPayrolls = allPayrolls.filter((p) => p.employeeId === employeeId)
 
         if (existingPayrolls.length > 0) {
           console.log(`La nómina para el empleado ${employeeId} en ${month}/${year} ya existe`)
