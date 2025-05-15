@@ -2186,66 +2186,52 @@ class DatabaseService {
    */
   async getPayrollById(payrollId: string) {
     try {
-      const query = `
-        SELECT p.*, 
-               e.first_name, e.last_name, e.document_id, e.position, e.local
-        FROM payroll p
-        LEFT JOIN employee e ON p.employee_id = e.id
-        WHERE p.id = $1
-      `
-      const result = await this.supabase.rpc("execute_sql", { sql_query: query, params: [payrollId] })
+      console.log(`Obteniendo nómina con ID: ${payrollId}`)
 
-      if (result.error) {
-        console.error("Error al obtener nómina por ID:", result.error)
+      // Consulta directa a la tabla payroll con join a employees
+      const { data, error } = await this.supabase
+        .from("payroll")
+        .select(`
+        *,
+        employee:employees(*)
+      `)
+        .eq("id", payrollId)
+        .single()
 
-        // Intentar con una consulta directa si la RPC falla
-        const { data, error } = await this.supabase
-          .from("payroll")
-          .select("*, employee:employees(*)")
-          .eq("id", payrollId)
-          .single()
-
-        if (error) {
-          console.error("Error en consulta directa:", error)
-          throw error
-        }
-
-        return objectToCamelCase(data)
+      if (error) {
+        console.error("Error al obtener nómina por ID:", error)
+        throw error
       }
 
-      if (!result.data || result.data.length === 0) {
+      if (!data) {
+        console.log(`No se encontró nómina con ID: ${payrollId}`)
         return null
       }
 
       // Convertir a camelCase para uso en el frontend
-      const payroll = objectToCamelCase(result.data[0])
+      const payroll = objectToCamelCase(data)
+      console.log("Nómina obtenida:", payroll)
 
       // Obtener detalles de la nómina si existen
-      const detailsQuery = `
-        SELECT * FROM payroll_details
-        WHERE payroll_id = $1
-        ORDER BY type, concept
-      `
-      const detailsResult = await this.supabase.rpc("execute_sql", { sql_query: detailsQuery, params: [payrollId] })
-
-      if (detailsResult.error) {
-        console.error("Error al obtener detalles de nómina:", detailsResult.error)
-
-        // Intentar con una consulta directa si la RPC falla
-        const { data, error } = await this.supabase
+      try {
+        const { data: detailsData, error: detailsError } = await this.supabase
           .from("payroll_details")
           .select("*")
           .eq("payroll_id", payrollId)
           .order("type", { ascending: true })
-          .order("concept", { ascending: true })
 
-        if (error) {
-          console.error("Error en consulta directa de detalles:", error)
-        } else if (data && data.length > 0) {
-          payroll.details = data.map((row) => objectToCamelCase(row))
+        if (detailsError) {
+          console.error("Error al obtener detalles de nómina:", detailsError)
+        } else if (detailsData && detailsData.length > 0) {
+          payroll.details = detailsData.map((row) => objectToCamelCase(row))
+          console.log(`Se encontraron ${detailsData.length} detalles para la nómina`)
+        } else {
+          payroll.details = []
+          console.log("No se encontraron detalles para la nómina")
         }
-      } else if (detailsResult.data && detailsResult.data.length > 0) {
-        payroll.details = detailsResult.data.map((row) => objectToCamelCase(row))
+      } catch (detailsError) {
+        console.error("Error al consultar detalles de nómina:", detailsError)
+        payroll.details = []
       }
 
       return payroll
