@@ -707,8 +707,17 @@ export class PayrollService {
 
           // Calcular los valores de la nómina
           const baseSalary = Number.parseFloat(employee.baseSalary || employee.base_salary || "0")
-          const handSalary = Number.parseFloat(employee.handSalary || employee.hand_salary || "0")
+          // Si el empleado tiene salario en banco, ese es su forma de pago principal
+          // Si no tiene salario en banco, entonces el salario base se paga en mano
           const bankSalary = Number.parseFloat(employee.bankSalary || employee.bank_salary || "0")
+          let handSalary = Number.parseFloat(employee.handSalary || employee.hand_salary || "0")
+
+          // Si no hay salario en mano definido pero hay salario base y no hay salario en banco,
+          // entonces el salario base se paga en mano
+          if (handSalary === 0 && baseSalary > 0 && bankSalary === 0) {
+            handSalary = baseSalary
+            console.log(`No hay salario en mano definido, usando salario base como salario en mano: ${handSalary}`)
+          }
 
           console.log(`Valores base calculados - Base: ${baseSalary}, Mano: ${handSalary}, Banco: ${bankSalary}`)
 
@@ -722,7 +731,8 @@ export class PayrollService {
 
           // Calcular salarios finales (inicialmente sin deducciones/adiciones)
           const finalHandSalary = handSalary
-          const totalSalary = baseSalary + bankSalary + attendanceBonus
+          // El total a pagar es la suma del salario en banco + salario final en mano
+          const totalSalary = bankSalary + finalHandSalary + attendanceBonus
 
           console.log(`Valores iniciales calculados - Final Mano: ${finalHandSalary}, Total: ${totalSalary}`)
 
@@ -809,8 +819,17 @@ export class PayrollService {
 
           // Calcular los valores de la nómina
           const baseSalary = Number.parseFloat(employee.baseSalary || employee.base_salary || "0")
-          const handSalary = Number.parseFloat(employee.handSalary || employee.hand_salary || "0")
+          // Si el empleado tiene salario en banco, ese es su forma de pago principal
+          // Si no tiene salario en banco, entonces el salario base se paga en mano
           const bankSalary = Number.parseFloat(employee.bankSalary || employee.bank_salary || "0")
+          let handSalary = Number.parseFloat(employee.handSalary || employee.hand_salary || "0")
+
+          // Si no hay salario en mano definido pero hay salario base y no hay salario en banco,
+          // entonces el salario base se paga en mano
+          if (handSalary === 0 && baseSalary > 0 && bankSalary === 0) {
+            handSalary = baseSalary
+            console.log(`No hay salario en mano definido, usando salario base como salario en mano: ${handSalary}`)
+          }
 
           console.log(`Valores base calculados - Base: ${baseSalary}, Mano: ${handSalary}, Banco: ${bankSalary}`)
 
@@ -822,7 +841,8 @@ export class PayrollService {
 
           // Calcular salarios finales
           const finalHandSalary = handSalary
-          const totalSalary = baseSalary + bankSalary + attendanceBonus
+          // El total a pagar es la suma del salario en banco + salario final en mano
+          const totalSalary = bankSalary + finalHandSalary + attendanceBonus
 
           console.log(`Valores iniciales calculados - Final Mano: ${finalHandSalary}, Total: ${totalSalary}`)
 
@@ -1029,8 +1049,8 @@ export class PayrollService {
       // Calcular sueldo final en mano (sueldo en mano - deducciones + adiciones)
       const finalHandSalary = handSalary - deductions + additions
 
-      // Calcular total a pagar (sueldo base + sueldo banco + bono de presentismo)
-      const totalSalary = baseSalary + bankSalary + attendanceBonus
+      // Calcular total a pagar (sueldo en banco + sueldo final en mano + bono de presentismo)
+      const totalSalary = bankSalary + finalHandSalary + attendanceBonus
 
       console.log(`Nuevos valores calculados - Sueldo final en mano: ${finalHandSalary}, Total a pagar: ${totalSalary}`)
 
