@@ -1,6 +1,0 @@
-"use client"
-
-// Este archivo es para mantener compatibilidad con el código existente
-// Reexporta el DateRangePicker unificado desde components/ui/date-range-picker.tsx
-export { DateRangePicker, DatePickerWithRange } from "@/components/ui/date-range-picker"
-export default { DateRangePicker, DatePickerWithRange }

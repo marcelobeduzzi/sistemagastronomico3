@@ -11,8 +11,8 @@ import { Calendar } from "@/components/ui/calendar"
 import type { DateRange } from "react-day-picker"
 import type { Locale } from "date-fns"
 
-// Interfaz principal para mantener compatibilidad con el componente existente
-interface DateRangePickerProps {
+// Interfaz para DateRangePicker
+export interface DateRangePickerProps {
   dateRange: DateRange | undefined
   onDateRangeChange: (dateRange: DateRange | undefined) => void
   className?: string
@@ -23,8 +23,8 @@ interface DateRangePickerProps {
   disabled?: boolean
 }
 
-// Interfaz alternativa para mantener compatibilidad con DatePickerWithRange
-interface DatePickerWithRangeProps {
+// Interfaz para DatePickerWithRange
+export interface DatePickerWithRangeProps {
   date: DateRange | undefined
   setDate: (date: DateRange | undefined) => void
   className?: string
@@ -35,29 +35,18 @@ interface DatePickerWithRangeProps {
   disabled?: boolean
 }
 
-// Función para determinar qué interfaz se está utilizando
-function isDateRangePickerProps(props: DateRangePickerProps | DatePickerWithRangeProps): props is DateRangePickerProps {
-  return 'dateRange' in props && 'onDateRangeChange' in props;
-}
-
-// Componente que puede recibir cualquiera de las dos interfaces
-export function DateRangePicker(props: DateRangePickerProps | DatePickerWithRangeProps) {
-  // Extraer las props según la interfaz utilizada
-  const {
-    className,
-    placeholder = "Seleccionar rango de fechas",
-    locale = es,
-    numberOfMonths = 2,
-    align = "start",
-    disabled = false
-  } = props;
-
-  // Determinar dateRange y onDateRangeChange según la interfaz
-  const dateRange = isDateRangePickerProps(props) ? props.dateRange : props.date;
-  const onDateRangeChange = isDateRangePickerProps(props) ? props.onDateRangeChange : props.setDate;
-
-  // Estado para controlar si el popover está abierto o cerrado
-  const [open, setOpen] = useState(false);
+// Componente DateRangePicker
+export function DateRangePicker({
+  dateRange,
+  onDateRangeChange,
+  className,
+  placeholder = "Seleccionar rango de fechas",
+  locale = es,
+  numberOfMonths = 2,
+  align = "start",
+  disabled = false
+}: DateRangePickerProps) {
+  const [open, setOpen] = useState(false)
 
   return (
     <div className={cn("grid gap-2", className)}>
@@ -91,9 +80,9 @@ export function DateRangePicker(props: DateRangePickerProps | DatePickerWithRang
             defaultMonth={dateRange?.from}
             selected={dateRange}
             onSelect={(newDateRange) => {
-              onDateRangeChange(newDateRange);
+              onDateRangeChange(newDateRange)
               if (newDateRange?.from && newDateRange?.to) {
-                setOpen(false); // Cerrar el popover cuando se selecciona un rango completo
+                setOpen(false) // Cerrar el popover cuando se selecciona un rango completo
               }
             }}
             numberOfMonths={numberOfMonths}
@@ -131,10 +120,10 @@ export function DateRangePicker(props: DateRangePickerProps | DatePickerWithRang
               variant="outline"
               className="w-full"
               onClick={() => {
-                const today = new Date();
-                const correctedToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0, 0);
-                onDateRangeChange({ from: correctedToday, to: correctedToday });
-                setOpen(false);
+                const today = new Date()
+                const correctedToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12, 0, 0)
+                onDateRangeChange({ from: correctedToday, to: correctedToday })
+                setOpen(false)
               }}
             >
               Hoy
@@ -146,7 +135,27 @@ export function DateRangePicker(props: DateRangePickerProps | DatePickerWithRang
   )
 }
 
-// Exportamos también el componente con la interfaz original para mantener compatibilidad
-export function DatePickerWithRange(props: DatePickerWithRangeProps) {
-  return <DateRangePicker {...props} />;
+// Componente DatePickerWithRange (para mantener compatibilidad)
+export function DatePickerWithRange({
+  date,
+  setDate,
+  className,
+  placeholder,
+  locale,
+  numberOfMonths,
+  align,
+  disabled
+}: DatePickerWithRangeProps) {
+  return (
+    <DateRangePicker
+      dateRange={date}
+      onDateRangeChange={setDate}
+      className={className}
+      placeholder={placeholder}
+      locale={locale}
+      numberOfMonths={numberOfMonths}
+      align={align}
+      disabled={disabled}
+    />
+  )
 }
