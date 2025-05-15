@@ -1,7 +1,6 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 
@@ -10,27 +9,15 @@ interface GenerateDiscrepanciesButtonProps {
 }
 
 export function GenerateDiscrepanciesButton({ localId }: GenerateDiscrepanciesButtonProps) {
-  const router = useRouter()
-  const [isLoading, setIsLoading] = useState(false)
-
-  const handleClick = () => {
-    setIsLoading(true)
-
-    // Usar window.location.href para una navegación directa en lugar de router.push
-    // Esto evita cualquier lógica adicional que pueda estar ocurriendo durante la navegación
-    if (localId) {
-      window.location.href = `/conciliacion/generar?localId=${localId}`
-    } else {
-      window.location.href = "/conciliacion/generar"
-    }
-
-    // No necesitamos setIsLoading(false) aquí porque la página se recargará
-  }
+  // Construir la URL basada en si tenemos un localId o no
+  const href = localId ? `/conciliacion/generar?localId=${localId}` : "/conciliacion/generar"
 
   return (
-    <Button onClick={handleClick} disabled={isLoading}>
-      <Plus className="mr-2 h-4 w-4" />
-      Generar Discrepancias
-    </Button>
+    <Link href={href} passHref>
+      <Button as="a">
+        <Plus className="mr-2 h-4 w-4" />
+        Generar Discrepancias
+      </Button>
+    </Link>
   )
 }
