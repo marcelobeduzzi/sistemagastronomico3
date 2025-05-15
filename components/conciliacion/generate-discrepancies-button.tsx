@@ -15,19 +15,16 @@ export function GenerateDiscrepanciesButton({ localId }: GenerateDiscrepanciesBu
 
   const handleClick = () => {
     setIsLoading(true)
-    try {
-      // Navegar a la página de generación de discrepancias
-      // Si tenemos un localId, lo pasamos como parámetro de consulta
-      if (localId) {
-        router.push(`/conciliacion/generar?localId=${localId}`)
-      } else {
-        router.push("/conciliacion/generar")
-      }
-    } catch (error) {
-      console.error("Error al navegar:", error)
-    } finally {
-      setIsLoading(false)
+
+    // Usar window.location.href para una navegación directa en lugar de router.push
+    // Esto evita cualquier lógica adicional que pueda estar ocurriendo durante la navegación
+    if (localId) {
+      window.location.href = `/conciliacion/generar?localId=${localId}`
+    } else {
+      window.location.href = "/conciliacion/generar"
     }
+
+    // No necesitamos setIsLoading(false) aquí porque la página se recargará
   }
 
   return (
