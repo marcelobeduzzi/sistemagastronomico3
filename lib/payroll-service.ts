@@ -1095,3 +1095,6 @@ export class PayrollService {
     }
   }
 }
+
+// Al final del archivo, después de cerrar la clase PayrollService
+export const payrollService = new PayrollService()
