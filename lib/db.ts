@@ -1,5 +1,5 @@
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { objectToCamelCase, objectToSnakeCase } from "./utils" // Import utility functions
+import { objectToCamelCase, objectToSnakeCase, toCamelCase } from "./utils" // Import utility functions
 import type { Employee, Attendance, Payroll, PayrollDetail, Audit, Billing, Balance, Order } from "@/types"
 import type { Liquidation } from "@/types"
 import { supabase as supabaseClient } from "./supabase/client" // Importar el cliente de Supabase
@@ -1002,10 +1002,12 @@ class DatabaseService {
       console.log("Actualizando nómina con ID:", id, "Datos:", payroll)
 
       // Crear objeto de actualización
-      const updateData: any = {}
       const now = new Date().toISOString()
+      const updateData: any = {
+        updated_at: now,
+      }
 
-      // Determinar qué campos actualizar según el tipo de pago
+      // Si se proporciona un objeto de pago, procesar los campos relacionados con el pago
       if (payroll.paymentType === "bank" || payroll.bankSalaryPaid) {
         // Pago de banco
         updateData.is_paid_bank = true
@@ -1026,56 +1028,33 @@ class DatabaseService {
         updateData.hand_payment_date = now
       }
 
-      // IMPORTANTE: Manejar explícitamente los campos del bono de presentismo
-      // Asegurarse de que estos campos se incluyan siempre que estén presentes en los datos
-      if (payroll.hasAttendanceBonus !== undefined) {
-        // Verificar si la columna existe en la tabla
-        try {
-          // Primero, verificar la estructura de la tabla payroll
-          const { data: tableInfo, error: tableError } = await this.supabase.from("payroll").select("*").limit(1)
+      // IMPORTANTE: Copiar todos los campos proporcionados al objeto de actualización
+      // Esto asegura que todos los campos se actualicen correctamente
+      const fieldsToUpdate = [
+        "base_salary",
+        "bank_salary",
+        "hand_salary",
+        "deductions",
+        "additions",
+        "final_hand_salary",
+        "total_salary",
+        "has_attendance_bonus",
+        "attendance_bonus",
+        "payment_method",
+        "payment_reference",
+        "payment_date",
+      ]
 
-          if (tableError) {
-            console.error("Error al verificar estructura de tabla payroll:", tableError)
-          } else {
-            const sampleRow = tableInfo && tableInfo.length > 0 ? tableInfo[0] : null
-            console.log("Estructura de tabla payroll:", sampleRow ? Object.keys(sampleRow) : "No hay datos")
-
-            // Si la columna no existe, intentar crearla
-            if (sampleRow && !("has_attendance_bonus" in sampleRow)) {
-              console.log("La columna has_attendance_bonus no existe en la tabla payroll")
-              // Intentar usar RPC para añadir la columna (requiere permisos de administrador)
-              try {
-                await this.supabase.rpc("add_column_if_not_exists", {
-                  table_name: "payroll",
-                  column_name: "has_attendance_bonus",
-                  column_type: "boolean",
-                })
-                console.log("Columna has_attendance_bonus añadida correctamente")
-              } catch (rpcError) {
-                console.error("Error al añadir columna has_attendance_bonus:", rpcError)
-              }
-            }
-
-            if (sampleRow && !("attendance_bonus" in sampleRow)) {
-              console.log("La columna attendance_bonus no existe en la tabla payroll")
-              // Intentar usar RPC para añadir la columna (requiere permisos de administrador)
-              try {
-                await this.supabase.rpc("add_column_if_not_exists", {
-                  table_name: "payroll",
-                  column_name: "attendance_bonus",
-                  column_type: "numeric",
-                })
-                console.log("Columna attendance_bonus añadida correctamente")
-              } catch (rpcError) {
-                console.error("Error al añadir columna attendance_bonus:", rpcError)
-              }
-            }
-          }
-        } catch (checkError) {
-          console.error("Error al verificar columnas:", checkError)
+      // Convertir los nombres de campos de camelCase a snake_case
+      for (const field of fieldsToUpdate) {
+        const camelField = toCamelCase(field)
+        if (payroll[camelField] !== undefined) {
+          updateData[field] = payroll[camelField]
         }
+      }
 
-        // Continuar con la actualización
+      // Manejar explícitamente los campos del bono de presentismo
+      if (payroll.hasAttendanceBonus !== undefined) {
         updateData.has_attendance_bonus = payroll.hasAttendanceBonus
       }
 
