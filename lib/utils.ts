@@ -71,10 +71,31 @@ export function objectToSnakeCase(obj: Record<string, any>): Record<string, any>
  * Formatea un número como moneda en formato argentino
  * Ejemplo: 1234.56 -> "$1.234,56"
  */
-export function formatCurrency(amount: number): string {
+export function formatCurrency(amount: number | string): string {
+  const numAmount = typeof amount === "string" ? Number.parseFloat(amount) : amount
   return new Intl.NumberFormat("es-AR", {
     style: "currency",
     currency: "ARS",
     minimumFractionDigits: 2,
-  }).format(amount)
+  }).format(numAmount)
+}
+
+/**
+ * Formatea una fecha para mostrarla en formato argentino
+ * Ejemplo: 2023-01-15 -> "15/01/2023"
+ */
+export function formatDateToDisplay(date: Date): string {
+  return date.toLocaleDateString("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  })
+}
+
+/**
+ * Formatea una fecha a formato ISO
+ * Ejemplo: Date -> "2023-01-15T00:00:00.000Z"
+ */
+export function formatDateToISO(date: Date): string {
+  return date.toISOString()
 }

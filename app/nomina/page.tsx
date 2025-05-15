@@ -44,6 +44,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import type { Employee, Payroll, Liquidation, Attendance } from "@/types"
 import { supabase } from "@/lib/supabase/client" // Importamos la instancia compartida
 import Link from "next/link"
+import { payrollService } from "@/lib/payroll-service" // Importamos el servicio de nóminas
 
 export default function NominaPage() {
   const router = useRouter()
@@ -249,12 +250,17 @@ export default function NominaPage() {
       setIsLoading(false)
     }
   }
+
   const handleGeneratePayrolls = async () => {
     setIsGeneratingPayrolls(true)
     try {
       console.log(`Generando nóminas para ${selectedMonth}/${selectedYear}`)
-      // Llamar al servicio para generar nóminas
-      await dbService.generatePayrolls(selectedMonth, selectedYear)
+
+      // Obtener IDs de empleados activos
+      const employeeIds = employees.map((emp) => emp.id)
+
+      // Usar el servicio de nóminas para generar las nóminas
+      await payrollService.generatePayrolls(employeeIds, selectedMonth, selectedYear)
 
       toast({
         title: "Nóminas generadas",
@@ -322,18 +328,19 @@ export default function NominaPage() {
     if (!selectedPayroll) return
 
     try {
-      // Actualizar el estado de pago de la nómina
-      const updatedPayroll = {
-        ...selectedPayroll,
-        handSalaryPaid: isHandSalaryPaid,
-        bankSalaryPaid: isBankSalaryPaid,
-        isPaid: isHandSalaryPaid && isBankSalaryPaid,
-        paymentDate: isHandSalaryPaid && isBankSalaryPaid ? paymentDate : null,
-        paymentMethod: paymentMethod,
-        paymentReference: paymentReference,
+      // Actualizar el estado de pago de la nómina usando el servicio de nóminas
+      if (isHandSalaryPaid) {
+        await payrollService.updatePayrollStatus(selectedPayroll.id, "is_paid_hand", true)
       }
 
-      await dbService.updatePayroll(selectedPayroll.id, updatedPayroll)
+      if (isBankSalaryPaid) {
+        await payrollService.updatePayrollStatus(selectedPayroll.id, "is_paid_bank", true)
+      }
+
+      if (isHandSalaryPaid && isBankSalaryPaid) {
+        await payrollService.updatePayrollStatus(selectedPayroll.id, "is_paid", true)
+        await payrollService.updatePaymentDetails(selectedPayroll.id, paymentMethod, paymentReference)
+      }
 
       toast({
         title: "Pago confirmado",
