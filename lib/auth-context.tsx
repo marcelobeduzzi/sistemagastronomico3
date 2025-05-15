@@ -6,21 +6,20 @@ import { useRouter, usePathname } from "next/navigation"
 import { supabase } from "./supabase/client"
 import { supervisorService, type SupervisorWithPin } from "./supervisor-service"
 import type { User } from "@/types/auth"
-import { sessionManager } from "./session-manager"
 
 // Tipo para los metadatos de usuario
 type UserMetadata = {
-  id: string;
-  first_name?: string;
-  last_name?: string;
-  role?: string;
-  email?: string;
-  local?: string;
-  position?: string;
-};
+  id: string
+  first_name?: string
+  last_name?: string
+  role?: string
+  email?: string
+  local?: string
+  position?: string
+}
 
 // Caché en memoria para metadatos (evita consultas repetidas)
-const metadataCache: Record<string, UserMetadata> = {};
+const metadataCache: Record<string, UserMetadata> = {}
 
 // Extender el tipo AuthContextType para incluir las nuevas funciones
 type AuthContextType = {
@@ -49,81 +48,92 @@ const publicRoutes = ["/login", "/forgot-password", "/reset-password", "/secure-
 async function loadUserMetadata(userId: string): Promise<UserMetadata> {
   // Si ya tenemos los datos en caché, los devolvemos
   if (metadataCache[userId]) {
-    console.log("Usando metadatos en caché para usuario:", userId);
-    return metadataCache[userId];
+    console.log("Usando metadatos en caché para usuario:", userId)
+    return metadataCache[userId]
   }
 
-  console.log("Cargando metadatos para usuario:", userId);
-  
+  console.log("Cargando metadatos para usuario:", userId)
+
   try {
     // Intento 1: Cargar desde la tabla employees (preferido)
     try {
       const { data: employeeData, error: employeeError } = await supabase
-        .from('employees')
-        .select('id, first_name, last_name, email, local, position, role')
-        .eq('id', userId)
-        .single();
+        .from("employees")
+        .select("id, first_name, last_name, email, local, position, role")
+        .eq("id", userId)
+        .single()
+        .headers({
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+        })
 
       if (!employeeError && employeeData) {
-        console.log("Metadatos cargados desde tabla employees");
+        console.log("Metadatos cargados desde tabla employees")
         const metadata: UserMetadata = {
           id: userId,
-          ...employeeData
-        };
-        metadataCache[userId] = metadata;
-        return metadata;
+          ...employeeData,
+        }
+        metadataCache[userId] = metadata
+        return metadata
       }
     } catch (err) {
-      console.error("Error al cargar desde employees:", err);
+      console.error("Error al cargar desde employees:", err)
     }
 
     // Intento 2: Usar RPC para evitar problemas de recursión
     try {
       const { data: rpcData, error: rpcError } = await supabase
-        .rpc('get_user_metadata_safe', { user_id: userId });
-      
+        .rpc("get_user_metadata_safe", { user_id: userId })
+        .headers({
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+        })
+
       if (!rpcError && rpcData) {
-        console.log("Metadatos cargados desde RPC");
+        console.log("Metadatos cargados desde RPC")
         const metadata: UserMetadata = {
           id: userId,
-          ...rpcData
-        };
-        metadataCache[userId] = metadata;
-        return metadata;
+          ...rpcData,
+        }
+        metadataCache[userId] = metadata
+        return metadata
       }
     } catch (err) {
-      console.error("Error al cargar desde RPC:", err);
+      console.error("Error al cargar desde RPC:", err)
     }
 
     // Fallback final: Devolver datos mínimos basados en la sesión actual
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
     if (session?.user) {
-      console.log("Usando datos mínimos de la sesión");
+      console.log("Usando datos mínimos de la sesión")
       const metadata: UserMetadata = {
         id: userId,
         email: session.user.email,
-        role: 'admin', // Asumimos admin como fallback seguro
-      };
-      metadataCache[userId] = metadata;
-      return metadata;
+        role: "admin", // Asumimos admin como fallback seguro
+      }
+      metadataCache[userId] = metadata
+      return metadata
     }
 
     // Si todo falla, devolver un objeto con datos mínimos
-    console.log("Usando datos mínimos por defecto");
+    console.log("Usando datos mínimos por defecto")
     const defaultMetadata: UserMetadata = {
       id: userId,
-      role: 'admin', // Asumimos admin como fallback seguro
-    };
-    metadataCache[userId] = defaultMetadata;
-    return defaultMetadata;
-
+      role: "admin", // Asumimos admin como fallback seguro
+    }
+    metadataCache[userId] = defaultMetadata
+    return defaultMetadata
   } catch (error) {
-    console.error("Error crítico al cargar metadatos de usuario:", error);
+    console.error("Error crítico al cargar metadatos de usuario:", error)
     // Último recurso si todo falla
-    return { 
+    return {
       id: userId,
-      role: 'admin' // Asumimos admin como fallback seguro
-    };
+      role: "admin", // Asumimos admin como fallback seguro
+    }
   }
 }
 
@@ -132,12 +142,12 @@ async function loadUserMetadata(userId: string): Promise<UserMetadata> {
  */
 function clearMetadataCache(userId?: string) {
   if (userId) {
-    delete metadataCache[userId];
+    delete metadataCache[userId]
   } else {
     // Limpiar toda la caché
-    Object.keys(metadataCache).forEach(key => {
-      delete metadataCache[key];
-    });
+    Object.keys(metadataCache).forEach((key) => {
+      delete metadataCache[key]
+    })
   }
 }
 
@@ -155,49 +165,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Función para cargar los datos del usuario
   const loadUserData = useCallback(async (userId: string) => {
-    if (!userId) return;
-    
+    if (!userId) return
+
     try {
-      setIsLoadingUser(true);
-      
+      setIsLoadingUser(true)
+
       // Usar nuestra función robusta para cargar metadatos
-      const metadata = await loadUserMetadata(userId);
-      
+      const metadata = await loadUserMetadata(userId)
+
       // Actualizar el estado con los metadatos
-      setUser(prev => ({
+      setUser((prev) => ({
         ...prev,
         id: userId,
         email: metadata.email || prev?.email || "",
-        name: metadata.first_name 
-          ? `${metadata.first_name} ${metadata.last_name || ''}`.trim() 
+        name: metadata.first_name
+          ? `${metadata.first_name} ${metadata.last_name || ""}`.trim()
           : prev?.name || metadata.email?.split("@")[0] || "Usuario",
-        role: metadata.role || 'admin', // Fallback a admin si no hay rol
-      }));
-      
+        role: metadata.role || "admin", // Fallback a admin si no hay rol
+      }))
+
       console.log("User object:", {
         id: userId,
         email: metadata.email,
-        name: metadata.first_name 
-          ? `${metadata.first_name} ${metadata.last_name || ''}`.trim() 
+        name: metadata.first_name
+          ? `${metadata.first_name} ${metadata.last_name || ""}`.trim()
           : metadata.email?.split("@")[0] || "Usuario",
-        role: metadata.role || 'admin'
-      });
-      
+        role: metadata.role || "admin",
+      })
     } catch (error) {
-      console.error("Error al cargar datos de usuario:", error);
+      console.error("Error al cargar datos de usuario:", error)
       // No interrumpir el flujo si hay un error, usar datos mínimos
     } finally {
-      setIsLoadingUser(false);
+      setIsLoadingUser(false)
     }
-  }, []);
+  }, [])
 
   // Función para refrescar los metadatos del usuario
   const refreshUserMetadata = useCallback(async () => {
     if (user?.id) {
-      clearMetadataCache(user.id);
-      await loadUserData(user.id);
+      clearMetadataCache(user.id)
+      await loadUserData(user.id)
     }
-  }, [user?.id, loadUserData]);
+  }, [user?.id, loadUserData])
 
   // Función para refrescar la sesión
   const refreshSession = async () => {
@@ -261,7 +270,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
 
           setUser(userData as User)
-          
+
           // Cargar metadatos completos en segundo plano
           loadUserData(session.user.id)
         } else {
@@ -295,14 +304,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         setUser(userData as User)
-        
+
         // Cargar metadatos completos en segundo plano
         loadUserData(session.user.id)
       } else if (event === "SIGNED_OUT") {
         setUser(null)
       } else if (event === "TOKEN_REFRESHED" && session?.user) {
         console.log("Session refreshed successfully")
-        
+
         // Actualizar metadatos si es necesario
         if (user?.id === session.user.id) {
           loadUserData(session.user.id)
@@ -374,10 +383,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         setUser(userData as User)
-        
+
         // Cargar metadatos completos en segundo plano
         loadUserData(data.user.id)
-        
+
         router.push("/")
       }
     } catch (err: any) {

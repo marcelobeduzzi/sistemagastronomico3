@@ -290,9 +290,9 @@ export default function LocalDetailPage() {
 
   const handleGenerateDiscrepancies = () => {
     if (localInfo && localInfo.id) {
-      router.push(`/conciliacion/generar-discrepancias?localId=${localInfo.id}`)
+      router.push(`/conciliacion/generar?localId=${localInfo.id}`)
     } else {
-      router.push("/conciliacion/generar-discrepancias")
+      router.push("/conciliacion/generar")
     }
   }
 
