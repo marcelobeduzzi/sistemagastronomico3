@@ -686,10 +686,10 @@ export class PayrollService {
       // Para cada empleado
       for (const employeeId of employeeIds) {
         console.log(`Procesando empleado ID: ${employeeId}`)
-        
+
         // Buscar si ya existe una nómina para este empleado
         const existingPayroll = existingPayrolls.find(
-          (p) => p.employeeId === employeeId || p.employee_id === employeeId
+          (p) => p.employeeId === employeeId || p.employee_id === employeeId,
         )
 
         if (existingPayroll) {
@@ -718,7 +718,7 @@ export class PayrollService {
             ? Number.parseFloat(employee.attendanceBonus || employee.attendance_bonus || "0")
             : 0
 
-          console.log(`Bono de presentismo: ${hasAttendanceBonus ? 'Sí' : 'No'}, Monto: ${attendanceBonus}`)
+          console.log(`Bono de presentismo: ${hasAttendanceBonus ? "Sí" : "No"}, Monto: ${attendanceBonus}`)
 
           // Calcular salarios finales (inicialmente sin deducciones/adiciones)
           const finalHandSalary = handSalary
@@ -740,7 +740,7 @@ export class PayrollService {
           }
 
           console.log("Actualizando nómina con datos:", JSON.stringify(updateData, null, 2))
-          
+
           try {
             const updatedPayroll = await dbService.updatePayroll(existingPayroll.id, updateData)
             console.log("Nómina actualizada:", JSON.stringify(updatedPayroll, null, 2))
@@ -769,7 +769,7 @@ export class PayrollService {
             // Obtener asistencias
             const attendances = await dbService.getAttendancesByDateRange(employeeId, startDateStr, endDateStr)
             console.log(`Se encontraron ${attendances.length} registros de asistencia`)
-            
+
             if (attendances.length > 0) {
               console.log("Muestra de asistencias:", JSON.stringify(attendances.slice(0, 2), null, 2))
             }
@@ -814,273 +814,284 @@ export class PayrollService {
 
           console.log(`Valores base calculados - Base: ${baseSalary}, Mano: ${handSalary}, Banco: ${bankSalary}`)
 
-        // Calcular bonificación por asistencia si aplica
-        const hasAttendanceBonus = employee.hasAttendanceBonus || employee.has_attendance_bonus || false
-        const attendanceBonus = hasAttendanceBonus
-          ? Number.parseFloat(employee.attendanceBonus || employee.attendance_bonus || "0")
-          : 0
+          // Calcular bonificación por asistencia si aplica
+          const hasAttendanceBonus = employee.hasAttendanceBonus || employee.has_attendance_bonus || false
+          const attendanceBonus = hasAttendanceBonus
+            ? Number.parseFloat(employee.attendanceBonus || employee.attendance_bonus || "0")
+            : 0
 
-        // Calcular salarios finales
-        const finalHandSalary = handSalary
-        const totalSalary = baseSalary + bankSalary + attendanceBonus
+          // Calcular salarios finales
+          const finalHandSalary = handSalary
+          const totalSalary = baseSalary + bankSalary + attendanceBonus
 
-        console.log(`Valores iniciales calculados - Final Mano: ${finalHandSalary}, Total: ${totalSalary}`)
+          console.log(`Valores iniciales calculados - Final Mano: ${finalHandSalary}, Total: ${totalSalary}`)
 
-        // Crear la nueva nómina
-        const newPayroll = {
-          employee_id: employeeId,
-          month,
-          year,
-          base_salary: baseSalary,
-          bank_salary: bankSalary,
-          hand_salary: handSalary,
-          deductions: 0,
-          additions: 0,
-          final_hand_salary: finalHandSalary,
-          total_salary: totalSalary,
-          is_paid_hand: false,
-          is_paid_bank: false,
-          has_attendance_bonus: hasAttendanceBonus,
-          attendance_bonus: attendanceBonus,
-        }
+          // Crear la nueva nómina
+          const newPayroll = {
+            employee_id: employeeId,
+            month,
+            year,
+            base_salary: baseSalary,
+            bank_salary: bankSalary,
+            hand_salary: handSalary,
+            deductions: 0,
+            additions: 0,
+            final_hand_salary: finalHandSalary,
+            total_salary: totalSalary,
+            is_paid_hand: false,
+            is_paid_bank: false,
+            has_attendance_bonus: hasAttendanceBonus,
+            attendance_bonus: attendanceBonus,
+          }
 
-        console.log("Creando nómina con datos:", JSON.stringify(newPayroll, null, 2))
-        
-        let createdPayroll;
-        try {
-          createdPayroll = await dbService.createPayroll(newPayroll)
-          console.log("Nómina creada:", JSON.stringify(createdPayroll, null, 2))
-        } catch (error) {
-          console.error("Error al crear nómina:", error)
-          continue;
-        }
+          console.log("Creando nómina con datos:", JSON.stringify(newPayroll, null, 2))
 
-        // Calcular ajustes basados en asistencias
-        try {
-          // Calcular el rango de fechas para el mes
-          const startDate = new Date(year, month - 1, 1)
-          const endDate = new Date(year, month, 0)
-          const startDateStr = startDate.toISOString().split("T")[0]
-          const endDateStr = endDate.toISOString().split("T")[0]
-
-          console.log(`Buscando asistencias desde ${startDateStr} hasta ${endDateStr}`)
-
-          // Obtener asistencias
-          const attendances = await dbService.getAttendancesByDateRange(employeeId, startDateStr, endDateStr)
-          console.log(`Se encontraron ${attendances.length} registros de asistencia`)
+          let createdPayroll
+          try {
+            createdPayroll = await dbService.createPayroll(newPayroll)
+            console.log("Nómina creada:", JSON.stringify(createdPayroll, null, 2))
+          } catch (error) {
+            console.error("Error al crear nómina:", error)
+            continue
+          }
 
           // Calcular ajustes basados en asistencias
-          if (attendances && attendances.length > 0) {
-            console.log(`Calculando ajustes para ${attendances.length} asistencias`)
-            await this.calculatePayrollAdjustmentsDebug(createdPayroll.id, attendances)
-            const updatedPayroll = await this.getPayrollById(createdPayroll.id)
-            console.log("Nómina después de ajustes:", JSON.stringify(updatedPayroll, null, 2))
-            results.push(updatedPayroll)
-          } else {
-            console.log("No hay asistencias, nómina final:", JSON.stringify(createdPayroll, null, 2))
+          try {
+            // Calcular el rango de fechas para el mes
+            const startDate = new Date(year, month - 1, 1)
+            const endDate = new Date(year, month, 0)
+            const startDateStr = startDate.toISOString().split("T")[0]
+            const endDateStr = endDate.toISOString().split("T")[0]
+
+            console.log(`Buscando asistencias desde ${startDateStr} hasta ${endDateStr}`)
+
+            // Obtener asistencias
+            const attendances = await dbService.getAttendancesByDateRange(employeeId, startDateStr, endDateStr)
+            console.log(`Se encontraron ${attendances.length} registros de asistencia`)
+
+            // Calcular ajustes basados en asistencias
+            if (attendances && attendances.length > 0) {
+              console.log(`Calculando ajustes para ${attendances.length} asistencias`)
+              await this.calculatePayrollAdjustmentsDebug(createdPayroll.id, attendances)
+              const updatedPayroll = await this.getPayrollById(createdPayroll.id)
+              console.log("Nómina después de ajustes:", JSON.stringify(updatedPayroll, null, 2))
+              results.push(updatedPayroll)
+            } else {
+              console.log("No hay asistencias, nómina final:", JSON.stringify(createdPayroll, null, 2))
+              results.push(createdPayroll)
+            }
+          } catch (error) {
+            console.error("Error al calcular ajustes de asistencia:", error)
             results.push(createdPayroll)
           }
-        } catch (error) {
-          console.error("Error al calcular ajustes de asistencia:", error)
-          results.push(createdPayroll)
         }
       }
-    }
 
-    return results
-  } catch (error) {
-    console.error("Error al regenerar nóminas:", error)
-    throw new Error("Error al regenerar nóminas")
-  }
-}
-
-// Añadir un nuevo método de diagnóstico para el cálculo de ajustes
-async calculatePayrollAdjustmentsDebug(payrollId: string, attendances: any[]) {
-  try {
-    console.log(`INICIO: Calculando ajustes para nómina ID: ${payrollId}`)
-    
-    // Obtener la nómina actual
-    const payroll = await this.getPayrollById(payrollId)
-    if (!payroll) {
-      throw new Error("Nómina no encontrada")
-    }
-    
-    console.log("Datos de la nómina antes de ajustes:", JSON.stringify(payroll, null, 2))
-
-    // Obtener información del empleado
-    const employeeId = payroll.employeeId || payroll.employee_id
-    const employee = await dbService.getEmployeeById(employeeId)
-    if (!employee) {
-      throw new Error("Empleado no encontrado")
-    }
-    
-    console.log("Datos del empleado:", JSON.stringify(employee, null, 2))
-
-    // Calcular deducciones por ausencias y llegadas tarde
-    let deductions = 0
-    let additions = 0
-    const details = []
-
-    // Valor del minuto (basado en el salario base)
-    const baseSalary = Number.parseFloat(payroll.baseSalary || payroll.base_salary || "0")
-    const dailySalary = baseSalary / 30 // Salario diario
-    const hourSalary = dailySalary / 8 // Salario por hora (asumiendo 8 horas por día)
-    const minuteSalary = hourSalary / 60 // Salario por minuto
-
-    console.log(`Valores para cálculos - Salario base: ${baseSalary}, Diario: ${dailySalary}, Hora: ${hourSalary}, Minuto: ${minuteSalary}`)
-
-    // Procesar cada asistencia
-    console.log(`Procesando ${attendances.length} registros de asistencia`)
-    
-    for (const attendance of attendances) {
-      console.log(`Procesando asistencia del día ${attendance.date}:`, JSON.stringify(attendance, null, 2))
-      
-      // Ausencias injustificadas
-      if (attendance.isAbsent && !attendance.isJustified && !attendance.isHoliday) {
-        const absenceDeduction = dailySalary
-        deductions += absenceDeduction
-        details.push({
-          concept: "Ausencia Injustificada",
-          type: "deduction",
-          amount: absenceDeduction,
-          description: `Ausencia el día ${attendance.date}`,
-        })
-        console.log(`Ausencia injustificada el día ${attendance.date}. Deducción: ${absenceDeduction}`)
-      }
-
-      // Llegadas tarde
-      if (attendance.lateMinutes > 0) {
-        const lateDeduction = minuteSalary * attendance.lateMinutes
-        deductions += lateDeduction
-        details.push({
-          concept: "Llegada Tarde",
-          type: "deduction",
-          amount: lateDeduction,
-          description: `${attendance.lateMinutes} minutos tarde el día ${attendance.date}`,
-        })
-        console.log(`Llegada tarde el día ${attendance.date}: ${attendance.lateMinutes} minutos. Deducción: ${lateDeduction}`)
-      }
-
-      // Salidas anticipadas
-      if (attendance.earlyDepartureMinutes > 0) {
-        const earlyDeduction = minuteSalary * attendance.earlyDepartureMinutes
-        deductions += earlyDeduction
-        details.push({
-          concept: "Salida Anticipada",
-          type: "deduction",
-          amount: earlyDeduction,
-          description: `${attendance.earlyDepartureMinutes} minutos antes el día ${attendance.date}`,
-        })
-        console.log(`Salida anticipada el día ${attendance.date}: ${attendance.earlyDepartureMinutes} minutos. Deducción: ${earlyDeduction}`)
-      }
-
-      // Horas extra
-      if (attendance.extraMinutes > 0) {
-        // Las horas extra se pagan a 1.5x el valor normal
-        const extraAddition = minuteSalary * attendance.extraMinutes * 1.5
-        additions += extraAddition
-        details.push({
-          concept: "Horas Extra",
-          type: "addition",
-          amount: extraAddition,
-          description: `${attendance.extraMinutes} minutos extra el día ${attendance.date}`,
-        })
-        console.log(`Horas extra el día ${attendance.date}: ${attendance.extraMinutes} minutos. Adición: ${extraAddition}`)
-      }
-
-      // Feriados trabajados
-      if (attendance.isHoliday && !attendance.isAbsent) {
-        // Los feriados se pagan doble
-        const holidayAddition = dailySalary
-        additions += holidayAddition
-        details.push({
-          concept: "Feriado Trabajado",
-          type: "addition",
-          amount: holidayAddition,
-          description: `Trabajo en día feriado ${attendance.date}`,
-        })
-        console.log(`Feriado trabajado el día ${attendance.date}. Adición: ${holidayAddition}`)
-      }
-    }
-
-    // Redondear valores para evitar problemas de precisión
-    deductions = Math.round(deductions * 100) / 100
-    additions = Math.round(additions * 100) / 100
-
-    console.log(`RESUMEN - Total deducciones: ${deductions}, Total adiciones: ${additions}`)
-
-    // Obtener valores actuales
-    const handSalary = Number.parseFloat(payroll.handSalary || payroll.hand_salary || "0")
-    const bankSalary = Number.parseFloat(payroll.bankSalary || payroll.bank_salary || "0")
-    const attendanceBonus = Number.parseFloat(payroll.attendanceBonus || payroll.attendance_bonus || "0")
-
-    console.log(`Valores actuales - Sueldo en mano: ${handSalary}, Sueldo banco: ${bankSalary}, Bono: ${attendanceBonus}`)
-
-    // Calcular sueldo final en mano (sueldo en mano - deducciones + adiciones)
-    const finalHandSalary = handSalary - deductions + additions
-
-    // Calcular total a pagar (sueldo base + sueldo banco + bono de presentismo)
-    const totalSalary = baseSalary + bankSalary + attendanceBonus
-
-    console.log(`Nuevos valores calculados - Sueldo final en mano: ${finalHandSalary}, Total a pagar: ${totalSalary}`)
-
-    // Actualizar la nómina
-    const updateData = {
-      deductions,
-      additions,
-      final_hand_salary: finalHandSalary,
-      total_salary: totalSalary,
-    }
-
-    console.log("Actualizando nómina con ajustes:", JSON.stringify(updateData, null, 2))
-
-    // Actualizar la nómina
-    try {
-      const updatedPayroll = await dbService.updatePayroll(payrollId, updateData)
-      console.log("Nómina actualizada con ajustes:", JSON.stringify(updatedPayroll, null, 2))
+      return results
     } catch (error) {
-      console.error("Error al actualizar nómina con ajustes:", error)
-      throw error;
+      console.error("Error al regenerar nóminas:", error)
+      throw new Error("Error al regenerar nóminas")
     }
+  }
 
-    // Guardar los detalles en la tabla payroll_details
-    if (details.length > 0) {
-      try {
-        // Eliminar detalles existentes si los hay
-        await dbService.deletePayrollDetails(payrollId)
-        console.log(`Detalles de nómina eliminados para ID: ${payrollId}`)
+  // Añadir un nuevo método de diagnóstico para el cálculo de ajustes
+  async calculatePayrollAdjustmentsDebug(payrollId: string, attendances: any[]) {
+    try {
+      console.log(`INICIO: Calculando ajustes para nómina ID: ${payrollId}`)
 
-        // Insertar nuevos detalles
-        console.log(`Guardando ${details.length} detalles para la nómina ${payrollId}`)
-        
-        for (const detail of details) {
-          console.log("Guardando detalle:", JSON.stringify(detail, null, 2))
-          
-          try {
-            await dbService.createPayrollDetail({
-              payroll_id: payrollId,
-              concept: detail.concept,
-              type: detail.type,
-              amount: detail.amount,
-              description: detail.description,
-            })
-          } catch (detailError) {
-            console.error("Error al guardar detalle:", detailError)
-          }
-        }
-        
-        console.log(`Guardados ${details.length} detalles para la nómina ${payrollId}`)
-      } catch (error) {
-        console.error("Error al guardar detalles de nómina:", error)
+      // Obtener la nómina actual
+      const payroll = await this.getPayrollById(payrollId)
+      if (!payroll) {
+        throw new Error("Nómina no encontrada")
       }
-    } else {
-      console.log("No hay detalles para guardar")
-    }
 
-    console.log(`FIN: Cálculo de ajustes para nómina ID: ${payrollId}`)
-    return await this.getPayrollById(payrollId)
-  } catch (error) {
-    console.error("Error al calcular ajustes de nómina:", error)
-    throw new Error("Error al calcular ajustes de nómina")
+      console.log("Datos de la nómina antes de ajustes:", JSON.stringify(payroll, null, 2))
+
+      // Obtener información del empleado
+      const employeeId = payroll.employeeId || payroll.employee_id
+      const employee = await dbService.getEmployeeById(employeeId)
+      if (!employee) {
+        throw new Error("Empleado no encontrado")
+      }
+
+      console.log("Datos del empleado:", JSON.stringify(employee, null, 2))
+
+      // Calcular deducciones por ausencias y llegadas tarde
+      let deductions = 0
+      let additions = 0
+      const details = []
+
+      // Valor del minuto (basado en el salario base)
+      const baseSalary = Number.parseFloat(payroll.baseSalary || payroll.base_salary || "0")
+      const dailySalary = baseSalary / 30 // Salario diario
+      const hourSalary = dailySalary / 8 // Salario por hora (asumiendo 8 horas por día)
+      const minuteSalary = hourSalary / 60 // Salario por minuto
+
+      console.log(
+        `Valores para cálculos - Salario base: ${baseSalary}, Diario: ${dailySalary}, Hora: ${hourSalary}, Minuto: ${minuteSalary}`,
+      )
+
+      // Procesar cada asistencia
+      console.log(`Procesando ${attendances.length} registros de asistencia`)
+
+      for (const attendance of attendances) {
+        console.log(`Procesando asistencia del día ${attendance.date}:`, JSON.stringify(attendance, null, 2))
+
+        // Ausencias injustificadas
+        if (attendance.isAbsent && !attendance.isJustified && !attendance.isHoliday) {
+          const absenceDeduction = dailySalary
+          deductions += absenceDeduction
+          details.push({
+            concept: "Ausencia Injustificada",
+            type: "deduction",
+            amount: absenceDeduction,
+            description: `Ausencia el día ${attendance.date}`,
+          })
+          console.log(`Ausencia injustificada el día ${attendance.date}. Deducción: ${absenceDeduction}`)
+        }
+
+        // Llegadas tarde
+        if (attendance.lateMinutes > 0) {
+          const lateDeduction = minuteSalary * attendance.lateMinutes
+          deductions += lateDeduction
+          details.push({
+            concept: "Llegada Tarde",
+            type: "deduction",
+            amount: lateDeduction,
+            description: `${attendance.lateMinutes} minutos tarde el día ${attendance.date}`,
+          })
+          console.log(
+            `Llegada tarde el día ${attendance.date}: ${attendance.lateMinutes} minutos. Deducción: ${lateDeduction}`,
+          )
+        }
+
+        // Salidas anticipadas
+        if (attendance.earlyDepartureMinutes > 0) {
+          const earlyDeduction = minuteSalary * attendance.earlyDepartureMinutes
+          deductions += earlyDeduction
+          details.push({
+            concept: "Salida Anticipada",
+            type: "deduction",
+            amount: earlyDeduction,
+            description: `${attendance.earlyDepartureMinutes} minutos antes el día ${attendance.date}`,
+          })
+          console.log(
+            `Salida anticipada el día ${attendance.date}: ${attendance.earlyDepartureMinutes} minutos. Deducción: ${earlyDeduction}`,
+          )
+        }
+
+        // Horas extra
+        if (attendance.extraMinutes > 0) {
+          // Las horas extra se pagan a 1.5x el valor normal
+          const extraAddition = minuteSalary * attendance.extraMinutes * 1.5
+          additions += extraAddition
+          details.push({
+            concept: "Horas Extra",
+            type: "addition",
+            amount: extraAddition,
+            description: `${attendance.extraMinutes} minutos extra el día ${attendance.date}`,
+          })
+          console.log(
+            `Horas extra el día ${attendance.date}: ${attendance.extraMinutes} minutos. Adición: ${extraAddition}`,
+          )
+        }
+
+        // Feriados trabajados
+        if (attendance.isHoliday && !attendance.isAbsent) {
+          // Los feriados se pagan doble
+          const holidayAddition = dailySalary
+          additions += holidayAddition
+          details.push({
+            concept: "Feriado Trabajado",
+            type: "addition",
+            amount: holidayAddition,
+            description: `Trabajo en día feriado ${attendance.date}`,
+          })
+          console.log(`Feriado trabajado el día ${attendance.date}. Adición: ${holidayAddition}`)
+        }
+      }
+
+      // Redondear valores para evitar problemas de precisión
+      deductions = Math.round(deductions * 100) / 100
+      additions = Math.round(additions * 100) / 100
+
+      console.log(`RESUMEN - Total deducciones: ${deductions}, Total adiciones: ${additions}`)
+
+      // Obtener valores actuales
+      const handSalary = Number.parseFloat(payroll.handSalary || payroll.hand_salary || "0")
+      const bankSalary = Number.parseFloat(payroll.bankSalary || payroll.bank_salary || "0")
+      const attendanceBonus = Number.parseFloat(payroll.attendanceBonus || payroll.attendance_bonus || "0")
+
+      console.log(
+        `Valores actuales - Sueldo en mano: ${handSalary}, Sueldo banco: ${bankSalary}, Bono: ${attendanceBonus}`,
+      )
+
+      // Calcular sueldo final en mano (sueldo en mano - deducciones + adiciones)
+      const finalHandSalary = handSalary - deductions + additions
+
+      // Calcular total a pagar (sueldo base + sueldo banco + bono de presentismo)
+      const totalSalary = baseSalary + bankSalary + attendanceBonus
+
+      console.log(`Nuevos valores calculados - Sueldo final en mano: ${finalHandSalary}, Total a pagar: ${totalSalary}`)
+
+      // Actualizar la nómina
+      const updateData = {
+        deductions,
+        additions,
+        final_hand_salary: finalHandSalary,
+        total_salary: totalSalary,
+      }
+
+      console.log("Actualizando nómina con ajustes:", JSON.stringify(updateData, null, 2))
+
+      // Actualizar la nómina
+      try {
+        const updatedPayroll = await dbService.updatePayroll(payrollId, updateData)
+        console.log("Nómina actualizada con ajustes:", JSON.stringify(updatedPayroll, null, 2))
+      } catch (error) {
+        console.error("Error al actualizar nómina con ajustes:", error)
+        throw error
+      }
+
+      // Guardar los detalles en la tabla payroll_details
+      if (details.length > 0) {
+        try {
+          // Eliminar detalles existentes si los hay
+          await dbService.deletePayrollDetails(payrollId)
+          console.log(`Detalles de nómina eliminados para ID: ${payrollId}`)
+
+          // Insertar nuevos detalles
+          console.log(`Guardando ${details.length} detalles para la nómina ${payrollId}`)
+
+          for (const detail of details) {
+            console.log("Guardando detalle:", JSON.stringify(detail, null, 2))
+
+            try {
+              await dbService.createPayrollDetail({
+                payroll_id: payrollId,
+                concept: detail.concept,
+                type: detail.type,
+                amount: detail.amount,
+                description: detail.description,
+              })
+            } catch (detailError) {
+              console.error("Error al guardar detalle:", detailError)
+            }
+          }
+
+          console.log(`Guardados ${details.length} detalles para la nómina ${payrollId}`)
+        } catch (error) {
+          console.error("Error al guardar detalles de nómina:", error)
+        }
+      } else {
+        console.log("No hay detalles para guardar")
+      }
+
+      console.log(`FIN: Cálculo de ajustes para nómina ID: ${payrollId}`)
+      return await this.getPayrollById(payrollId)
+    } catch (error) {
+      console.error("Error al calcular ajustes de nómina:", error)
+      throw new Error("Error al calcular ajustes de nómina")
+    }
   }
 }
