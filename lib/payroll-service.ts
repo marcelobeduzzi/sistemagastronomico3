@@ -15,7 +15,6 @@ export class PayrollService {
         }
 
         // Verificar si ya existe una nómina para este empleado en el mes/año especificado
-        // Usamos getPayrollsByPeriod y filtramos por employeeId en lugar de usar un método específico
         const allPayrolls = await dbService.getPayrollsByPeriod(month, year, false)
         const existingPayrolls = allPayrolls.filter((p) => p.employeeId === employeeId)
 
@@ -43,22 +42,22 @@ export class PayrollService {
 
         // Crear la nueva nómina usando dbService
         // Usamos los nombres de columnas correctos según la base de datos
+        // NO incluimos is_paid ya que es una columna generada
         const newPayroll = {
-          employeeId,
+          employee_id: employeeId,
           month,
           year,
-          baseSalary,
-          bankSalary,
+          base_salary: baseSalary,
+          bank_salary: bankSalary,
           deductions,
           additions,
-          finalHandSalary,
-          totalSalary,
-          is_paid_hand: false, // Cambiado de handSalaryPaid a is_paid_hand
-          is_paid_bank: false, // Cambiado de bankSalaryPaid a is_paid_bank
-          handSalary,
-          isPaid: false,
-          hasAttendanceBonus: employee.hasAttendanceBonus,
-          attendanceBonus,
+          final_hand_salary: finalHandSalary,
+          total_salary: totalSalary,
+          is_paid_hand: false,
+          is_paid_bank: false,
+          hand_salary: handSalary,
+          has_attendance_bonus: employee.hasAttendanceBonus,
+          attendance_bonus: attendanceBonus,
         }
 
         const createdPayroll = await dbService.createPayroll(newPayroll)
@@ -88,22 +87,38 @@ export class PayrollService {
         throw new Error("Campo inválido para actualizar")
       }
 
-      // Usamos directamente el nombre del campo en snake_case
-      // No necesitamos convertir a camelCase
-      const updateData: Record<string, any> = {
-        [field]: value,
-      }
+      // No actualizamos is_paid directamente ya que es una columna generada
+      if (field === "is_paid") {
+        // Si queremos marcar como pagado, actualizamos tanto is_paid_hand como is_paid_bank
+        const updateData = {
+          is_paid_hand: value,
+          is_paid_bank: value,
+        }
 
-      // Si estamos marcando como pagado, actualizar la fecha de pago correspondiente
-      if (field === "is_paid_hand" && value) {
-        updateData.hand_payment_date = new Date().toISOString()
-      } else if (field === "is_paid_bank" && value) {
-        updateData.bank_payment_date = new Date().toISOString()
-      }
+        if (value) {
+          updateData.hand_payment_date = new Date().toISOString()
+          updateData.bank_payment_date = new Date().toISOString()
+        }
 
-      // Usar dbService para actualizar la nómina
-      const updatedPayroll = await dbService.updatePayroll(payrollId, updateData)
-      return updatedPayroll
+        const updatedPayroll = await dbService.updatePayroll(payrollId, updateData)
+        return updatedPayroll
+      } else {
+        // Usamos directamente el nombre del campo en snake_case
+        const updateData: Record<string, any> = {
+          [field]: value,
+        }
+
+        // Si estamos marcando como pagado, actualizar la fecha de pago correspondiente
+        if (field === "is_paid_hand" && value) {
+          updateData.hand_payment_date = new Date().toISOString()
+        } else if (field === "is_paid_bank" && value) {
+          updateData.bank_payment_date = new Date().toISOString()
+        }
+
+        // Usar dbService para actualizar la nómina
+        const updatedPayroll = await dbService.updatePayroll(payrollId, updateData)
+        return updatedPayroll
+      }
     } catch (error) {
       console.error("Error al actualizar estado de nómina:", error)
       throw new Error("Error al actualizar estado de nómina")
@@ -115,8 +130,8 @@ export class PayrollService {
       // Usar dbService para actualizar los detalles de pago
       // Usamos los nombres de columnas correctos según la base de datos
       const updateData = {
-        payment_method: paymentMethod, // Cambiado de paymentMethod a payment_method
-        payment_reference: paymentReference, // Cambiado de paymentReference a payment_reference
+        payment_method: paymentMethod,
+        payment_reference: paymentReference,
       }
 
       const updatedPayroll = await dbService.updatePayroll(payrollId, updateData)
