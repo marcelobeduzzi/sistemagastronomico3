@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Plus } from "lucide-react"
+import { Plus } from 'lucide-react'
 
 interface GenerateDiscrepanciesButtonProps {
   localId?: number
@@ -16,10 +16,10 @@ export function GenerateDiscrepanciesButton({ localId }: GenerateDiscrepanciesBu
   const handleClick = () => {
     if (localId) {
       // Si tenemos un ID de local, redirigir a la página de generar discrepancias con el local preseleccionado
-      router.push(`/conciliacion/generar-discrepancias?localId=${localId}`)
+      router.push(`/conciliacion/generar?localId=${localId}`)
     } else {
       // Si no hay ID de local, mostrar el diálogo o redirigir a la página general
-      router.push(`/conciliacion/generar-discrepancias`)
+      router.push(`/conciliacion/generar`)
     }
   }
 
