@@ -72,9 +72,9 @@ export function CashDiscrepancyTable({ discrepancies, isLoading, localId, date, 
       if (shift) queryParams.append("shift", shift)
       queryParams.append("forceCashDiscrepancies", "true")
 
-      router.push(`/conciliacion/generar-discrepancias?${queryParams.toString()}`)
+      router.push(`/conciliacion/generar?${queryParams.toString()}`)
     } else {
-      router.push("/conciliacion/generar-discrepancias")
+      router.push("/conciliacion/generar")
     }
   }
 
