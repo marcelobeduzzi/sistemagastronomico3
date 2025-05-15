@@ -390,7 +390,6 @@ export default function NominaPage() {
       toast({
         title: "Error",
         description: "No se pudo confirmar el pago. Intente nuevamente.",
-        variant: "destructive",
       })
     }
   }
@@ -1053,6 +1052,47 @@ export default function NominaPage() {
           <Button variant="outline" onClick={handleGeneratePayrolls} disabled={isGeneratingPayrolls}>
             <RefreshCw className={`mr-2 h-4 w-4 ${isGeneratingPayrolls ? "animate-spin" : ""}`} />
             {isGeneratingPayrolls ? "Generando..." : "Generar Nóminas"}
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={async () => {
+              try {
+                setIsGeneratingPayrolls(true)
+                // Obtener IDs de empleados activos
+                const employeeIds = employees.map((emp) => emp.id)
+
+                console.log("=== INICIO DE REGENERACIÓN DE NÓMINAS ===")
+                console.log(`Regenerando nóminas para ${selectedMonth}/${selectedYear}`)
+                console.log(`Empleados seleccionados: ${employeeIds.length}`)
+
+                // Usar el servicio de nóminas para regenerar las nóminas
+                await payrollService.forceRegeneratePayrolls(employeeIds, selectedMonth, selectedYear)
+
+                console.log("=== FIN DE REGENERACIÓN DE NÓMINAS ===")
+
+                toast({
+                  title: "Nóminas regeneradas",
+                  description: "Las nóminas han sido regeneradas correctamente. Revisa la consola para ver detalles.",
+                })
+
+                // Recargar datos
+                loadData()
+              } catch (error) {
+                console.error("Error al regenerar nóminas:", error)
+                toast({
+                  title: "Error",
+                  description: "No se pudieron regenerar las nóminas. Intente nuevamente.",
+                  variant: "destructive",
+                })
+              } finally {
+                setIsGeneratingPayrolls(false)
+              }
+            }}
+            disabled={isGeneratingPayrolls}
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${isGeneratingPayrolls ? "animate-spin" : ""}`} />
+            {isGeneratingPayrolls ? "Regenerando..." : "Regenerar Nóminas (Debug)"}
           </Button>
 
           {activeTab === "liquidaciones" && (
