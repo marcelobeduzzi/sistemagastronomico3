@@ -1433,7 +1433,7 @@ class DatabaseService {
         // Verificar si ya existe una liquidación para este empleado
         if (employeesWithLiquidation.has(employee.id)) {
           const liquidationId = employeesWithLiquidation.get(employee.id)
-          console.log(`  {
+          // console.log(`  {
           const liquidationId = employeesWithLiquidation.get(employee.id)
           console.log(`Actualizando liquidación existente con ID ${liquidationId} para empleado ${employee.id}`);
 
