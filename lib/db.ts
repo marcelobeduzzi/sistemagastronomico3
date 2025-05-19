@@ -852,33 +852,65 @@ class DatabaseService {
     return data.map((item) => objectToCamelCase(item))
   }
 
-  // MODIFICADO: Método createPayroll para asegurar que los valores se propaguen correctamente
+  // MODIFICADO: Método createPayroll para usar el salario base del empleado cuando no hay asistencias
   async createPayroll(payroll: Omit<Payroll, "id">) {
     try {
       console.log("Datos originales recibidos en createPayroll:", payroll);
       
-      // Asegurar que los valores se propaguen correctamente
-      const handSalary = Number(payroll.handSalary || 0);
+      // Si no se proporciona handSalary, obtener el salario base del empleado
+      let handSalary = Number(payroll.handSalary || 0);
+      
+      // Si handSalary es 0, intentar obtener el salario base del empleado
+      if (handSalary === 0 && payroll.employeeId) {
+        try {
+          const { data: employee, error } = await this.supabase
+            .from("employees")
+            .select("base_salary")
+            .eq("id", payroll.employeeId)
+            .single();
+            
+          if (!error && employee && employee.base_salary) {
+            console.log(`Usando salario base del empleado: ${employee.base_salary}`);
+            handSalary = Number(employee.base_salary);
+          }
+        } catch (err) {
+          console.error("Error al obtener salario base del empleado:", err);
+        }
+      }
+      
       const bankSalary = Number(payroll.bankSalary || 0);
       const deductions = Number(payroll.deductions || 0);
       const additions = Number(payroll.additions || 0);
       const attendanceBonus = Number(payroll.attendanceBonus || 0);
+      const hasAttendanceBonus = Boolean(payroll.hasAttendanceBonus);
       
       // Calcular el sueldo final en mano (handSalary - deductions + additions + attendanceBonus)
-      const finalHandSalary = handSalary - deductions + additions + attendanceBonus;
+      const finalHandSalary = handSalary - deductions + additions + (hasAttendanceBonus ? attendanceBonus : 0);
       
       // Calcular el total a pagar (finalHandSalary + bankSalary)
       const totalSalary = finalHandSalary + bankSalary;
       
+      console.log("Valores calculados:", {
+        handSalary,
+        bankSalary,
+        deductions,
+        additions,
+        attendanceBonus,
+        hasAttendanceBonus,
+        finalHandSalary,
+        totalSalary
+      });
+      
       // Crear el objeto de datos para la nómina
       const payrollData = objectToSnakeCase({
         ...payroll,
+        base_salary: payroll.baseSalary || handSalary, // Usar el salario base proporcionado o el handSalary como fallback
         hand_salary: handSalary,
         bank_salary: bankSalary,
         deductions: deductions,
         additions: additions,
         attendance_bonus: attendanceBonus,
-        has_attendance_bonus: Boolean(payroll.hasAttendanceBonus),
+        has_attendance_bonus: hasAttendanceBonus,
         final_hand_salary: finalHandSalary,
         total_salary: totalSalary,
         created_at: new Date().toISOString(),
@@ -920,7 +952,7 @@ class DatabaseService {
         .from("payroll")
         .select(`
           *,
-          employee:employees(id, first_name, last_name),
+          employee:employees(id, first_name, last_name, base_salary),
           details:payroll_details(*)
         `)
         .order("created_at", { ascending: false })
@@ -952,6 +984,9 @@ class DatabaseService {
       const payrolls = (data || []).map((item) => {
         const payroll = objectToCamelCase(item)
 
+        // Obtener el salario base del empleado si está disponible
+        const employeeBaseSalary = payroll.employee?.baseSalary ? Number(payroll.employee.baseSalary) : 0;
+        
         // Asegurarse de que los campos de salario tengan valores numéricos
         payroll.handSalary = Number(payroll.handSalary || 0);
         payroll.bankSalary = Number(payroll.bankSalary || 0);
@@ -959,16 +994,23 @@ class DatabaseService {
         payroll.deductions = Number(payroll.deductions || 0);
         payroll.additions = Number(payroll.additions || 0);
         payroll.attendanceBonus = Number(payroll.attendanceBonus || 0);
+        
+        // Si handSalary es 0, usar el salario base del empleado
+        if (payroll.handSalary === 0 && employeeBaseSalary > 0) {
+          payroll.handSalary = employeeBaseSalary;
+          console.log(`Usando salario base del empleado (${employeeBaseSalary}) para nómina ${payroll.id}`);
+        }
+        
+        // Si finalHandSalary es 0 o no existe, calcularlo
         payroll.finalHandSalary = Number(payroll.finalHandSalary || 0);
-        payroll.totalSalary = Number(payroll.totalSalary || 0);
-
-        // Si no hay finalHandSalary, calcularlo
-        if (!payroll.finalHandSalary) {
-          payroll.finalHandSalary = payroll.handSalary - payroll.deductions + payroll.additions + payroll.attendanceBonus;
+        if (payroll.finalHandSalary === 0) {
+          payroll.finalHandSalary = payroll.handSalary - payroll.deductions + payroll.additions + 
+            (payroll.hasAttendanceBonus ? payroll.attendanceBonus : 0);
         }
 
-        // Si no hay totalSalary, calcularlo
-        if (!payroll.totalSalary) {
+        // Si totalSalary es 0 o no existe, calcularlo
+        payroll.totalSalary = Number(payroll.totalSalary || 0);
+        if (payroll.totalSalary === 0) {
           payroll.totalSalary = payroll.finalHandSalary + payroll.bankSalary;
         }
 
@@ -1042,7 +1084,7 @@ class DatabaseService {
     }
   }
 
-  // MODIFICADO: Método updatePayroll para asegurar cálculos correctos
+  // MODIFICADO: Método updatePayroll para asegurar cálculos correctos y usar el salario base del empleado
   async updatePayroll(id: string, payroll: Partial<Payroll>) {
     try {
       console.log("Actualizando nómina con ID:", id, "Datos:", payroll)
@@ -1050,7 +1092,7 @@ class DatabaseService {
       // Obtener la nómina actual para tener todos los datos necesarios
       const { data: currentPayroll, error: fetchError } = await this.supabase
         .from("payroll")
-        .select("*")
+        .select("*, employee:employees(base_salary)")
         .eq("id", id)
         .single()
 
@@ -1061,6 +1103,9 @@ class DatabaseService {
 
       // Convertir a camelCase para facilitar el trabajo
       const current = objectToCamelCase(currentPayroll)
+      
+      // Obtener el salario base del empleado si está disponible
+      const employeeBaseSalary = current.employee?.baseSalary ? Number(current.employee.baseSalary) : 0;
 
       // Crear objeto de actualización con los valores actuales
       const updateData: any = {
@@ -1092,7 +1137,14 @@ class DatabaseService {
       if (payroll.handSalary !== undefined) {
         updateData.hand_salary = Number(payroll.handSalary)
       } else {
+        // Si no se proporciona handSalary, usar el valor actual o el salario base del empleado
         updateData.hand_salary = Number(current.handSalary || 0)
+        
+        // Si handSalary es 0, usar el salario base del empleado
+        if (updateData.hand_salary === 0 && employeeBaseSalary > 0) {
+          updateData.hand_salary = employeeBaseSalary;
+          console.log(`Usando salario base del empleado (${employeeBaseSalary}) para nómina ${id}`);
+        }
       }
 
       if (payroll.bankSalary !== undefined) {
@@ -1252,8 +1304,14 @@ class DatabaseService {
           continue
         }
 
-        // Usar salario base de la última nómina o un valor predeterminado
-        const baseSalary = latestPayroll && latestPayroll.length > 0 ? latestPayroll[0].base_salary : 0
+        // Usar salario base de la última nómina o del empleado como fallback
+        let baseSalary = 0;
+        if (latestPayroll && latestPayroll.length > 0 && latestPayroll[0].base_salary) {
+          baseSalary = Number(latestPayroll[0].base_salary);
+        } else if (employee.baseSalary) {
+          baseSalary = Number(employee.baseSalary);
+        }
+        
         console.log(`Salario base: ${baseSalary}`)
 
         // Valor diario del salario
@@ -1366,6 +1424,7 @@ class DatabaseService {
             .eq("id", liquidationId)
 
           if (updateError) {
+            console.error(`Error al actualizar liquidación para empleado ${employee.id}:  {
             console.error(`Error al actualizar liquidación para empleado ${employee.id}:`, updateError)
             skipped++
             continue
@@ -1435,7 +1494,7 @@ class DatabaseService {
           // Obtener información del empleado
           const { data: employee, error: employeeError } = await this.supabase
             .from("employees")
-            .select("hire_date, salary")
+            .select("hire_date, salary, base_salary")
             .eq("id", liquidation.employee_id)
             .single()
 
@@ -1451,7 +1510,9 @@ class DatabaseService {
             continue
           }
 
-          console.log(`Empleado encontrado - Fecha contratación: ${employee.hire_date}, Salario: ${employee.salary}`)
+          // Usar base_salary si está disponible, de lo contrario usar salary
+          const employeeSalary = employee.base_salary || employee.salary || 0;
+          console.log(`Empleado encontrado - Fecha contratación: ${employee.hire_date}, Salario: ${employeeSalary}`)
 
           // Calcular los días a pagar del último mes
           const terminationDate = new Date(liquidation.termination_date)
@@ -1465,7 +1526,7 @@ class DatabaseService {
           console.log(`Días trabajados en el último mes: ${daysInLastMonth}`)
 
           // Calcular el valor diario del salario
-          const dailySalary = (employee.salary || 0) / 30
+          const dailySalary = employeeSalary / 30
           console.log(`Salario diario: ${dailySalary}`)
 
           // Calcular el monto de compensación (pago por días trabajados en el último mes)
