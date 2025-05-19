@@ -935,15 +935,33 @@ class DatabaseService {
   }
 
   async createPayrollDetail(detail: Omit<PayrollDetail, "id">) {
-    const detailData = objectToSnakeCase(detail)
-    const { data, error } = await this.supabase.from("payroll_details").insert([detailData]).select().single()
+    try {
+      // CORRECCIÓN: Asegurarse de que se use el campo 'notes' en lugar de 'description'
+      const detailData = {
+        ...objectToSnakeCase(detail),
+        // Si se proporciona 'description', usarlo como 'notes'
+        notes: detail.notes || detail.description || "",
+      }
 
-    if (error) throw error
-    return objectToCamelCase(data)
+      console.log("Creando detalle de nómina con datos:", detailData)
+
+      const { data, error } = await this.supabase.from("payroll_details").insert([detailData]).select().single()
+
+      if (error) {
+        console.error("Error al crear detalle de nómina:", error)
+        throw error
+      }
+
+      console.log("Detalle de nómina creado exitosamente:", data)
+      return objectToCamelCase(data)
+    } catch (error) {
+      console.error("Error en createPayrollDetail:", error)
+      throw error
+    }
   }
 
   // MODIFICADO: Método getPayrollsByPeriod para incluir información del empleado y asegurar valores correctos
-  async getPayrollsByPeriod(month: number, year: number, isPaid: boolean) {
+  async getPayrollsByPeriod(month: number, year: number, isPaid = false) {
     try {
       console.log(`Consultando nóminas con isPaid=${isPaid}, month=${month}, year=${year}`)
 

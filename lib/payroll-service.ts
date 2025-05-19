@@ -1,3 +1,5 @@
+// lib/payroll-service.ts
+
 import { dbService } from "@/lib/db-service"
 
 export class PayrollService {
@@ -331,7 +333,7 @@ export class PayrollService {
             // Calcular ajustes basados en asistencias
             if (attendances && attendances.length > 0) {
               console.log(`Calculando ajustes para ${attendances.length} asistencias`)
-              await this.calculatePayrollAdjustmentsDebug(existingPayroll.id, attendances)
+              await this.calculatePayrollAdjustments(existingPayroll.id, attendances)
               const updatedPayroll = await this.getPayrollById(existingPayroll.id)
               console.log("Nómina después de ajustes:", JSON.stringify(updatedPayroll, null, 2))
               results.push(updatedPayroll)
@@ -506,7 +508,8 @@ export class PayrollService {
             concept: "Ausencia Injustificada",
             type: "deduction",
             amount: absenceDeduction,
-            description: `Ausencia el día ${attendance.date}`,
+            notes: `Ausencia el día ${attendance.date}`,
+            date: attendance.date,
           })
           console.log(`Ausencia injustificada el día ${attendance.date}. Deducción: ${absenceDeduction}`)
         }
@@ -519,7 +522,8 @@ export class PayrollService {
             concept: "Llegada Tarde",
             type: "deduction",
             amount: lateDeduction,
-            description: `${attendance.lateMinutes} minutos tarde el día ${attendance.date}`,
+            notes: `${attendance.lateMinutes} minutos tarde el día ${attendance.date}`,
+            date: attendance.date,
           })
           console.log(
             `Llegada tarde el día ${attendance.date}: ${attendance.lateMinutes} minutos. Deducción: ${lateDeduction}`,
@@ -534,7 +538,8 @@ export class PayrollService {
             concept: "Salida Anticipada",
             type: "deduction",
             amount: earlyDeduction,
-            description: `${attendance.earlyDepartureMinutes} minutos antes el día ${attendance.date}`,
+            notes: `${attendance.earlyDepartureMinutes} minutos antes el día ${attendance.date}`,
+            date: attendance.date,
           })
           console.log(
             `Salida anticipada el día ${attendance.date}: ${attendance.earlyDepartureMinutes} minutos. Deducción: ${earlyDeduction}`,
@@ -550,7 +555,8 @@ export class PayrollService {
             concept: "Horas Extra",
             type: "addition",
             amount: extraAddition,
-            description: `${attendance.extraMinutes} minutos extra el día ${attendance.date}`,
+            notes: `${attendance.extraMinutes} minutos extra el día ${attendance.date}`,
+            date: attendance.date,
           })
           console.log(
             `Horas extra el día ${attendance.date}: ${attendance.extraMinutes} minutos. Adición: ${extraAddition}`,
@@ -566,7 +572,8 @@ export class PayrollService {
             concept: "Feriado Trabajado",
             type: "addition",
             amount: holidayAddition,
-            description: `Trabajo en día feriado ${attendance.date}`,
+            notes: `Trabajo en día feriado ${attendance.date}`,
+            date: attendance.date,
           })
           console.log(`Feriado trabajado el día ${attendance.date}. Adición: ${holidayAddition}`)
         }
@@ -633,7 +640,8 @@ export class PayrollService {
                 concept: detail.concept,
                 type: detail.type,
                 amount: detail.amount,
-                description: detail.description,
+                date: detail.date,
+                notes: detail.notes,
               })
             } catch (detailError) {
               console.error("Error al guardar detalle:", detailError)
@@ -694,7 +702,8 @@ export class PayrollService {
             concept: "Ausencia Injustificada",
             type: "deduction",
             amount: absenceDeduction,
-            description: `Ausencia el día ${attendance.date}`,
+            notes: `Ausencia el día ${attendance.date}`,
+            date: attendance.date,
           })
           console.log(`Ausencia injustificada el día ${attendance.date}. Deducción: ${absenceDeduction}`)
         }
@@ -707,7 +716,8 @@ export class PayrollService {
             concept: "Llegada Tarde",
             type: "deduction",
             amount: lateDeduction,
-            description: `${attendance.lateMinutes} minutos tarde el día ${attendance.date}`,
+            notes: `${attendance.lateMinutes} minutos tarde el día ${attendance.date}`,
+            date: attendance.date,
           })
           console.log(
             `Llegada tarde el día ${attendance.date}: ${attendance.lateMinutes} minutos. Deducción: ${lateDeduction}`,
@@ -722,7 +732,8 @@ export class PayrollService {
             concept: "Salida Anticipada",
             type: "deduction",
             amount: earlyDeduction,
-            description: `${attendance.earlyDepartureMinutes} minutos antes el día ${attendance.date}`,
+            notes: `${attendance.earlyDepartureMinutes} minutos antes el día ${attendance.date}`,
+            date: attendance.date,
           })
           console.log(
             `Salida anticipada el día ${attendance.date}: ${attendance.earlyDepartureMinutes} minutos. Deducción: ${earlyDeduction}`,
@@ -738,7 +749,8 @@ export class PayrollService {
             concept: "Horas Extra",
             type: "addition",
             amount: extraAddition,
-            description: `${attendance.extraMinutes} minutos extra el día ${attendance.date}`,
+            notes: `${attendance.extraMinutes} minutos extra el día ${attendance.date}`,
+            date: attendance.date,
           })
           console.log(
             `Horas extra el día ${attendance.date}: ${attendance.extraMinutes} minutos. Adición: ${extraAddition}`,
@@ -754,7 +766,8 @@ export class PayrollService {
             concept: "Feriado Trabajado",
             type: "addition",
             amount: holidayAddition,
-            description: `Trabajo en día feriado ${attendance.date}`,
+            notes: `Trabajo en día feriado ${attendance.date}`,
+            date: attendance.date,
           })
           console.log(`Feriado trabajado el día ${attendance.date}. Adición: ${holidayAddition}`)
         }
@@ -809,7 +822,8 @@ export class PayrollService {
               concept: detail.concept,
               type: detail.type,
               amount: detail.amount,
-              description: detail.description,
+              date: detail.date,
+              notes: detail.notes,
             })
           }
           console.log(`Guardados ${details.length} detalles para la nómina ${payrollId}`)
