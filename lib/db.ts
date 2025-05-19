@@ -1174,14 +1174,17 @@ class DatabaseService {
         updateData.bank_salary = Number(current.bankSalary || 0)
       }
 
+      // IMPORTANTE: Procesar explícitamente los campos de deducciones y adiciones
       if (payroll.deductions !== undefined) {
         updateData.deductions = Number(payroll.deductions)
+        console.log(`Actualizando deductions a: ${updateData.deductions} (valor original: ${payroll.deductions})`)
       } else {
         updateData.deductions = Number(current.deductions || 0)
       }
 
       if (payroll.additions !== undefined) {
         updateData.additions = Number(payroll.additions)
+        console.log(`Actualizando additions a: ${updateData.additions} (valor original: ${payroll.additions})`)
       } else {
         updateData.additions = Number(current.additions || 0)
       }
@@ -1199,15 +1202,34 @@ class DatabaseService {
         updateData.attendance_bonus = Number(current.attendanceBonus || 0)
       }
 
-      // Calcular el sueldo final en mano
-      updateData.final_hand_salary =
-        updateData.hand_salary -
-        updateData.deductions +
-        updateData.additions +
-        (updateData.has_attendance_bonus ? updateData.attendance_bonus : 0)
+      // Calcular el sueldo final en mano si no se proporciona
+      if (payroll.finalHandSalary !== undefined) {
+        updateData.final_hand_salary = Number(payroll.finalHandSalary)
+      } else if (payroll.deductions !== undefined || payroll.additions !== undefined) {
+        // Recalcular solo si se actualizaron deducciones o adiciones
+        updateData.final_hand_salary =
+          updateData.hand_salary -
+          updateData.deductions +
+          updateData.additions +
+          (updateData.has_attendance_bonus ? updateData.attendance_bonus : 0)
+      } else {
+        updateData.final_hand_salary = Number(current.finalHandSalary || 0)
+      }
 
-      // Calcular el total a pagar
-      updateData.total_salary = updateData.final_hand_salary + updateData.bank_salary
+      // Calcular el total a pagar si no se proporciona
+      if (payroll.totalSalary !== undefined) {
+        updateData.total_salary = Number(payroll.totalSalary)
+      } else if (
+        payroll.finalHandSalary !== undefined ||
+        payroll.bankSalary !== undefined ||
+        payroll.deductions !== undefined ||
+        payroll.additions !== undefined
+      ) {
+        // Recalcular solo si se actualizaron valores relacionados
+        updateData.total_salary = updateData.final_hand_salary + updateData.bank_salary
+      } else {
+        updateData.total_salary = Number(current.totalSalary || 0)
+      }
 
       console.log("Datos para actualización:", updateData)
 

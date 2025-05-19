@@ -37,6 +37,13 @@ export class PayrollService {
   private calculateAdjustmentsFromAttendances(attendances: any[], baseSalary: number) {
     console.log("Calculando ajustes a partir de asistencias")
 
+    // Inspeccionar los datos de asistencia
+    console.log("DATOS DE ASISTENCIA RECIBIDOS:", JSON.stringify(attendances.slice(0, 3), null, 2))
+    console.log(
+      "Campos disponibles en el primer registro:",
+      attendances.length > 0 ? Object.keys(attendances[0]) : "No hay registros",
+    )
+
     let deductions = 0
     let additions = 0
     const details = []
@@ -365,6 +372,11 @@ export class PayrollService {
    */
   async forceRegeneratePayrolls(employeeIds: string[], month: number, year: number) {
     try {
+      // Primero verificar la estructura de la tabla
+      const tableStructure = await this.checkPayrollTableStructure()
+      console.log("ESTRUCTURA DE LA TABLA PAYROLL:", tableStructure)
+
+      // Continuar con el resto de la función...
       console.log(`Forzando regeneración de nóminas para ${employeeIds.length} empleados en período ${month}/${year}`)
       const results = []
 
@@ -401,6 +413,23 @@ export class PayrollService {
         // Obtener asistencias del empleado para el período
         const attendances = await dbService.getAttendancesByDateRange(employeeId, startDateStr, endDateStr)
         console.log(`Se encontraron ${attendances.length} registros de asistencia`)
+
+        // Verificar si hay asistencias con datos relevantes para cálculos
+        if (attendances.length > 0) {
+          const hasLateMinutes = attendances.some((a) => a.lateMinutes > 0)
+          const hasEarlyDepartures = attendances.some((a) => a.earlyDepartureMinutes > 0)
+          const hasExtraMinutes = attendances.some((a) => a.extraMinutes > 0)
+          const hasAbsences = attendances.some((a) => a.isAbsent && !a.isJustified)
+          const hasHolidays = attendances.some((a) => a.isHoliday && !a.isAbsent)
+
+          console.log(`ANÁLISIS DE ASISTENCIAS: 
+            - Registros con llegadas tarde: ${hasLateMinutes}
+            - Registros con salidas anticipadas: ${hasEarlyDepartures}
+            - Registros con horas extra: ${hasExtraMinutes}
+            - Registros con ausencias injustificadas: ${hasAbsences}
+            - Registros con feriados trabajados: ${hasHolidays}
+          `)
+        }
 
         // Calcular los valores base de la nómina
         const baseSalary = Number(employee.baseSalary || employee.base_salary || 0)
@@ -454,6 +483,13 @@ export class PayrollService {
           attendance_bonus: attendanceBonus,
         }
 
+        // Verificar que los valores de deducciones y adiciones estén presentes
+        console.log(`VERIFICACIÓN DE DATOS A GUARDAR:
+  - Deducciones: ${deductions} (tipo: ${typeof deductions})
+  - Adiciones: ${additions} (tipo: ${typeof additions})
+  - Datos completos: ${JSON.stringify(payrollData, null, 2)}
+`)
+
         let payrollId: string
 
         if (existingPayroll) {
@@ -476,6 +512,14 @@ export class PayrollService {
 
           console.log(`Nueva nómina creada con ID: ${payrollId}`)
         }
+
+        // Verificar que la nómina se haya guardado correctamente
+        const payrollAfterSave = await this.getPayrollById(payrollId)
+        console.log(`NÓMINA DESPUÉS DE GUARDAR:
+  - ID: ${payrollId}
+  - Deducciones: ${payrollAfterSave.deductions || payrollAfterSave.deductions === 0 ? payrollAfterSave.deductions : "NO PRESENTE"}
+  - Adiciones: ${payrollAfterSave.additions || payrollAfterSave.additions === 0 ? payrollAfterSave.additions : "NO PRESENTE"}
+`)
 
         // Guardar los detalles de la nómina
         if (details.length > 0) {
@@ -667,11 +711,33 @@ export class PayrollService {
         total_salary: totalSalary,
       }
 
+      // Asegurarse de que los valores sean numéricos
+      Object.keys(updateData).forEach((key) => {
+        if (typeof updateData[key] === "number") {
+          // Convertir a string y luego a número para asegurar que se guarde como numérico
+          updateData[key] = Number(updateData[key].toString())
+          console.log(`Campo ${key} convertido a número: ${updateData[key]}`)
+        }
+      })
+
       console.log(`Actualizando nómina con datos:`, JSON.stringify(updateData, null, 2))
 
       try {
         const updatedPayroll = await dbService.updatePayroll(payrollId, updateData)
         console.log(`Nómina actualizada correctamente:`, JSON.stringify(updatedPayroll, null, 2))
+
+        // Verificar si los valores se guardaron correctamente
+        if (updatedPayroll.deductions === 0 && deductions > 0) {
+          console.error(
+            `ADVERTENCIA: El valor de deductions no se guardó correctamente. Valor calculado: ${deductions}, Valor guardado: ${updatedPayroll.deductions}`,
+          )
+        }
+
+        if (updatedPayroll.additions === 0 && additions > 0) {
+          console.error(
+            `ADVERTENCIA: El valor de additions no se guardó correctamente. Valor calculado: ${additions}, Valor guardado: ${updatedPayroll.additions}`,
+          )
+        }
       } catch (updateError) {
         console.error(`Error al actualizar nómina:`, updateError)
         throw updateError
@@ -1009,6 +1075,64 @@ export class PayrollService {
     } catch (error) {
       console.error("Error al exportar nóminas a CSV:", error)
       throw new Error("Error al exportar nóminas a CSV")
+    }
+  }
+
+  // Añadir esta función al final de la clase PayrollService, justo antes del cierre
+  async checkPayrollTableStructure() {
+    try {
+      // Obtener una nómina existente para ver su estructura
+      const payrolls = await dbService.getPayrollsByPeriod(1, 2023, false)
+
+      if (payrolls && payrolls.length > 0) {
+        const payroll = payrolls[0]
+        console.log("ESTRUCTURA DE NÓMINA:", Object.keys(payroll))
+        console.log("VALORES DE NÓMINA:", JSON.stringify(payroll, null, 2))
+
+        // Verificar si existen los campos deductions y additions
+        const hasDeductions = "deductions" in payroll || "deductions" in payroll
+        const hasAdditions = "additions" in payroll || "additions" in payroll
+
+        console.log(`Campo deductions existe: ${hasDeductions}`)
+        console.log(`Campo additions existe: ${hasAdditions}`)
+
+        // Verificar si hay campos similares que podrían estar siendo usados en su lugar
+        const possibleDeductionsFields = Object.keys(payroll).filter(
+          (key) =>
+            key.toLowerCase().includes("deduct") ||
+            key.toLowerCase().includes("discount") ||
+            key.toLowerCase().includes("minus"),
+        )
+
+        const possibleAdditionsFields = Object.keys(payroll).filter(
+          (key) =>
+            key.toLowerCase().includes("add") ||
+            key.toLowerCase().includes("plus") ||
+            key.toLowerCase().includes("bonus"),
+        )
+
+        if (possibleDeductionsFields.length > 0) {
+          console.log(`Posibles campos para deducciones: ${possibleDeductionsFields.join(", ")}`)
+        }
+
+        if (possibleAdditionsFields.length > 0) {
+          console.log(`Posibles campos para adiciones: ${possibleAdditionsFields.join(", ")}`)
+        }
+
+        return {
+          hasDeductions,
+          hasAdditions,
+          possibleDeductionsFields,
+          possibleAdditionsFields,
+          structure: Object.keys(payroll),
+        }
+      } else {
+        console.log("No se encontraron nóminas para verificar la estructura")
+        return null
+      }
+    } catch (error) {
+      console.error("Error al verificar la estructura de la tabla payroll:", error)
+      throw new Error("Error al verificar la estructura de la tabla payroll")
     }
   }
 }
