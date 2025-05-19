@@ -664,20 +664,29 @@ export class PayrollService {
     }
   }
 
+  // FUNCIÓN MEJORADA: calculatePayrollAdjustments con más logging y mejor manejo de errores
   async calculatePayrollAdjustments(payrollId: string, attendances: any[]) {
     try {
+      console.log(`Iniciando cálculo de ajustes para nómina ID: ${payrollId} con ${attendances.length} asistencias`)
+
       // Obtener la nómina actual
       const payroll = await this.getPayrollById(payrollId)
       if (!payroll) {
+        console.error(`No se encontró la nómina con ID: ${payrollId}`)
         throw new Error("Nómina no encontrada")
       }
+
+      console.log(`Nómina encontrada:`, JSON.stringify(payroll, null, 2))
 
       // Obtener información del empleado
       const employeeId = payroll.employeeId || payroll.employee_id
       const employee = await dbService.getEmployeeById(employeeId)
       if (!employee) {
+        console.error(`No se encontró el empleado con ID: ${employeeId}`)
         throw new Error("Empleado no encontrado")
       }
+
+      console.log(`Empleado encontrado: ${employee.firstName} ${employee.lastName}`)
 
       // Calcular deducciones por ausencias y llegadas tarde
       let deductions = 0
@@ -685,15 +694,31 @@ export class PayrollService {
       const details = []
 
       // Valor del minuto (basado en el salario base)
-      const baseSalary = Number.parseFloat(payroll.baseSalary || payroll.base_salary || "0")
+      const baseSalary = Number(payroll.baseSalary || payroll.base_salary || 0)
       const dailySalary = baseSalary / 30 // Salario diario
       const hourSalary = dailySalary / 8 // Salario por hora (asumiendo 8 horas por día)
       const minuteSalary = hourSalary / 60 // Salario por minuto
 
-      console.log(`Calculando ajustes para nómina ${payrollId}. Valor del minuto: ${minuteSalary}`)
+      console.log(
+        `Valores para cálculos - Base: ${baseSalary}, Diario: ${dailySalary}, Hora: ${hourSalary}, Minuto: ${minuteSalary}`,
+      )
 
       // Procesar cada asistencia
+      console.log(`Procesando ${attendances.length} registros de asistencia`)
+
       for (const attendance of attendances) {
+        console.log(
+          `Procesando asistencia del día ${attendance.date}:`,
+          JSON.stringify({
+            isAbsent: attendance.isAbsent,
+            isJustified: attendance.isJustified,
+            isHoliday: attendance.isHoliday,
+            lateMinutes: attendance.lateMinutes,
+            earlyDepartureMinutes: attendance.earlyDepartureMinutes,
+            extraMinutes: attendance.extraMinutes,
+          }),
+        )
+
         // Ausencias injustificadas
         if (attendance.isAbsent && !attendance.isJustified && !attendance.isHoliday) {
           const absenceDeduction = dailySalary
@@ -777,65 +802,84 @@ export class PayrollService {
       deductions = Math.round(deductions * 100) / 100
       additions = Math.round(additions * 100) / 100
 
-      console.log(`Total deducciones: ${deductions}, Total adiciones: ${additions}`)
+      console.log(`RESUMEN - Total deducciones: ${deductions}, Total adiciones: ${additions}`)
 
       // Obtener valores actuales
-      const handSalary = Number.parseFloat(payroll.handSalary || payroll.hand_salary || "0")
-      const bankSalary = Number.parseFloat(payroll.bankSalary || payroll.bank_salary || "0")
-      const attendanceBonus = Number.parseFloat(payroll.attendanceBonus || payroll.attendance_bonus || "0")
-
-      console.log(
-        `Valores actuales - Sueldo en mano: ${handSalary}, Sueldo banco: ${bankSalary}, Bono: ${attendanceBonus}`,
-      )
+      const handSalary = Number(payroll.handSalary || payroll.hand_salary || 0)
+      const bankSalary = Number(payroll.bankSalary || payroll.bank_salary || 0)
+      const attendanceBonus = Number(payroll.attendanceBonus || payroll.attendance_bonus || 0)
 
       // Calcular sueldo final en mano (sueldo en mano - deducciones + adiciones)
       const finalHandSalary = handSalary - deductions + additions
 
       // Calcular total a pagar (sueldo en banco + sueldo final en mano + bono de presentismo)
-      const totalSalary = bankSalary + finalHandSalary + attendanceBonus
+      const totalSalary = bankSalary + finalHandSalary + (payroll.hasAttendanceBonus ? attendanceBonus : 0)
 
-      console.log(`Nuevos valores - Sueldo final en mano: ${finalHandSalary}, Total a pagar: ${totalSalary}`)
+      console.log(`Valores calculados - Final Mano: ${finalHandSalary}, Total: ${totalSalary}`)
 
       // Actualizar la nómina
       const updateData = {
-        deductions,
-        additions,
+        deductions: deductions,
+        additions: additions,
         final_hand_salary: finalHandSalary,
         total_salary: totalSalary,
       }
 
-      console.log("Actualizando nómina con ajustes:", updateData)
+      console.log(`Actualizando nómina con datos:`, JSON.stringify(updateData, null, 2))
 
-      // Actualizar la nómina
-      const updatedPayroll = await dbService.updatePayroll(payrollId, updateData)
+      try {
+        const updatedPayroll = await dbService.updatePayroll(payrollId, updateData)
+        console.log(`Nómina actualizada correctamente:`, JSON.stringify(updatedPayroll, null, 2))
+      } catch (updateError) {
+        console.error(`Error al actualizar nómina:`, updateError)
+        throw updateError
+      }
 
       // Guardar los detalles en la tabla payroll_details
       if (details.length > 0) {
         try {
           // Eliminar detalles existentes si los hay
           await dbService.deletePayrollDetails(payrollId)
+          console.log(`Detalles anteriores eliminados para nómina ${payrollId}`)
 
           // Insertar nuevos detalles
+          console.log(`Guardando ${details.length} detalles para la nómina ${payrollId}`)
+
           for (const detail of details) {
-            await dbService.createPayrollDetail({
-              payroll_id: payrollId,
-              concept: detail.concept,
-              type: detail.type,
-              amount: detail.amount,
-              date: detail.date,
-              notes: detail.notes,
-            })
+            console.log(`Guardando detalle:`, JSON.stringify(detail, null, 2))
+
+            try {
+              const savedDetail = await dbService.createPayrollDetail({
+                payroll_id: payrollId,
+                concept: detail.concept,
+                type: detail.type,
+                amount: detail.amount,
+                date: detail.date,
+                notes: detail.notes,
+              })
+
+              console.log(`Detalle guardado correctamente:`, JSON.stringify(savedDetail, null, 2))
+            } catch (detailError) {
+              console.error(`Error al guardar detalle:`, detailError)
+            }
           }
-          console.log(`Guardados ${details.length} detalles para la nómina ${payrollId}`)
+
+          console.log(`Proceso de guardado de detalles completado`)
         } catch (error) {
-          console.error("Error al guardar detalles de nómina:", error)
+          console.error(`Error al gestionar detalles de nómina:`, error)
         }
+      } else {
+        console.log(`No hay detalles para guardar`)
       }
 
-      return updatedPayroll
+      // Obtener la nómina actualizada para devolverla
+      const finalPayroll = await this.getPayrollById(payrollId)
+      console.log(`Nómina final después de ajustes:`, JSON.stringify(finalPayroll, null, 2))
+
+      return finalPayroll
     } catch (error) {
-      console.error("Error al calcular ajustes de nómina:", error)
-      throw new Error("Error al calcular ajustes de nómina")
+      console.error(`Error general en calculatePayrollAdjustments:`, error)
+      throw new Error(`Error al calcular ajustes de nómina: ${error.message}`)
     }
   }
 
