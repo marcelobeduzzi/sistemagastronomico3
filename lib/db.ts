@@ -1,6 +1,6 @@
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { objectToCamelCase, objectToSnakeCase } from "./utils" // Import utility functions
-import type { Employee, Attendance, Payroll, PayrollDetail, Audit, Billing, Balance, Order } from "@/types"
+import type { Employee, Attendance, Payroll, PayrollDetail } from "@/types"
 import type { Liquidation } from "@/types"
 import { supabase as supabaseClient } from "./supabase/client" // Importar el cliente de Supabase
 
@@ -879,6 +879,7 @@ class DatabaseService {
       }
 
       const bankSalary = Number(payroll.bankSalary || 0)
+      // IMPORTANTE: Asegurarse de que deductions y additions sean números
       const deductions = Number(payroll.deductions || 0)
       const additions = Number(payroll.additions || 0)
       const attendanceBonus = Number(payroll.attendanceBonus || 0)
@@ -941,6 +942,8 @@ class DatabaseService {
         ...objectToSnakeCase(detail),
         // Si se proporciona 'description', usarlo como 'notes'
         notes: detail.notes || detail.description || "",
+        // IMPORTANTE: Asegurarse de que amount sea un número
+        amount: Number(detail.amount || 0),
       }
 
       console.log("Creando detalle de nómina con datos:", detailData)
@@ -1233,6 +1236,14 @@ class DatabaseService {
 
       console.log("Datos para actualización:", updateData)
 
+      // IMPORTANTE: Asegurarse de que todos los valores numéricos sean realmente números
+      Object.keys(updateData).forEach((key) => {
+        if (typeof updateData[key] === "number") {
+          // Convertir explícitamente a número para asegurar que se guarde correctamente
+          updateData[key] = Number(updateData[key])
+        }
+      })
+
       // Realizar la actualización
       const { data, error } = await this.supabase.from("payroll").update(updateData).eq("id", id).select().single()
 
@@ -1422,10 +1433,12 @@ class DatabaseService {
         // Verificar si ya existe una liquidación para este empleado
         if (employeesWithLiquidation.has(employee.id)) {
           const liquidationId = employeesWithLiquidation.get(employee.id)
+          console.log(`  {
+          const liquidationId = employeesWithLiquidation.get(employee.id)
           console.log(`Actualizando liquidación existente con ID ${liquidationId} para empleado ${employee.id}`)
 
-          // Obtener la liquidación existente para preservar algunos campos
-          const { data: existingLiquidation, error: getLiquidationError } = await this.supabase
+          // Obtener la liquidación existente para preservar algunos campos\
+          const { data: existingLiquidation, error: getLiquidationError } = await this.supabase\
             .from("liquidations")
             .select("*")
             .eq("id", liquidationId)
@@ -1436,8 +1449,8 @@ class DatabaseService {
             skipped++
             continue
           }
-
-          // Preservar los valores de include_vacation e include_bonus si ya existen
+\
+          // Preservar los valores de include_vacation e include_bonus si ya existen\
           if (existingLiquidation) {
             liquidationData.include_vacation =
               existingLiquidation.include_vacation !== undefined
@@ -1477,11 +1490,11 @@ class DatabaseService {
         } else {
           console.log(`Creando nueva liquidación para empleado ${employee.id}`)
           // Crear nueva liquidación
-          const { error: insertError } = await this.supabase.from("liquidations").insert(liquidationData)
+          const { error: insertError } = await this.supabase.from(\"liquidations").insert(liquidationData)
 
           if (insertError) {
             console.error(`Error al crear liquidación para empleado ${employee.id}:`, insertError)
-            skipped++
+            skipped++\
             continue
           }
 
@@ -1490,171 +1503,181 @@ class DatabaseService {
         }
       }
 
-      console.log(`Proceso completado: ${generated} generadas, ${updated} actualizadas, ${skipped} omitidas`)
-      return { generated, updated, skipped }
-    } catch (error) {
-      console.error("Error al generar liquidaciones:", error)
-      throw new Error("No se pudieron generar las liquidaciones")
-    }
+    console.log(`Proceso completado: ${generated} generadas, ${updated} actualizadas, ${skipped} omitidas`)
+    return { generated, updated, skipped }
   }
-
+  catch(error) {
+    console.error(\"Error al generar liquidaciones:", error)
+    throw new Error("No se pudieron generar las liquidaciones")
+  }
+}
+\
   // Agregar esta nueva función después de generateLiquidations en la clase DatabaseService
 
   /**
    * Actualiza los días a pagar del último mes en las liquidaciones existentes
    * @returns Resultado de la operación
    */
-  async updateLiquidationDaysToPayInLastMonth() {
-    try {
-      console.log("Iniciando actualización de días a pagar en liquidaciones...")
+  async updateLiquidationDaysToPayInLastMonth()
+{
+  try {
+    console.log("Iniciando actualización de días a pagar en liquidaciones...")
 
-      // Obtener todas las liquidaciones
-      const { data: liquidations, error: fetchError } = await this.supabase
-        .from("liquidations")
-        .select(
-          "id, employee_id, termination_date, include_vacation, include_bonus, proportional_vacation, proportional_bonus",
-        )
+    // Obtener todas las liquidaciones
+    const { data: liquidations, error: fetchError } = await this.supabase
+      .from("liquidations")
+      .select(
+        "id, employee_id, termination_date, include_vacation, include_bonus, proportional_vacation, proportional_bonus",
+      )
 
-      if (fetchError) throw fetchError
+    if (fetchError) throw fetchError
 
-      if (!liquidations || liquidations.length === 0) {
-        console.log("No hay liquidaciones para actualizar")
-        return { updated: 0, failed: 0, skipped: 0 }
-      }
-
-      console.log(`Se encontraron ${liquidations.length} liquidaciones para procesar`)
-
-      let updated = 0
-      let failed = 0
-      const skipped = 0
-
-      // Procesar cada liquidación
-      for (const liquidation of liquidations) {
-        try {
-          console.log(`Procesando liquidación ID: ${liquidation.id} para empleado: ${liquidation.employee_id}`)
-
-          // Obtener información del empleado
-          const { data: employee, error: employeeError } = await this.supabase
-            .from("employees")
-            .select("hire_date, salary, base_salary")
-            .eq("id", liquidation.employee_id)
-            .single()
-
-          if (employeeError) {
-            console.error(`Error al obtener empleado para liquidación ${liquidation.id}:`, employeeError)
-            failed++
-            continue
-          }
-
-          if (!employee) {
-            console.log(`No se encontró el empleado ${liquidation.employee_id} para la liquidación ${liquidation.id}`)
-            failed++
-            continue
-          }
-
-          // Usar base_salary si está disponible, de lo contrario usar salary
-          const employeeSalary = employee.base_salary || employee.salary || 0
-          console.log(`Empleado encontrado - Fecha contratación: ${employee.hire_date}, Salario: ${employeeSalary}`)
-
-          // Calcular los días a pagar del último mes
-          const terminationDate = new Date(liquidation.termination_date)
-
-          // Obtener el último día del mes
-          const lastDayOfMonth = new Date(terminationDate.getFullYear(), terminationDate.getMonth() + 1, 0).getDate()
-
-          // Calcular días trabajados en el último mes (hasta la fecha de terminación)
-          const daysInLastMonth = Math.min(terminationDate.getDate(), lastDayOfMonth)
-
-          console.log(`Días trabajados en el último mes: ${daysInLastMonth}`)
-
-          // Calcular el valor diario del salario
-          const dailySalary = employeeSalary / 30
-          console.log(`Salario diario: ${dailySalary}`)
-
-          // Calcular el monto de compensación (pago por días trabajados en el último mes)
-          const compensationAmount = dailySalary * daysInLastMonth
-          console.log(`Monto de compensación calculado: ${compensationAmount}`)
-
-          // Calcular el nuevo monto total
-          let totalAmount = compensationAmount
-
-          // Agregar vacaciones proporcionales si se incluyen
-          if (liquidation.include_vacation) {
-            totalAmount += liquidation.proportional_vacation || 0
-            console.log(`Incluyendo vacaciones proporcionales: ${liquidation.proportional_vacation}`)
-          }
-
-          // Agregar aguinaldo proporcional si se incluye
-          if (liquidation.include_bonus) {
-            totalAmount += liquidation.proportional_bonus || 0
-            console.log(`Incluyendo aguinaldo proporcional: ${liquidation.proportional_bonus}`)
-          }
-
-          console.log(`Nuevo monto total calculado: ${totalAmount}`)
-
-          // Actualizar la liquidación
-          const { error: updateError } = await this.supabase
-            .from("liquidations")
-            .update({
-              days_to_pay_in_last_month: daysInLastMonth,
-              compensation_amount: compensationAmount,
-              total_amount: totalAmount,
-            })
-            .eq("id", liquidation.id)
-
-          if (updateError) {
-            console.error(`Error al actualizar liquidación ${liquidation.id}:`, updateError)
-            failed++
-          } else {
-            console.log(`Liquidación ${liquidation.id} actualizada correctamente`)
-            updated++
-          }
-        } catch (error) {
-          console.error(`Error al procesar liquidación ${liquidation.id}:`, error)
-          failed++
-        }
-      }
-
-      console.log(`Actualización completada: ${updated} actualizadas, ${failed} fallidas, ${skipped} omitidas`)
-      return { updated, failed, skipped }
-    } catch (error) {
-      console.error("Error al actualizar días a pagar en liquidaciones:", error)
-      throw error
+    if (!liquidations || liquidations.length === 0) {
+      console.log("No hay liquidaciones para actualizar")
+      return { updated: 0, failed: 0, skipped: 0 }
     }
-  }
 
-  // Delivery stats methods
-  async getDeliveryStats(startDate: Date, endDate: Date) {
-    const { data, error } = await this.supabase
-      .from("delivery_stats")
-      .select("*")
-      .gte("date", startDate.toISOString())
-      .lte("date", endDate.toISOString())
+    console.log(`Se encontraron ${liquidations.length} liquidaciones para procesar`)
+
+    let updated = 0
+    let failed = 0
+    const skipped = 0
+
+    // Procesar cada liquidación
+    for (const liquidation of liquidations) {
+      try {
+        console.log(`Procesando liquidación ID: ${liquidation.id} para empleado: ${liquidation.employee_id}`)
+
+        // Obtener información del empleado
+        const { data: employee, error: employeeError } = await this.supabase
+          .from("employees")
+          .select("hire_date, salary, base_salary")
+          .eq("id", liquidation.employee_id)
+          .single()
+
+        if (employeeError) {
+          console.error(`Error al obtener empleado para liquidación ${liquidation.id}:`, employeeError)
+          failed++
+          continue
+        }
+
+        if (!employee) {
+          console.log(`No se encontró el empleado ${liquidation.employee_id} para la liquidación ${liquidation.id}`)
+          failed++
+          continue
+        }
+
+        // Usar base_salary si está disponible, de lo contrario usar salary
+        const employeeSalary = employee.base_salary || employee.salary || 0
+        console.log(`Empleado encontrado - Fecha contratación: ${employee.hire_date}, Salario: ${employeeSalary}`)
+
+        // Calcular los días a pagar del último mes
+        const terminationDate = new Date(liquidation.termination_date)
+
+        // Obtener el último día del mes
+        const lastDayOfMonth = new Date(terminationDate.getFullYear(), terminationDate.getMonth() + 1, 0).getDate()
+
+        // Calcular días trabajados en el último mes (hasta la fecha de terminación)
+        const daysInLastMonth = Math.min(terminationDate.getDate(), lastDayOfMonth)
+
+        console.log(`Días trabajados en el último mes: ${daysInLastMonth}`)
+
+        // Calcular el valor diario del salario
+        const dailySalary = employeeSalary / 30
+        console.log(`Salario diario: ${dailySalary}`)
+
+        // Calcular el monto de compensación (pago por días trabajados en el último mes)
+        const compensationAmount = dailySalary * daysInLastMonth
+        console.log(`Monto de compensación calculado: ${compensationAmount}`)
+
+        // Calcular el nuevo monto total
+        let totalAmount = compensationAmount
+
+        // Agregar vacaciones proporcionales si se incluyen
+        if (liquidation.include_vacation) {
+          totalAmount += liquidation.proportional_vacation || 0
+          console.log(`Incluyendo vacaciones proporcionales: ${liquidation.proportional_vacation}`)
+        }
+
+        // Agregar aguinaldo proporcional si se incluye
+        if (liquidation.include_bonus) {
+          totalAmount += liquidation.proportional_bonus || 0
+          console.log(`Incluyendo aguinaldo proporcional: ${liquidation.proportional_bonus}`)
+        }
+
+        console.log(`Nuevo monto total calculado: ${totalAmount}`)
+
+        // Actualizar la liquidación
+        const { error: updateError } = await this.supabase
+          .from("liquidations")
+          .update({
+            days_to_pay_in_last_month: daysInLastMonth,
+            compensation_amount: compensationAmount,
+            total_amount: totalAmount,
+          })
+          .eq("id", liquidation.id)
+
+        if (updateError) {
+          console.error(`Error al actualizar liquidación ${liquidation.id}:`, updateError)
+          failed++
+        } else {
+          console.log(`Liquidación ${liquidation.id} actualizada correctamente`)
+          updated++
+        }
+      } catch (error) {
+        console.error(`Error al procesar liquidación ${liquidation.id}:`, error)
+        failed++
+      }
+    }
+
+    console.log(`Actualización completada: ${updated} actualizadas, ${failed} fallidas, ${skipped} omitidas`)
+    return { updated, failed, skipped }
+  } catch (error) {
+    console.error("Error al actualizar días a pagar en liquidaciones:", error)
+    throw error
+  }
+}
+
+// Delivery stats methods
+async
+getDeliveryStats(startDate: Date, endDate: Date)
+{
+  const { data, error } = await this.supabase
+    .from("delivery_stats")
+    .select("*")
+    .gte("date", startDate.toISOString())
+    .lte("date", endDate.toISOString())
+  \
       .order("date")
+\
+  if (error) throw error
+  \
+  return data.map((item) => objectToCamelCase(item))
+}
+
+// Audit methods
+async
+getAudits(startDate?: Date, endDate?: Date)
+{
+  try {
+    let query = this.supabase.from("audits").select("*").order("date", { ascending: false })
+
+    if (startDate) {
+      query = query.gte("date", startDate.toISOString())
+      \
+    }
+    \
+    if (endDate) {
+      \
+        query = query.lte("date", endDate.toISOString())
+    }
+
+    const { data, error } = await query
 
     if (error) throw error
-    return data.map((item) => objectToCamelCase(item))
-  }
 
-  // Audit methods
-  async getAudits(startDate?: Date, endDate?: Date) {
-    try {
-      let query = this.supabase.from("audits").select("*").order("date", { ascending: false })
-
-      if (startDate) {
-        query = query.gte("date", startDate.toISOString())
-      }
-
-      if (endDate) {
-        query = query.lte("date", endDate.toISOString())
-      }
-
-      const { data, error } = await query
-
-      if (error) throw error
-
-      // Convertir de snake_case a camelCase y asegurar que localName esté disponible
-      return (data || []).map((item) => {
+    // Convertir de snake_case a camelCase y asegurar que localName esté disponible
+    return (data || []).map((item) => {
         const audit = objectToCamelCase(item)
 
         // Si no hay localName pero hay local_name, usar ese valor
@@ -1670,256 +1693,293 @@ class DatabaseService {
         console.log("Audit después de procesamiento:", audit)
         return audit
       })
-    } catch (error) {
-      console.error("Error en getAudits:", error)
-      return []
-    }
+  } catch (error) {
+    console.error("Error en getAudits:", error)
+    return []
   }
+}
 
-  // Actualización de la función createAudit en la clase DatabaseService
-  async createAudit(auditData: any): Promise<Audit> {
-    try {
-      console.log("Datos recibidos en createAudit:", auditData)
+// Actualización de la función createAudit en la clase DatabaseService
+async
+createAudit(auditData: any)
+: Promise<Audit>
+{
+  try {
+    console.log("Datos recibidos en createAudit:", auditData)
 
-      // Asegurarse de que categories sea un array
-      if (!auditData.categories || !Array.isArray(auditData.categories)) {
+    // Asegurarse de que categories sea un array\
+    if (!auditData.categories || !Array.isArray(auditData.categories)) {
+      \
         console.error("Error: categories no es un array o está vacío")
-        throw new Error("Las categorías de la auditoría deben ser un array")
-      }
+      throw new Error("Las categorías de la auditoría deben ser un array")
+    }
 
-      // Mapear los campos para que coincidan con lo que espera la base de datos
-      // Usar auditor_name como nombre de la columna y notes en lugar de general_observations
-      const dataToSave = {
-        local_id: auditData.localId || "",
-        local_name: auditData.localName || "",
-        auditor_name: auditData.auditor || "", // Cambiado a auditor_name
-        date: auditData.date ? new Date(auditData.date).toISOString() : new Date().toISOString(),
-        notes: auditData.generalObservations || "", // Cambiado a notes que es el nombre correcto en la base de datos
-        categories: auditData.categories,
-        total_score: auditData.totalScore || 0,
-        max_score: auditData.maxScore || 0,
-        percentage: auditData.percentage || 0,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }
+    // Mapear los campos para que coincidan con lo que espera la base de datos
+    // Usar auditor_name como nombre de la columna y notes en lugar de general_observations
+    const dataToSave = {
+      local_id: auditData.localId || "",
+      local_name: auditData.localName || "",
+      auditor_name: auditData.auditor || "", // Cambiado a auditor_name
+      date: auditData.date ? new Date(auditData.date).toISOString() : new Date().toISOString(),
+      notes: auditData.generalObservations || "", // Cambiado a notes que es el nombre correcto en la base de datos
+      categories: auditData.categories,
+      total_score: auditData.totalScore || 0,
+      max_score: auditData.maxScore || 0,
+      percentage: auditData.percentage || 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
 
-      console.log("Datos de auditoría a insertar:", dataToSave)
+    console.log("Datos de auditoría a insertar:", dataToSave)
 
-      const { data, error } = await this.supabase.from("audits").insert([dataToSave]).select().single()
+    const { data, error } = await this.supabase.from("audits").insert([dataToSave]).select().single()
 
-      if (error) {
-        console.error("Error en createAudit:", error)
-        throw error
-      }
-
-      console.log("Auditoría creada con éxito:", data)
-      return objectToCamelCase(data)
-    } catch (error) {
+    if (error) {
       console.error("Error en createAudit:", error)
       throw error
     }
+
+    console.log("Auditoría creada con éxito:", data)
+    return objectToCamelCase(data)
+  } catch (error) {
+    console.error("Error en createAudit:", error)
+    throw error
   }
+}
 
-  /**
-   * Obtiene una auditoría por su ID
-   * @param id ID de la auditoría
-   * @returns La auditoría encontrada o null si no existe
-   */
-  async getAuditById(id: string): Promise<Audit | null> {
-    try {
-      const { data, error } = await this.supabase.from("audits").select("*").eq("id", id).single()
+/**
+ * Obtiene una auditoría por su ID
+ * @param id ID de la auditoría
+ * @returns La auditoría encontrada o null si no existe
+ */
+async
+getAuditById(id: string)
+: Promise<Audit | null>
+{
+  try {
+    const { data, error } = await this.supabase.from("audits").select("*").eq("id", id).single()
 
-      if (error) {
-        console.error("Error en getAuditById:", error)
-        throw error
-      }
-
-      // Convertir de snake_case a camelCase y asegurar que localName y auditorName estén disponibles
-      const audit = objectToCamelCase(data)
-
-      // Si no hay localName pero hay local_name, usar ese valor
-      if (!audit.localName && data.local_name) {
-        audit.localName = data.local_name
-      }
-
-      // Si no hay auditorName pero hay auditor_name, usar ese valor
-      if (!audit.auditorName && data.auditor_name) {
-        audit.auditorName = data.auditor_name
-      }
-
-      console.log("Audit por ID después de procesamiento:", audit)
-      return audit
-    } catch (error) {
+    if (error) {
       console.error("Error en getAuditById:", error)
-      return null
+      \
+      throw error
     }
-  }
+    \
+    // Convertir de snake_case a camelCase y asegurar que localName y auditorName estén disponibles
+    const audit = objectToCamelCase(data)
 
-  // Billing methods
-  async getBilling(startDate: Date, endDate: Date) {
-    const { data, error } = await this.supabase
+    // Si no hay localName pero hay local_name, usar ese valor
+    if (!audit.localName && data.local_name) {
+      audit.localName = data.local_name
+    }
+
+    // Si no hay auditorName pero hay auditor_name, usar ese valor
+    if (!audit.auditorName && data.auditor_name) {
+      audit.auditorName = data.auditor_name
+    }
+
+    console.log("Audit por ID después de procesamiento:", audit)
+    return audit
+  } catch (error) {
+    console.error("Error en getAuditById:", error)
+    return null
+  }
+}
+
+// Billing methods
+async
+getBilling(startDate: Date, endDate: Date)
+{
+  const { data, error } = await this.supabase
       .from("billing")
       .select("*")
       .gte("date", startDate.toISOString())
       .lte("date", endDate.toISOString())
-      .order("date", { ascending: false })
+      .order("date\", { ascending: false })
+\
+  if (error) throw error
+  \
+  return data.map((item) => objectToCamelCase(item))
+}
 
-    if (error) throw error
-    return data.map((item) => objectToCamelCase(item))
-  }
+async
+createBilling(billing: Omit<Billing, "id">)
+{
+  const billingData = objectToSnakeCase(billing)
+  \
+  const { data, error } = await this.supabase.from("billing\").insert([billingData]).select().single()
 
-  async createBilling(billing: Omit<Billing, "id">) {
-    const billingData = objectToSnakeCase(billing)
-    const { data, error } = await this.supabase.from("billing").insert([billingData]).select().single()
-
-    if (error) throw error
-    return objectToCamelCase(data)
-  }
-
-  // Balance methods
-  async getBalance(startDate: Date, endDate: Date) {
-    const { data, error } = await this.supabase
+  if (error) throw error
+  \
+  return objectToCamelCase(data)
+}
+\
+  // Balance methods\
+  async getBalance(startDate: Date, endDate: Date)
+{
+  const { data, error } = await this.supabase
+  \
       .from("balance")
       .select("*")
-      .gte("date", startDate.toISOString())
+      .gte("date\", startDate.toISOString())
       .lte("date", endDate.toISOString())
       .order("date")
 
-    if (error) throw error
-    return data.map((item) => objectToCamelCase(item))
-  }
+  if (error) throw error
+  return data.map((item) => objectToCamelCase(item))
+}
 
-  async createBalance(balance: Omit<Balance, "id">) {
-    const balanceData = objectToSnakeCase(balance)
-    const { data, error } = await this.supabase.from("balance").insert([balanceData]).select().single()
+async
+createBalance(balance: Omit<Balance, "id">)
+{
+  \
+  const balanceData = objectToSnakeCase(balance)
+  const { data, error } = await this.supabase.from("balance").insert([balanceData]).select().single()
 
-    if (error) throw error
-    return objectToCamelCase(data)
-  }
+  if (error) throw error
+  \
+  return objectToCamelCase(data)
+}
 
-  /**
-   * Obtiene el promedio de ventas para un local
-   * @param localId ID del local
-   * @returns Objeto con los promedios de ventas por producto
-   */
-  async getAverageSales(localId: string): Promise<Record<string, number>> {
-    try {
-      const { data, error } = await this.supabase.from("sales_average").select("*").eq("local_id", localId).single()
+/**
+ * Obtiene el promedio de ventas para un local
+ * @param localId ID del local
+ * @returns Objeto con los promedios de ventas por producto
+ */
+async
+getAverageSales(localId: string)
+: Promise<Record<string, number>>
+{
+  try {
+    const { data, error } = await this.supabase.from("sales_average").select("*").eq("local_id", localId).single()
 
-      if (error) {
-        console.error("Error en getAverageSales:", error)
-        throw error
-      }
-
-      return objectToCamelCase(data.averages || {})
-    } catch (error) {
+    if (error) {
       console.error("Error en getAverageSales:", error)
-      return {}
+      throw error
     }
+
+    return objectToCamelCase(data.averages || {})
+  } catch (error) {
+    console.error("Error en getAverageSales:", error)
+    return {}
   }
+}
 
-  /**
-   * Obtiene el stock actual para un local
-   * @param localId ID del local
-   * @returns Objeto con el stock actual por producto
-   */
-  async getCurrentStock(localId: string): Promise<Record<string, number>> {
-    try {
-      const { data, error } = await this.supabase
-        .from("stock")
-        .select("*")
-        .eq("local_id", localId)
-        .order("created_at", { ascending: false })
-        .limit(1)
+/**
+ * Obtiene el stock actual para un local
+ * @param localId ID del local
+ * @returns Objeto con el stock actual por producto
+ */
+async
+getCurrentStock(localId: string)
+: Promise<Record<string, number>>
+{
+  try {
+    const { data, error } = await this.supabase
+      .from("stock")
+      .select("*")
+      .eq("local_id", localId)
+      .order("created_at", { ascending: false })
+      .limit(1)
 
-      if (error) {
-        console.error("Error en getCurrentStock:", error)
-        throw error
-      }
-
-      return objectToCamelCase(data[0]?.items || {})
-    } catch (error) {
+    if (error) {
       console.error("Error en getCurrentStock:", error)
-      return {}
+      throw error
     }
+
+    return objectToCamelCase(data[0]?.items || {})
+  } catch (error) {
+    console.error("Error en getCurrentStock:", error)
+    return {}
   }
+}
 
-  /**
-   * Guarda un pedido
-   * @param orderData Datos del pedido
-   * @returns El pedido guardado
-   */
-  async saveOrder(orderData: any): Promise<Order> {
-    try {
-      // Convertir de camelCase a snake_case
-      const snakeCaseData = objectToSnakeCase(orderData)
+/**
+ * Guarda un pedido
+ * @param orderData Datos del pedido
+ * @returns El pedido guardado
+ */
+async
+saveOrder(orderData: any)
+: Promise<Order>
+{
+  try {
+    // Convertir de camelCase a snake_case
+    const snakeCaseData = objectToSnakeCase(orderData)
 
-      const { data, error } = await this.supabase.from("orders").insert([snakeCaseData]).select().single()
+    const { data, error } = await this.supabase.from("orders").insert([snakeCaseData]).select().single()
 
-      if (error) {
-        console.error("Error en saveOrder:", error)
-        throw error
-      }
-
-      return objectToCamelCase(data)
-    } catch (error) {
+    if (error) {
       console.error("Error en saveOrder:", error)
       throw error
     }
+
+    return objectToCamelCase(data)
+  } catch (error) {
+    console.error("Error en saveOrder:", error)
+    throw error
   }
+}
 
-  /**
-   * Obtiene un pedido por su ID
-   * @param id ID del pedido
-   * @returns El pedido encontrado o null si no existe
-   */
-  async getOrderById(id: string): Promise<Order | null> {
-    try {
-      const { data, error } = await this.supabase.from("orders").select("*").eq("id", id).single()
+/**
+ * Obtiene un pedido por su ID
+ * @param id ID del pedido
+ * @returns El pedido encontrado o null si no existe
+ */
+async
+getOrderById(id: string)
+: Promise<Order | null>
+{
+  try {
+    const { data, error } = await this.supabase.from("orders").select("*").eq("id", id).single()
 
-      if (error) {
-        console.error("Error en getOrderById:", error)
-        throw error
-      }
-
-      return objectToCamelCase(data)
-    } catch (error) {
+    if (error) {
       console.error("Error en getOrderById:", error)
-      return null
+      throw error
     }
+
+    return objectToCamelCase(data)
+  } catch (error) {
+    console.error("Error en getOrderById:", error)
+    return null
   }
+}
 
-  async getAllOrders() {
-    try {
-      const { data, error } = await this.supabase.from("orders").select("*")
+async
+getAllOrders()
+{
+  try {
+    const { data, error } = await this.supabase.from("orders").select("*")
 
-      if (error) {
-        console.error("Error en getAllOrders:", error)
-        throw error
-      }
-
-      return data.map((item) => objectToCamelCase(item))
-    } catch (error) {
+    if (error) {
       console.error("Error en getAllOrders:", error)
-      return []
+      throw error
     }
+
+    return data.map((item) => objectToCamelCase(item))
+  } catch (error) {
+    console.error("Error en getAllOrders:", error)
+    return []
   }
-  // UPDATED: Simplified getDashboardStats method to fix the error
-  async getDashboardStats() {
-    try {
-      // Simplificamos para evitar el error
-      const { data: activeEmployees, error: employeesError } = await this.supabase
-        .from("employees")
-        .select("id")
-        .eq("status", "active")
+}
+// UPDATED: Simplified getDashboardStats method to fix the error
+async
+getDashboardStats()
+{
+  try {
+    // Simplificamos para evitar el error
+    const { data: activeEmployees, error: employeesError } = await this.supabase
+      .from("employees")
+      .select("id")
+      .eq("status", "active")
 
-      if (employeesError) {
-        console.error("Error fetching employees:", employeesError)
-        throw employeesError
-      }
+    if (employeesError) {
+      console.error("Error fetching employees:", employeesError)
+      throw employeesError
+    }
 
-      // Devolvemos datos básicos sin intentar obtener delivery_stats por ahora
-      return {
+    // Devolvemos datos básicos sin intentar obtener delivery_stats por ahora
+    return {
         activeEmployees: Array.isArray(activeEmployees) ? activeEmployees.length : 0,
         activeEmployeesChange: 0,
         totalDeliveryOrders: 0,
@@ -1929,10 +1989,10 @@ class DatabaseService {
         averageRating: 0,
         ratingChange: 0,
       }
-    } catch (error) {
-      console.error("Error fetching dashboard stats:", error)
-      // Return default values instead of throwing to prevent UI crashes
-      return {
+  } catch (error) {
+    console.error("Error fetching dashboard stats:", error)
+    // Return default values instead of throwing to prevent UI crashes
+    return {
         activeEmployees: 0,
         activeEmployeesChange: 0,
         totalDeliveryOrders: 0,
@@ -1942,13 +2002,15 @@ class DatabaseService {
         averageRating: 0,
         ratingChange: 0,
       }
-    }
   }
+}
 
-  async generateReports() {
-    try {
-      // Mock data for reports
-      return [
+async
+generateReports()
+{
+  try {
+    // Mock data for reports
+    return [
         {
           name: "Facturación por Local",
           data: {
@@ -1979,55 +2041,59 @@ class DatabaseService {
           },
         },
       ]
-    } catch (error) {
-      console.error("Error generating reports:", error)
-      throw error
-    }
+  } catch (error) {
+    console.error("Error generating reports:", error)
+    throw error
   }
+}
 
-  // Método para verificar la estructura de la tabla
-  async checkTableStructure(tableName: string) {
-    try {
-      // Consultar una fila para ver la estructura
-      const { data, error } = await this.supabase.from(tableName).select("*").limit(1)
+// Método para verificar la estructura de la tabla
+async
+checkTableStructure(tableName: string)
+{
+  try {
+    // Consultar una fila para ver la estructura
+    const { data, error } = await this.supabase.from(tableName).select("*").limit(1)
 
-      if (error) throw error
+    if (error) throw error
 
-      if (data && data.length > 0) {
-        console.log(`Estructura de la tabla ${tableName}:`, Object.keys(data[0]))
-        return Object.keys(data[0])
-      } else {
-        console.log(`La tabla ${tableName} está vacía o no existe`)
-        return []
-      }
-    } catch (error) {
-      console.error(`Error al verificar la estructura de la tabla ${tableName}:`, error)
-      throw error
+    if (data && data.length > 0) {
+      console.log(`Estructura de la tabla ${tableName}:`, Object.keys(data[0]))
+      return Object.keys(data[0])
+    } else {
+      console.log(`La tabla ${tableName} está vacía o no existe`)
+      return []
     }
+  } catch (error) {
+    console.error(`Error al verificar la estructura de la tabla ${tableName}:`, error)
+    throw error
   }
+}
 
-  // Añadir el método getAuditConfig mejorado en la clase DatabaseService
+// Añadir el método getAuditConfig mejorado en la clase DatabaseService
 
-  /**
-   * Obtiene la configuración de auditorías
-   * @param type Tipo de auditoría ('rapida' o 'completa')
-   * @returns Configuración de categorías e ítems para auditorías
-   */
-  async getAuditConfig(type = "completa") {
-    try {
-      console.log(`Obteniendo configuración de auditorías tipo: ${type}`)
-      const { data, error } = await this.supabase.from("audit_config").select("*").eq("type", type).single()
+/**
+ * Obtiene la configuración de auditorías
+ * @param type Tipo de auditoría ('rapida' o 'completa')
+ * @returns Configuración de categorías e ítems para auditorías
+ */
+async
+getAuditConfig((type = "completa"))
+{
+  try {
+    console.log(`Obteniendo configuración de auditorías tipo: ${type}`)
+    const { data, error } = await this.supabase.from("audit_config").select("*").eq("type", type).single()
 
-      if (error) {
-        console.error(`Error al obtener configuración de auditorías tipo ${type}:`, error)
+    if (error) {
+      console.error(`Error al obtener configuración de auditorías tipo ${type}:`, error)
 
-        // Si el error es porque no existe la tabla o no hay registros, devolver configuración por defecto
-        if (error.code === "PGRST116" || error.code === "22P02") {
-          console.log("No se encontró configuración, devolviendo valores por defecto")
+      // Si el error es porque no existe la tabla o no hay registros, devolver configuración por defecto
+      if (error.code === "PGRST116" || error.code === "22P02") {
+        console.log("No se encontró configuración, devolviendo valores por defecto")
 
-          // Configuración por defecto según el tipo
-          if (type === "rapida") {
-            return {
+        // Configuración por defecto según el tipo
+        if (type === "rapida") {
+          return {
               type: "rapida",
               categories: [
                 {
@@ -2163,8 +2229,8 @@ class DatabaseService {
                 },
               ],
             }
-          } else {
-            return {
+        } else {
+          return {
               type: "completa",
               categories: [
                 {
@@ -2224,329 +2290,341 @@ class DatabaseService {
                 },
               ],
             }
-          }
         }
-
-        throw error
       }
 
-      console.log(`Configuración de auditoría ${type} obtenida:`, data)
-      return data
-    } catch (error) {
-      console.error(`Error en getAuditConfig para tipo ${type}:`, error)
       throw error
     }
+
+    console.log(`Configuración de auditoría ${type} obtenida:`, data)
+    return data
+  } catch (error) {
+    console.error(`Error en getAuditConfig para tipo ${type}:`, error)
+    throw error
   }
+}
 
-  /**
-   * Guarda la configuración de auditorías
-   * @param config Configuración de categorías e ítems para auditorías
-   * @returns Resultado de la operación
-   */
-  async saveAuditConfig(config: any) {
-    try {
-      const type = config.type || "completa"
+/**
+ * Guarda la configuración de auditorías
+ * @param config Configuración de categorías e ítems para auditorías
+ * @returns Resultado de la operación
+ */
+async
+saveAuditConfig(config: any)
+{
+  try {
+    const type = config.type || "completa"
 
-      // Verificar si ya existe una configuración para este tipo
-      const { data: existingConfig, error: checkError } = await this.supabase
+    // Verificar si ya existe una configuración para este tipo
+    const { data: existingConfig, error: checkError } = await this.supabase
+      .from("audit_config")
+      .select("id")
+      .eq("type", type)
+      .single()
+
+    if (checkError && checkError.code !== "PGRST116") {
+      console.error(`Error al verificar configuración existente para tipo ${type}:`, checkError)
+      throw checkError
+    }
+
+    if (existingConfig) {
+      // Actualizar configuración existente
+      console.log(`Actualizando configuración existente para tipo ${type}:`, existingConfig.id)
+      const { data, error } = await this.supabase
         .from("audit_config")
-        .select("id")
-        .eq("type", type)
+        .update(config)
+        .eq("id", existingConfig.id)
+        .select()
         .single()
 
-      if (checkError && checkError.code !== "PGRST116") {
-        console.error(`Error al verificar configuración existente para tipo ${type}:`, checkError)
-        throw checkError
-      }
+      if (error) throw error
+      return data
+    } else {
+      // Crear nueva configuración
+      console.log(`Creando nueva configuración para tipo ${type}`)
+      const { data, error } = await this.supabase.from("audit_config").insert([config]).select().single()
 
-      if (existingConfig) {
-        // Actualizar configuración existente
-        console.log(`Actualizando configuración existente para tipo ${type}:`, existingConfig.id)
-        const { data, error } = await this.supabase
-          .from("audit_config")
-          .update(config)
-          .eq("id", existingConfig.id)
-          .select()
-          .single()
-
-        if (error) throw error
-        return data
-      } else {
-        // Crear nueva configuración
-        console.log(`Creando nueva configuración para tipo ${type}`)
-        const { data, error } = await this.supabase.from("audit_config").insert([config]).select().single()
-
-        if (error) throw error
-        return data
-      }
-    } catch (error) {
-      console.error("Error en saveAuditConfig:", error)
-      throw error
+      if (error) throw error
+      return data
     }
+  } catch (error) {
+    console.error("Error en saveAuditConfig:", error)
+    throw error
   }
+}
 
-  // NUEVAS FUNCIONES PARA SOLUCIONAR LOS ERRORES
+// NUEVAS FUNCIONES PARA SOLUCIONAR LOS ERRORES
 
-  /**
-   * Obtiene una nómina por su ID
-   * @param payrollId ID de la nómina
-   * @returns La nómina encontrada o null si no existe
-   */
-  async getPayrollById(payrollId: string) {
-    try {
-      console.log(`Obteniendo nómina con ID: ${payrollId}`)
+/**
+ * Obtiene una nómina por su ID
+ * @param payrollId ID de la nómina
+ * @returns La nómina encontrada o null si no existe
+ */
+async
+getPayrollById(payrollId: string)
+{
+  try {
+    console.log(`Obteniendo nómina con ID: ${payrollId}`)
 
-      // Consulta directa a la tabla payroll con join a employees
-      const { data, error } = await this.supabase
-        .from("payroll")
-        .select(`
+    // Consulta directa a la tabla payroll con join a employees
+    const { data, error } = await this.supabase
+      .from("payroll")
+      .select(`
         *,
         employee:employees(*)
       `)
-        .eq("id", payrollId)
-        .single()
+      .eq("id", payrollId)
+      .single()
 
-      if (error) {
-        console.error("Error al obtener nómina por ID:", error)
-        throw error
-      }
-
-      if (!data) {
-        console.log(`No se encontró nómina con ID: ${payrollId}`)
-        return null
-      }
-
-      // Convertir a camelCase para uso en el frontend
-      const payroll = objectToCamelCase(data)
-      console.log("Nómina obtenida:", payroll)
-
-      // Obtener detalles de la nómina si existen
-      try {
-        const { data: detailsData, error: detailsError } = await this.supabase
-          .from("payroll_details")
-          .select("*")
-          .eq("payroll_id", payrollId)
-          .order("type", { ascending: true })
-
-        if (detailsError) {
-          console.error("Error al obtener detalles de nómina:", detailsError)
-        } else if (detailsData && detailsData.length > 0) {
-          payroll.details = detailsData.map((row) => objectToCamelCase(row))
-          console.log(`Se encontraron ${detailsData.length} detalles para la nómina`)
-        } else {
-          payroll.details = []
-          console.log("No se encontraron detalles para la nómina")
-        }
-      } catch (detailsError) {
-        console.error("Error al consultar detalles de nómina:", detailsError)
-        payroll.details = []
-      }
-
-      return payroll
-    } catch (error) {
+    if (error) {
       console.error("Error al obtener nómina por ID:", error)
-      throw new Error("Error al obtener nómina por ID")
+      throw error
     }
-  }
 
-  /**
-   * Elimina los detalles de una nómina
-   * @param payrollId ID de la nómina
-   * @returns true si se eliminaron correctamente
-   */
-  async deletePayrollDetails(payrollId: string) {
-    try {
-      const { error } = await this.supabase.from("payroll_details").delete().eq("payroll_id", payrollId)
-
-      if (error) {
-        console.error("Error al eliminar detalles de nómina:", error)
-        throw error
-      }
-
-      return true
-    } catch (error) {
-      console.error("Error al eliminar detalles de nómina:", error)
-      throw new Error("Error al eliminar detalles de nómina")
+    if (!data) {
+      console.log(`No se encontró nómina con ID: ${payrollId}`)
+      return null
     }
-  }
 
-  /**
-   * Obtiene nóminas por empleado y período
-   * @param employeeId ID del empleado
-   * @param month Mes
-   * @param year Año
-   * @returns Lista de nóminas
-   */
-  async getPayrollsByEmployeeAndPeriod(employeeId: string, month: number, year: number) {
+    // Convertir a camelCase para uso en el frontend
+    const payroll = objectToCamelCase(data)
+    console.log("Nómina obtenida:", payroll)
+
+    // Obtener detalles de la nómina si existen
     try {
-      const { data, error } = await this.supabase
-        .from("payroll")
+      const { data: detailsData, error: detailsError } = await this.supabase
+        .from("payroll_details")
         .select("*")
-        .eq("employee_id", employeeId)
-        .eq("month", month)
-        .eq("year", year)
+        .eq("payroll_id", payrollId)
+        .order("type", { ascending: true })
 
-      if (error) {
-        console.error("Error al obtener nóminas por empleado y período:", error)
-        throw error
+      if (detailsError) {
+        console.error("Error al obtener detalles de nómina:", detailsError)
+      } else if (detailsData && detailsData.length > 0) {
+        payroll.details = detailsData.map((row) => objectToCamelCase(row))
+        console.log(`Se encontraron ${detailsData.length} detalles para la nómina`)
+      } else {
+        payroll.details = []
+        console.log("No se encontraron detalles para la nómina")
       }
-
-      return data.map((item) => objectToCamelCase(item))
-    } catch (error) {
-      console.error("Error al obtener nóminas por empleado y período:", error)
-      throw new Error("Error al obtener nóminas por empleado y período")
+    } catch (detailsError) {
+      console.error("Error al consultar detalles de nómina:", detailsError)
+      payroll.details = []
     }
+
+    return payroll
+  } catch (error) {
+    console.error("Error al obtener nómina por ID:", error)
+    throw new Error("Error al obtener nómina por ID")
   }
+}
 
-  /**
-   * Obtiene estadísticas de ventas
-   * @param startDate Fecha de inicio
-   * @param endDate Fecha de fin
-   * @returns Estadísticas de ventas
-   */
-  async getSalesStats(startDate?: Date, endDate?: Date) {
-    try {
-      console.log("Obteniendo estadísticas de ventas", { startDate, endDate })
+/**
+ * Elimina los detalles de una nómina
+ * @param payrollId ID de la nómina
+ * @returns true si se eliminaron correctamente
+ */
+async
+deletePayrollDetails(payrollId: string)
+{
+  try {
+    const { error } = await this.supabase.from("payroll_details").delete().eq("payroll_id", payrollId)
 
-      // Construir la consulta base
-      let query = this.supabase.from("sales_stats").select("*")
+    if (error) {
+      console.error("Error al eliminar detalles de nómina:", error)
+      throw error
+    }
 
-      // Aplicar filtros de fecha si se proporcionan
-      if (startDate) {
-        query = query.gte("date", startDate.toISOString())
-      }
+    return true
+  } catch (error) {
+    console.error("Error al eliminar detalles de nómina:", error)
+    throw new Error("Error al eliminar detalles de nómina")
+  }
+}
 
-      if (endDate) {
-        query = query.lte("date", endDate.toISOString())
-      }
+/**
+ * Obtiene nóminas por empleado y período
+ * @param employeeId ID del empleado
+ * @param month Mes
+ * @param year Año
+ * @returns Lista de nóminas
+ */
+async
+getPayrollsByEmployeeAndPeriod(employeeId: string, month: number, year: number)
+{
+  try {
+    const { data, error } = await this.supabase
+      .from("payroll")
+      .select("*")
+      .eq("employee_id", employeeId)
+      .eq("month", month)
+      .eq("year", year)
 
-      // Ordenar por fecha
-      query = query.order("date", { ascending: false })
+    if (error) {
+      console.error("Error al obtener nóminas por empleado y período:", error)
+      throw error
+    }
 
-      const { data, error } = await query
+    return data.map((item) => objectToCamelCase(item))
+  } catch (error) {
+    console.error("Error al obtener nóminas por empleado y período:", error)
+    throw new Error("Error al obtener nóminas por empleado y período")
+  }
+}
 
-      if (error) {
-        console.error("Error al obtener estadísticas de ventas:", error)
-        // Devolver datos vacíos en caso de error para evitar que la aplicación falle
-        return {
-          totalSales: 0,
-          averageTicket: 0,
-          salesByPlatform: {},
-          salesByPaymentMethod: {},
-          salesByDay: [],
-        }
-      }
+/**
+ * Obtiene estadísticas de ventas
+ * @param startDate Fecha de inicio
+ * @param endDate Fecha de fin
+ * @returns Estadísticas de ventas
+ */
+async
+getSalesStats(startDate?: Date, endDate?: Date)
+{
+  try {
+    console.log("Obteniendo estadísticas de ventas", { startDate, endDate })
 
-      // Si no hay datos, devolver estructura vacía
-      if (!data || data.length === 0) {
-        console.log("No se encontraron estadísticas de ventas")
-        return {
-          totalSales: 0,
-          averageTicket: 0,
-          salesByPlatform: {},
-          salesByPaymentMethod: {},
-          salesByDay: [],
-        }
-      }
+    // Construir la consulta base
+    let query = this.supabase.from("sales_stats").select("*")
 
-      // Procesar los datos para el formato esperado
-      // Esto es una implementación básica, ajustar según la estructura real de los datos
-      const result = {
-        totalSales: data.reduce((sum, item) => sum + (item.total_amount || 0), 0),
-        averageTicket: data.reduce((sum, item) => sum + (item.average_ticket || 0), 0) / data.length,
-        salesByPlatform: {},
-        salesByPaymentMethod: {},
-        salesByDay: data.map((item) => ({
-          date: item.date,
-          amount: item.total_amount || 0,
-        })),
-      }
+    // Aplicar filtros de fecha si se proporcionan
+    if (startDate) {
+      query = query.gte("date", startDate.toISOString())
+    }
 
-      // Agrupar por plataforma si existe
-      if (data[0].platform) {
-        const platforms = {}
-        data.forEach((item) => {
-          if (item.platform) {
-            platforms[item.platform] = (platforms[item.platform] || 0) + (item.total_amount || 0)
-          }
-        })
-        result.salesByPlatform = platforms
-      }
+    if (endDate) {
+      query = query.lte("date", endDate.toISOString())
+    }
 
-      // Agrupar por método de pago si existe
-      if (data[0].payment_method) {
-        const methods = {}
-        data.forEach((item) => {
-          if (item.payment_method) {
-            methods[item.payment_method] = (methods[item.payment_method] || 0) + (item.total_amount || 0)
-          }
-        })
-        result.salesByPaymentMethod = methods
-      }
+    // Ordenar por fecha
+    query = query.order("date", { ascending: false })
 
-      return result
-    } catch (error) {
-      console.error("Error en getSalesStats:", error)
+    const { data, error } = await query
+
+    if (error) {
+      console.error("Error al obtener estadísticas de ventas:", error)
       // Devolver datos vacíos en caso de error para evitar que la aplicación falle
       return {
+          totalSales: 0,
+          averageTicket: 0,
+          salesByPlatform: {},
+          salesByPaymentMethod: {},
+          salesByDay: [],
+        }
+    }
+
+    // Si no hay datos, devolver estructura vacía
+    if (!data || data.length === 0) {
+      console.log("No se encontraron estadísticas de ventas")
+      return {
+          totalSales: 0,
+          averageTicket: 0,
+          salesByPlatform: {},
+          salesByPaymentMethod: {},
+          salesByDay: [],
+        }
+    }
+
+    // Procesar los datos para el formato esperado
+    // Esto es una implementación básica, ajustar según la estructura real de los datos
+    const result = {
+      totalSales: data.reduce((sum, item) => sum + (item.total_amount || 0), 0),
+      averageTicket: data.reduce((sum, item) => sum + (item.average_ticket || 0), 0) / data.length,
+      salesByPlatform: {},
+      salesByPaymentMethod: {},
+      salesByDay: data.map((item) => ({
+        date: item.date,
+        amount: item.total_amount || 0,
+      })),
+    }
+
+    // Agrupar por plataforma si existe
+    if (data[0].platform) {
+      const platforms = {}
+      data.forEach((item) => {
+        if (item.platform) {
+          platforms[item.platform] = (platforms[item.platform] || 0) + (item.total_amount || 0)
+        }
+      })
+      result.salesByPlatform = platforms
+    }
+
+    // Agrupar por método de pago si existe
+    if (data[0].payment_method) {
+      const methods = {}
+      data.forEach((item) => {
+        if (item.payment_method) {
+          methods[item.payment_method] = (methods[item.payment_method] || 0) + (item.total_amount || 0)
+        }
+      })
+      result.salesByPaymentMethod = methods
+    }
+
+    return result
+  } catch (error) {
+    console.error("Error en getSalesStats:", error)
+    // Devolver datos vacíos en caso de error para evitar que la aplicación falle
+    return {
         totalSales: 0,
         averageTicket: 0,
         salesByPlatform: {},
         salesByPaymentMethod: {},
         salesByDay: [],
       }
-    }
   }
+}
 
-  /**
-   * Obtiene los productos más vendidos
-   * @param limit Límite de productos a obtener
-   * @param startDate Fecha de inicio
-   * @param endDate Fecha de fin
-   * @returns Lista de productos más vendidos
-   */
-  async getTopSellingProducts(limit = 10, startDate?: Date, endDate?: Date) {
-    try {
-      console.log("Obteniendo productos más vendidos", { limit, startDate, endDate })
+/**
+ * Obtiene los productos más vendidos
+ * @param limit Límite de productos a obtener
+ * @param startDate Fecha de inicio
+ * @param endDate Fecha de fin
+ * @returns Lista de productos más vendidos
+ */
+async
+getTopSellingProducts(limit = 10, startDate?: Date, endDate?: Date)
+{
+  try {
+    console.log("Obteniendo productos más vendidos", { limit, startDate, endDate })
 
-      // Construir la consulta base
-      // Asumimos que existe una tabla o vista que contiene esta información
-      let query = this.supabase.from("product_sales").select("*")
+    // Construir la consulta base
+    // Asumimos que existe una tabla o vista que contiene esta información
+    let query = this.supabase.from("product_sales").select("*")
 
-      // Aplicar filtros de fecha si se proporcionan
-      if (startDate) {
-        query = query.gte("date", startDate.toISOString())
-      }
+    // Aplicar filtros de fecha si se proporcionan
+    if (startDate) {
+      query = query.gte("date", startDate.toISOString())
+    }
 
-      if (endDate) {
-        query = query.lte("date", endDate.toISOString())
-      }
+    if (endDate) {
+      query = query.lte("date", endDate.toISOString())
+    }
 
-      // Ordenar por cantidad vendida descendente y limitar resultados
-      query = query.order("quantity", { ascending: false }).limit(limit)
+    // Ordenar por cantidad vendida descendente y limitar resultados
+    query = query.order("quantity", { ascending: false }).limit(limit)
 
-      const { data, error } = await query
+    const { data, error } = await query
 
-      if (error) {
-        console.error("Error al obtener productos más vendidos:", error)
-        // Devolver array vacío en caso de error para evitar que la aplicación falle
-        return []
-      }
-
-      // Si no hay datos, devolver array vacío
-      if (!data || data.length === 0) {
-        console.log("No se encontraron datos de productos más vendidos")
-        return []
-      }
-
-      // Convertir de snake_case a camelCase
-      return data.map((item) => objectToCamelCase(item))
-    } catch (error) {
-      console.error("Error en getTopSellingProducts:", error)
+    if (error) {
+      console.error("Error al obtener productos más vendidos:", error)
       // Devolver array vacío en caso de error para evitar que la aplicación falle
       return []
     }
+
+    // Si no hay datos, devolver array vacío
+    if (!data || data.length === 0) {
+      console.log("No se encontraron datos de productos más vendidos")
+      return []
+    }
+
+    // Convertir de snake_case a camelCase
+    return data.map((item) => objectToCamelCase(item))
+  } catch (error) {
+    console.error("Error en getTopSellingProducts:", error)
+    // Devolver array vacío en caso de error para evitar que la aplicación falle
+    return []
   }
+}
 }
 
 // Función auxiliar para calcular la jornada laboral esperada en minutos

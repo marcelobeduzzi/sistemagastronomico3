@@ -1,8 +1,9 @@
-// lib/payroll-service.ts
-
+// Importar los servicios necesarios
 import { dbService } from "@/lib/db-service"
 
+// Clase PayrollService
 export class PayrollService {
+  // Método para obtener una nómina por su ID
   async getPayrollById(payrollId: string) {
     try {
       return await dbService.getPayrollById(payrollId)
@@ -132,9 +133,9 @@ export class PayrollService {
       }
     }
 
-    // Redondear valores para evitar problemas de precisión
-    deductions = Math.round(deductions * 100) / 100
-    additions = Math.round(additions * 100) / 100
+    // IMPORTANTE: Asegurarse de que los valores sean números y estén redondeados
+    deductions = Number(Math.round(deductions * 100) / 100)
+    additions = Number(Math.round(additions * 100) / 100)
 
     console.log(
       `RESUMEN - Total deducciones: ${deductions}, Total adiciones: ${additions}, Detalles: ${details.length}`,
@@ -227,8 +228,8 @@ export class PayrollService {
           base_salary: baseSalary,
           bank_salary: bankSalary,
           hand_salary: handSalary,
-          deductions: deductions,
-          additions: additions,
+          deductions: Number(deductions), // Asegurar que sea número
+          additions: Number(additions), // Asegurar que sea número
           final_hand_salary: finalHandSalary,
           total_salary: totalSalary,
           is_paid_hand: false,
@@ -253,7 +254,7 @@ export class PayrollService {
                 payroll_id: createdPayroll.id,
                 concept: detail.concept,
                 type: detail.type,
-                amount: detail.amount,
+                amount: Number(detail.amount), // Asegurar que sea número
                 date: detail.date,
                 notes: detail.notes,
               })
@@ -350,6 +351,14 @@ export class PayrollService {
 
   async updatePayroll(payrollId: string, updateData: Record<string, any>) {
     try {
+      // IMPORTANTE: Asegurarse de que deductions y additions sean números
+      if (updateData.deductions !== undefined) {
+        updateData.deductions = Number(updateData.deductions)
+      }
+      if (updateData.additions !== undefined) {
+        updateData.additions = Number(updateData.additions)
+      }
+
       return await dbService.updatePayroll(payrollId, updateData)
     } catch (error) {
       console.error("Error al actualizar nómina:", error)
@@ -473,8 +482,8 @@ export class PayrollService {
           base_salary: baseSalary,
           bank_salary: bankSalary,
           hand_salary: handSalary,
-          deductions: deductions,
-          additions: additions,
+          deductions: Number(deductions), // Asegurar que sea número
+          additions: Number(additions), // Asegurar que sea número
           final_hand_salary: finalHandSalary,
           total_salary: totalSalary,
           is_paid_hand: existingPayroll ? existingPayroll.is_paid_hand || false : false,
@@ -531,7 +540,7 @@ export class PayrollService {
                 payroll_id: payrollId,
                 concept: detail.concept,
                 type: detail.type,
-                amount: detail.amount,
+                amount: Number(detail.amount), // Asegurar que sea número
                 date: detail.date,
                 notes: detail.notes,
               })
@@ -601,8 +610,8 @@ export class PayrollService {
 
       // Actualizar la nómina
       const updateData = {
-        deductions,
-        additions,
+        deductions: Number(deductions), // Asegurar que sea número
+        additions: Number(additions), // Asegurar que sea número
         final_hand_salary: finalHandSalary,
         total_salary: totalSalary,
       }
@@ -636,7 +645,7 @@ export class PayrollService {
                 payroll_id: payrollId,
                 concept: detail.concept,
                 type: detail.type,
-                amount: detail.amount,
+                amount: Number(detail.amount), // Asegurar que sea número
                 date: detail.date,
                 notes: detail.notes,
               })
@@ -705,8 +714,8 @@ export class PayrollService {
 
       // Actualizar la nómina
       const updateData = {
-        deductions: deductions,
-        additions: additions,
+        deductions: Number(deductions), // Asegurar que sea número
+        additions: Number(additions), // Asegurar que sea número
         final_hand_salary: finalHandSalary,
         total_salary: totalSalary,
       }
@@ -761,7 +770,7 @@ export class PayrollService {
                 payroll_id: payrollId,
                 concept: detail.concept,
                 type: detail.type,
-                amount: detail.amount,
+                amount: Number(detail.amount), // Asegurar que sea número
                 date: detail.date,
                 notes: detail.notes,
               })
@@ -1133,6 +1142,97 @@ export class PayrollService {
     } catch (error) {
       console.error("Error al verificar la estructura de la tabla payroll:", error)
       throw new Error("Error al verificar la estructura de la tabla payroll")
+    }
+  }
+
+  /**
+   * Método para recalcular los ajustes de una nómina específica
+   * @param payrollId ID de la nómina a recalcular
+   * @returns La nómina actualizada
+   */
+  async recalculatePayrollAdjustments(payrollId: string) {
+    try {
+      console.log(`Recalculando ajustes para nómina ID: ${payrollId}`)
+
+      // Obtener la nómina actual
+      const payroll = await this.getPayrollById(payrollId)
+      if (!payroll) {
+        throw new Error("Nómina no encontrada")
+      }
+
+      // Obtener información del empleado
+      const employeeId = payroll.employeeId || payroll.employee_id
+      const employee = await dbService.getEmployeeById(employeeId)
+      if (!employee) {
+        throw new Error("Empleado no encontrado")
+      }
+
+      // Calcular el rango de fechas para el período de la nómina
+      const month = payroll.month
+      const year = payroll.year
+      const startDate = new Date(year, month - 1, 1)
+      const endDate = new Date(year, month, 0)
+      const startDateStr = startDate.toISOString().split("T")[0]
+      const endDateStr = endDate.toISOString().split("T")[0]
+
+      console.log(`Obteniendo asistencias desde ${startDateStr} hasta ${endDateStr}`)
+
+      // Obtener asistencias del empleado para el período
+      const attendances = await dbService.getAttendancesByDateRange(employeeId, startDateStr, endDateStr)
+      console.log(`Se encontraron ${attendances.length} registros de asistencia`)
+
+      // Calcular deducciones y adiciones basadas en asistencias
+      const baseSalary = Number(payroll.baseSalary || payroll.base_salary || 0)
+      const { deductions, additions, details } = this.calculateAdjustmentsFromAttendances(attendances, baseSalary)
+
+      // Obtener valores actuales
+      const handSalary = Number(payroll.handSalary || payroll.hand_salary || 0)
+      const bankSalary = Number(payroll.bankSalary || payroll.bank_salary || 0)
+      const attendanceBonus = Number(payroll.attendanceBonus || payroll.attendance_bonus || 0)
+      const hasAttendanceBonus = Boolean(payroll.hasAttendanceBonus || payroll.has_attendance_bonus || false)
+
+      // Calcular sueldo final en mano (sueldo en mano - deducciones + adiciones)
+      const finalHandSalary = handSalary - deductions + additions
+
+      // Calcular total a pagar (sueldo en banco + sueldo final en mano + bono de presentismo)
+      const totalSalary = bankSalary + finalHandSalary + (hasAttendanceBonus ? attendanceBonus : 0)
+
+      // Actualizar la nómina
+      const updateData = {
+        deductions: Number(deductions), // Asegurar que sea número
+        additions: Number(additions), // Asegurar que sea número
+        final_hand_salary: finalHandSalary,
+        total_salary: totalSalary,
+      }
+
+      console.log(`Actualizando nómina con datos: ${JSON.stringify(updateData)}`)
+
+      // Actualizar la nómina
+      await dbService.updatePayroll(payrollId, updateData)
+
+      // Guardar los detalles en la tabla payroll_details
+      if (details.length > 0) {
+        // Eliminar detalles existentes si los hay
+        await dbService.deletePayrollDetails(payrollId)
+
+        // Insertar nuevos detalles
+        for (const detail of details) {
+          await dbService.createPayrollDetail({
+            payroll_id: payrollId,
+            concept: detail.concept,
+            type: detail.type,
+            amount: Number(detail.amount), // Asegurar que sea número
+            date: detail.date,
+            notes: detail.notes,
+          })
+        }
+      }
+
+      // Obtener la nómina actualizada para devolverla
+      return await this.getPayrollById(payrollId)
+    } catch (error) {
+      console.error("Error al recalcular ajustes de nómina:", error)
+      throw new Error(`Error al recalcular ajustes de nómina: ${error.message}`)
     }
   }
 }
