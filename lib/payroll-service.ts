@@ -1,6 +1,33 @@
 import { dbService } from "@/lib/db-service"
 
 export class PayrollService {
+  async getPayrollById(payrollId: string) {
+    try {
+      return await dbService.getPayrollById(payrollId)
+    } catch (error) {
+      console.error(`Error al obtener nómina con ID ${payrollId}:`, error)
+      throw new Error(`Error al obtener nómina con ID ${payrollId}`)
+    }
+  }
+
+  async getPayrollsByPeriod(month: number, year: number, isPaid = false) {
+    try {
+      return await dbService.getPayrollsByPeriod(month, year, isPaid)
+    } catch (error) {
+      console.error(`Error al obtener nóminas para el período ${month}/${year}:`, error)
+      throw new Error(`Error al obtener nóminas para el período ${month}/${year}`)
+    }
+  }
+
+  async getPayrollsByEmployeeId(employeeId: string) {
+    try {
+      return await dbService.getPayrollsByEmployeeId(employeeId)
+    } catch (error) {
+      console.error(`Error al obtener nóminas para el empleado ${employeeId}:`, error)
+      throw new Error(`Error al obtener nóminas para el empleado ${employeeId}`)
+    }
+  }
+
   async generatePayrolls(employeeIds: string[], month: number, year: number) {
     try {
       const results = []
@@ -27,8 +54,14 @@ export class PayrollService {
         // Calcular los valores de la nómina
         // Asegurarse de manejar tanto camelCase como snake_case
         const baseSalary = Number.parseFloat(employee.baseSalary || employee.base_salary || "0")
-        const handSalary = Number.parseFloat(employee.handSalary || employee.hand_salary || "0")
         const bankSalary = Number.parseFloat(employee.bankSalary || employee.bank_salary || "0")
+        let handSalary = Number.parseFloat(employee.handSalary || employee.hand_salary || "0")
+
+        // REGLA IMPORTANTE: Si no hay salario en mano ni en banco, el salario base se convierte en salario en mano
+        if (handSalary === 0 && bankSalary === 0 && baseSalary > 0) {
+          handSalary = baseSalary
+          console.log(`Aplicando regla: Sueldo Base (${baseSalary}) se convierte en Sueldo en Mano`)
+        }
 
         // Calcular deducciones y adiciones (inicialmente en 0)
         const deductions = 0
@@ -42,11 +75,10 @@ export class PayrollService {
 
         // Calcular salarios finales
         const finalHandSalary = handSalary - deductions + additions
-        const totalSalary = baseSalary + bankSalary + attendanceBonus
+        // El total a pagar es la suma del salario en banco + salario final en mano + bono de presentismo
+        const totalSalary = bankSalary + finalHandSalary + attendanceBonus
 
         // Crear la nueva nómina usando dbService
-        // Usamos los nombres de columnas correctos según la base de datos
-        // NO incluimos is_paid ya que es una columna generada
         const newPayroll = {
           employee_id: employeeId,
           month,
@@ -171,24 +203,6 @@ export class PayrollService {
     }
   }
 
-  async getPayrollById(payrollId: string) {
-    try {
-      return await dbService.getPayrollById(payrollId)
-    } catch (error) {
-      console.error("Error al obtener nómina:", error)
-      throw new Error("Error al obtener nómina")
-    }
-  }
-
-  async getPayrollsByEmployeeId(employeeId: string) {
-    try {
-      return await dbService.getPayrollsByEmployeeId(employeeId)
-    } catch (error) {
-      console.error("Error al obtener nóminas del empleado:", error)
-      throw new Error("Error al obtener nóminas del empleado")
-    }
-  }
-
   async updatePayroll(payrollId: string, updateData: Record<string, any>) {
     try {
       return await dbService.updatePayroll(payrollId, updateData)
@@ -204,473 +218,6 @@ export class PayrollService {
     } catch (error) {
       console.error("Error al eliminar nómina:", error)
       throw new Error("Error al eliminar nómina")
-    }
-  }
-
-  async calculatePayrollAdjustments(payrollId: string, attendances: any[]) {
-    try {
-      // Obtener la nómina actual
-      const payroll = await this.getPayrollById(payrollId)
-      if (!payroll) {
-        throw new Error("Nómina no encontrada")
-      }
-
-      // Obtener información del empleado
-      const employeeId = payroll.employeeId || payroll.employee_id
-      const employee = await dbService.getEmployeeById(employeeId)
-      if (!employee) {
-        throw new Error("Empleado no encontrado")
-      }
-
-      // Calcular deducciones por ausencias y llegadas tarde
-      let deductions = 0
-      let additions = 0
-      const details = []
-
-      // Valor del minuto (basado en el salario base)
-      const baseSalary = payroll.baseSalary || payroll.base_salary || 0
-      const dailySalary = baseSalary / 30 // Salario diario
-      const hourSalary = dailySalary / 8 // Salario por hora (asumiendo 8 horas por día)
-      const minuteSalary = hourSalary / 60 // Salario por minuto
-
-      console.log(`Calculando ajustes para nómina ${payrollId}. Valor del minuto: ${minuteSalary}`)
-
-      // Procesar cada asistencia
-      for (const attendance of attendances) {
-        // Ausencias injustificadas
-        if (attendance.isAbsent && !attendance.isJustified && !attendance.isHoliday) {
-          const absenceDeduction = dailySalary
-          deductions += absenceDeduction
-          details.push({
-            concept: "Ausencia Injustificada",
-            type: "deduction",
-            amount: absenceDeduction,
-            description: `Ausencia el día ${attendance.date}`,
-          })
-          console.log(`Ausencia injustificada el día ${attendance.date}. Deducción: ${absenceDeduction}`)
-        }
-
-        // Llegadas tarde
-        if (attendance.lateMinutes > 0) {
-          const lateDeduction = minuteSalary * attendance.lateMinutes
-          deductions += lateDeduction
-          details.push({
-            concept: "Llegada Tarde",
-            type: "deduction",
-            amount: lateDeduction,
-            description: `${attendance.lateMinutes} minutos tarde el día ${attendance.date}`,
-          })
-          console.log(
-            `Llegada tarde el día ${attendance.date}: ${attendance.lateMinutes} minutos. Deducción: ${lateDeduction}`,
-          )
-        }
-
-        // Salidas anticipadas
-        if (attendance.earlyDepartureMinutes > 0) {
-          const earlyDeduction = minuteSalary * attendance.earlyDepartureMinutes
-          deductions += earlyDeduction
-          details.push({
-            concept: "Salida Anticipada",
-            type: "deduction",
-            amount: earlyDeduction,
-            description: `${attendance.earlyDepartureMinutes} minutos antes el día ${attendance.date}`,
-          })
-          console.log(
-            `Salida anticipada el día ${attendance.date}: ${attendance.earlyDepartureMinutes} minutos. Deducción: ${earlyDeduction}`,
-          )
-        }
-
-        // Horas extra
-        if (attendance.extraMinutes > 0) {
-          // Las horas extra se pagan a 1.5x el valor normal
-          const extraAddition = minuteSalary * attendance.extraMinutes * 1.5
-          additions += extraAddition
-          details.push({
-            concept: "Horas Extra",
-            type: "addition",
-            amount: extraAddition,
-            description: `${attendance.extraMinutes} minutos extra el día ${attendance.date}`,
-          })
-          console.log(
-            `Horas extra el día ${attendance.date}: ${attendance.extraMinutes} minutos. Adición: ${extraAddition}`,
-          )
-        }
-
-        // Feriados trabajados
-        if (attendance.isHoliday && !attendance.isAbsent) {
-          // Los feriados se pagan doble
-          const holidayAddition = dailySalary
-          additions += holidayAddition
-          details.push({
-            concept: "Feriado Trabajado",
-            type: "addition",
-            amount: holidayAddition,
-            description: `Trabajo en día feriado ${attendance.date}`,
-          })
-          console.log(`Feriado trabajado el día ${attendance.date}. Adición: ${holidayAddition}`)
-        }
-      }
-
-      // Redondear valores para evitar problemas de precisión
-      deductions = Math.round(deductions * 100) / 100
-      additions = Math.round(additions * 100) / 100
-
-      console.log(`Total deducciones: ${deductions}, Total adiciones: ${additions}`)
-
-      // Obtener valores actuales
-      const handSalary = Number(payroll.handSalary || payroll.hand_salary || 0)
-      const bankSalary = Number(payroll.bankSalary || payroll.bank_salary || 0)
-      const attendanceBonus = Number(payroll.attendanceBonus || payroll.attendance_bonus || 0)
-
-      console.log(
-        `Valores actuales - Sueldo en mano: ${handSalary}, Sueldo banco: ${bankSalary}, Bono: ${attendanceBonus}`,
-      )
-
-      // Calcular sueldo final en mano (sueldo en mano - deducciones + adiciones)
-      const finalHandSalary = handSalary - deductions + additions
-
-      // Calcular total a pagar (sueldo base + sueldo banco + bono de presentismo)
-      const totalSalary = baseSalary + bankSalary + attendanceBonus
-
-      console.log(`Nuevos valores - Sueldo final en mano: ${finalHandSalary}, Total a pagar: ${totalSalary}`)
-
-      // Actualizar la nómina
-      const updateData = {
-        deductions,
-        additions,
-        final_hand_salary: finalHandSalary,
-        total_salary: totalSalary,
-      }
-
-      console.log("Actualizando nómina con ajustes:", updateData)
-
-      // Actualizar la nómina
-      const updatedPayroll = await dbService.updatePayroll(payrollId, updateData)
-
-      // Guardar los detalles en la tabla payroll_details
-      if (details.length > 0) {
-        try {
-          // Eliminar detalles existentes si los hay
-          await dbService.deletePayrollDetails(payrollId)
-
-          // Insertar nuevos detalles
-          for (const detail of details) {
-            await dbService.createPayrollDetail({
-              payroll_id: payrollId,
-              concept: detail.concept,
-              type: detail.type,
-              amount: detail.amount,
-              description: detail.description,
-            })
-          }
-          console.log(`Guardados ${details.length} detalles para la nómina ${payrollId}`)
-        } catch (error) {
-          console.error("Error al guardar detalles de nómina:", error)
-        }
-      }
-
-      return updatedPayroll
-    } catch (error) {
-      console.error("Error al calcular ajustes de nómina:", error)
-      throw new Error("Error al calcular ajustes de nómina")
-    }
-  }
-
-  async recalculateAllPayrolls(month: number, year: number) {
-    try {
-      // Obtener todas las nóminas del período
-      const payrolls = await this.getPayrollsByMonthYear(month, year)
-      const results = []
-
-      for (const payroll of payrolls) {
-        // Obtener asistencias del empleado para el período
-        const startDate = new Date(year, month - 1, 1)
-        const endDate = new Date(year, month, 0)
-        const startDateStr = startDate.toISOString().split("T")[0]
-        const endDateStr = endDate.toISOString().split("T")[0]
-
-        const employeeId = payroll.employeeId || payroll.employee_id
-        const attendances = await dbService.getAttendancesByDateRange(employeeId, startDateStr, endDateStr)
-
-        // Recalcular ajustes
-        const updatedPayroll = await this.calculatePayrollAdjustments(payroll.id, attendances)
-        results.push(updatedPayroll)
-      }
-
-      return results
-    } catch (error) {
-      console.error("Error al recalcular nóminas:", error)
-      throw new Error("Error al recalcular nóminas")
-    }
-  }
-
-  async generatePayrollReport(month: number, year: number) {
-    try {
-      // Obtener todas las nóminas del período
-      const payrolls = await this.getPayrollsByMonthYear(month, year)
-
-      // Calcular totales
-      const totalHandSalary = payrolls.reduce(
-        (sum, p) => sum + Number(p.finalHandSalary || p.final_hand_salary || 0),
-        0,
-      )
-      const totalBankSalary = payrolls.reduce((sum, p) => sum + Number(p.bankSalary || p.bank_salary || 0), 0)
-      const totalSalary = payrolls.reduce((sum, p) => sum + Number(p.totalSalary || p.total_salary || 0), 0)
-      const totalDeductions = payrolls.reduce((sum, p) => sum + Number(p.deductions || 0), 0)
-      const totalAdditions = payrolls.reduce((sum, p) => sum + Number(p.additions || 0), 0)
-      const totalAttendanceBonus = payrolls.reduce(
-        (sum, p) => sum + Number(p.attendanceBonus || p.attendance_bonus || 0),
-        0,
-      )
-
-      // Agrupar por local
-      const byLocation = {}
-      for (const payroll of payrolls) {
-        const employeeId = payroll.employeeId || payroll.employee_id
-        const employee = await dbService.getEmployeeById(employeeId)
-        if (employee) {
-          const location = employee.local || "Sin asignar"
-          if (!byLocation[location]) {
-            byLocation[location] = {
-              count: 0,
-              totalSalary: 0,
-              employees: [],
-            }
-          }
-          byLocation[location].count++
-          byLocation[location].totalSalary += Number(payroll.totalSalary || payroll.total_salary || 0)
-          byLocation[location].employees.push({
-            id: employee.id,
-            name: `${employee.firstName} ${employee.lastName}`,
-            salary: Number(payroll.totalSalary || payroll.total_salary || 0),
-          })
-        }
-      }
-
-      return {
-        period: {
-          month,
-          year,
-        },
-        summary: {
-          totalEmployees: payrolls.length,
-          totalHandSalary,
-          totalBankSalary,
-          totalSalary,
-          totalDeductions,
-          totalAdditions,
-          totalAttendanceBonus,
-          averageSalary: payrolls.length > 0 ? totalSalary / payrolls.length : 0,
-        },
-        byLocation,
-        payrolls: payrolls.map((p) => ({
-          id: p.id,
-          employeeId: p.employeeId || p.employee_id,
-          totalSalary: Number(p.totalSalary || p.total_salary || 0),
-          isPaid: p.isPaid || p.is_paid || false,
-        })),
-      }
-    } catch (error) {
-      console.error("Error al generar reporte de nóminas:", error)
-      throw new Error("Error al generar reporte de nóminas")
-    }
-  }
-
-  async applyBulkAttendanceBonus(employeeIds: string[], month: number, year: number, bonusAmount: number) {
-    try {
-      const results = []
-
-      for (const employeeId of employeeIds) {
-        // Obtener la nómina del empleado para el período
-        const payrolls = await dbService.getPayrollsByEmployeeAndPeriod(employeeId, month, year)
-
-        if (payrolls.length === 0) {
-          console.log(`No se encontró nómina para el empleado ${employeeId} en ${month}/${year}`)
-          continue
-        }
-
-        const payroll = payrolls[0]
-        const handSalary = Number(payroll.handSalary || payroll.hand_salary || 0)
-        const baseSalary = Number(payroll.baseSalary || payroll.base_salary || 0)
-        const bankSalary = Number(payroll.bankSalary || payroll.bank_salary || 0)
-        const deductions = Number(payroll.deductions || 0)
-        const additions = Number(payroll.additions || 0)
-
-        // Actualizar el bono de presentismo
-        const updateData = {
-          has_attendance_bonus: true,
-          attendance_bonus: bonusAmount,
-          // Recalcular totales
-          final_hand_salary: handSalary - deductions + additions,
-          total_salary: baseSalary + bankSalary + bonusAmount,
-        }
-
-        const updatedPayroll = await dbService.updatePayroll(payroll.id, updateData)
-        results.push(updatedPayroll)
-      }
-
-      return results
-    } catch (error) {
-      console.error("Error al aplicar bono de presentismo masivo:", error)
-      throw new Error("Error al aplicar bono de presentismo masivo")
-    }
-  }
-
-  async removeBulkAttendanceBonus(employeeIds: string[], month: number, year: number) {
-    try {
-      const results = []
-
-      for (const employeeId of employeeIds) {
-        // Obtener la nómina del empleado para el período
-        const payrolls = await dbService.getPayrollsByEmployeeAndPeriod(employeeId, month, year)
-
-        if (payrolls.length === 0) {
-          console.log(`No se encontró nómina para el empleado ${employeeId} en ${month}/${year}`)
-          continue
-        }
-
-        const payroll = payrolls[0]
-        const handSalary = Number(payroll.handSalary || payroll.hand_salary || 0)
-        const baseSalary = Number(payroll.baseSalary || payroll.base_salary || 0)
-        const bankSalary = Number(payroll.bankSalary || payroll.bank_salary || 0)
-        const deductions = Number(payroll.deductions || 0)
-        const additions = Number(payroll.additions || 0)
-
-        // Quitar el bono de presentismo
-        const updateData = {
-          has_attendance_bonus: false,
-          attendance_bonus: 0,
-          // Recalcular totales
-          final_hand_salary: handSalary - deductions + additions,
-          total_salary: baseSalary + bankSalary,
-        }
-
-        const updatedPayroll = await dbService.updatePayroll(payroll.id, updateData)
-        results.push(updatedPayroll)
-      }
-
-      return results
-    } catch (error) {
-      console.error("Error al quitar bono de presentismo masivo:", error)
-      throw new Error("Error al quitar bono de presentismo masivo")
-    }
-  }
-
-  async bulkUpdatePayrollStatus(payrollIds: string[], status: "paid" | "hand_paid" | "bank_paid") {
-    try {
-      const results = []
-
-      for (const payrollId of payrollIds) {
-        let field = ""
-        if (status === "paid") field = "is_paid"
-        else if (status === "hand_paid") field = "is_paid_hand"
-        else if (status === "bank_paid") field = "is_paid_bank"
-        else throw new Error("Estado de pago inválido")
-
-        const updatedPayroll = await this.updatePayrollStatus(payrollId, field, true)
-        results.push(updatedPayroll)
-      }
-
-      return results
-    } catch (error) {
-      console.error("Error al actualizar estado de nóminas masivamente:", error)
-      throw new Error("Error al actualizar estado de nóminas masivamente")
-    }
-  }
-
-  async getPayrollStatistics(year: number) {
-    try {
-      const statistics = {
-        byMonth: [] as any[],
-        totalAnnual: 0,
-        averageMonthly: 0,
-        employeeCount: 0,
-        topPaidEmployees: [] as any[],
-      }
-
-      // Obtener estadísticas por mes
-      for (let month = 1; month <= 12; month++) {
-        const payrolls = await this.getPayrollsByMonthYear(month, year)
-        const totalAmount = payrolls.reduce((sum, p) => sum + Number(p.totalSalary || p.total_salary || 0), 0)
-
-        statistics.byMonth.push({
-          month,
-          employeeCount: payrolls.length,
-          totalAmount,
-          averageSalary: payrolls.length > 0 ? totalAmount / payrolls.length : 0,
-        })
-
-        statistics.totalAnnual += totalAmount
-      }
-
-      // Calcular promedio mensual
-      statistics.averageMonthly = statistics.totalAnnual / 12
-
-      // Obtener empleados con mayor salario (promedio anual)
-      const employees = await dbService.getEmployees()
-      statistics.employeeCount = employees.length
-
-      const employeeSalaries = [] as any[]
-
-      for (const employee of employees) {
-        const payrolls = await this.getPayrollsByEmployeeId(employee.id)
-        const yearPayrolls = payrolls.filter((p) => p.year === year)
-
-        if (yearPayrolls.length > 0) {
-          const totalSalary = yearPayrolls.reduce((sum, p) => sum + Number(p.totalSalary || p.total_salary || 0), 0)
-          const averageSalary = totalSalary / yearPayrolls.length
-
-          employeeSalaries.push({
-            employeeId: employee.id,
-            name: `${employee.firstName} ${employee.lastName}`,
-            averageSalary,
-            payrollCount: yearPayrolls.length,
-          })
-        }
-      }
-
-      // Ordenar por salario promedio y tomar los 5 primeros
-      statistics.topPaidEmployees = employeeSalaries.sort((a, b) => b.averageSalary - a.averageSalary).slice(0, 5)
-
-      return statistics
-    } catch (error) {
-      console.error("Error al obtener estadísticas de nóminas:", error)
-      throw new Error("Error al obtener estadísticas de nóminas")
-    }
-  }
-
-  async exportPayrollsToCSV(month: number, year: number) {
-    try {
-      const payrolls = await this.getPayrollsByMonthYear(month, year)
-      let csvContent =
-        "ID,Empleado,Mes,Año,Salario Base,Salario Banco,Salario Mano,Deducciones,Adiciones,Bono Presentismo,Salario Final Mano,Total,Estado\n"
-
-      for (const payroll of payrolls) {
-        const employeeId = payroll.employeeId || payroll.employee_id
-        const employee = await dbService.getEmployeeById(employeeId)
-        const employeeName = employee ? `${employee.firstName} ${employee.lastName}` : "Desconocido"
-
-        const isPaid = payroll.isPaid || payroll.is_paid || false
-        const handSalaryPaid = payroll.handSalaryPaid || payroll.is_paid_hand || false
-        const bankSalaryPaid = payroll.bankSalaryPaid || payroll.is_paid_bank || false
-
-        const status = isPaid
-          ? "Pagado"
-          : handSalaryPaid && bankSalaryPaid
-            ? "Pagado"
-            : handSalaryPaid
-              ? "Mano Pagado"
-              : bankSalaryPaid
-                ? "Banco Pagado"
-                : "Pendiente"
-
-        csvContent += `${payroll.id},${employeeName},${payroll.month},${payroll.year},${payroll.baseSalary || payroll.base_salary || 0},${payroll.bankSalary || payroll.bank_salary || 0},${payroll.handSalary || payroll.hand_salary || 0},${payroll.deductions || 0},${payroll.additions || 0},${payroll.attendanceBonus || payroll.attendance_bonus || 0},${payroll.finalHandSalary || payroll.final_hand_salary || 0},${payroll.totalSalary || payroll.total_salary || 0},${status}\n`
-      }
-
-      return csvContent
-    } catch (error) {
-      console.error("Error al exportar nóminas a CSV:", error)
-      throw new Error("Error al exportar nóminas a CSV")
     }
   }
 
@@ -707,16 +254,13 @@ export class PayrollService {
 
           // Calcular los valores de la nómina
           const baseSalary = Number.parseFloat(employee.baseSalary || employee.base_salary || "0")
-          // Si el empleado tiene salario en banco, ese es su forma de pago principal
-          // Si no tiene salario en banco, entonces el salario base se paga en mano
           const bankSalary = Number.parseFloat(employee.bankSalary || employee.bank_salary || "0")
           let handSalary = Number.parseFloat(employee.handSalary || employee.hand_salary || "0")
 
-          // Si no hay salario en mano definido pero hay salario base y no hay salario en banco,
-          // entonces el salario base se paga en mano
-          if (handSalary === 0 && baseSalary > 0 && bankSalary === 0) {
+          // REGLA IMPORTANTE: Si no hay salario en mano ni en banco, el salario base se convierte en salario en mano
+          if (handSalary === 0 && bankSalary === 0 && baseSalary > 0) {
             handSalary = baseSalary
-            console.log(`No hay salario en mano definido, usando salario base como salario en mano: ${handSalary}`)
+            console.log(`Aplicando regla: Sueldo Base (${baseSalary}) se convierte en Sueldo en Mano`)
           }
 
           console.log(`Valores base calculados - Base: ${baseSalary}, Mano: ${handSalary}, Banco: ${bankSalary}`)
@@ -731,7 +275,7 @@ export class PayrollService {
 
           // Calcular salarios finales (inicialmente sin deducciones/adiciones)
           const finalHandSalary = handSalary
-          // El total a pagar es la suma del salario en banco + salario final en mano
+          // El total a pagar es la suma del salario en banco + salario final en mano + bono de presentismo
           const totalSalary = bankSalary + finalHandSalary + attendanceBonus
 
           console.log(`Valores iniciales calculados - Final Mano: ${finalHandSalary}, Total: ${totalSalary}`)
@@ -819,16 +363,13 @@ export class PayrollService {
 
           // Calcular los valores de la nómina
           const baseSalary = Number.parseFloat(employee.baseSalary || employee.base_salary || "0")
-          // Si el empleado tiene salario en banco, ese es su forma de pago principal
-          // Si no tiene salario en banco, entonces el salario base se paga en mano
           const bankSalary = Number.parseFloat(employee.bankSalary || employee.bank_salary || "0")
           let handSalary = Number.parseFloat(employee.handSalary || employee.hand_salary || "0")
 
-          // Si no hay salario en mano definido pero hay salario base y no hay salario en banco,
-          // entonces el salario base se paga en mano
-          if (handSalary === 0 && baseSalary > 0 && bankSalary === 0) {
+          // REGLA IMPORTANTE: Si no hay salario en mano ni en banco, el salario base se convierte en salario en mano
+          if (handSalary === 0 && bankSalary === 0 && baseSalary > 0) {
             handSalary = baseSalary
-            console.log(`No hay salario en mano definido, usando salario base como salario en mano: ${handSalary}`)
+            console.log(`Aplicando regla: Sueldo Base (${baseSalary}) se convierte en Sueldo en Mano`)
           }
 
           console.log(`Valores base calculados - Base: ${baseSalary}, Mano: ${handSalary}, Banco: ${bankSalary}`)
@@ -841,7 +382,7 @@ export class PayrollService {
 
           // Calcular salarios finales
           const finalHandSalary = handSalary
-          // El total a pagar es la suma del salario en banco + salario final en mano
+          // El total a pagar es la suma del salario en banco + salario final en mano + bono de presentismo
           const totalSalary = bankSalary + finalHandSalary + attendanceBonus
 
           console.log(`Valores iniciales calculados - Final Mano: ${finalHandSalary}, Total: ${totalSalary}`)
@@ -1112,6 +653,473 @@ export class PayrollService {
     } catch (error) {
       console.error("Error al calcular ajustes de nómina:", error)
       throw new Error("Error al calcular ajustes de nómina")
+    }
+  }
+
+  async calculatePayrollAdjustments(payrollId: string, attendances: any[]) {
+    try {
+      // Obtener la nómina actual
+      const payroll = await this.getPayrollById(payrollId)
+      if (!payroll) {
+        throw new Error("Nómina no encontrada")
+      }
+
+      // Obtener información del empleado
+      const employeeId = payroll.employeeId || payroll.employee_id
+      const employee = await dbService.getEmployeeById(employeeId)
+      if (!employee) {
+        throw new Error("Empleado no encontrado")
+      }
+
+      // Calcular deducciones por ausencias y llegadas tarde
+      let deductions = 0
+      let additions = 0
+      const details = []
+
+      // Valor del minuto (basado en el salario base)
+      const baseSalary = Number.parseFloat(payroll.baseSalary || payroll.base_salary || "0")
+      const dailySalary = baseSalary / 30 // Salario diario
+      const hourSalary = dailySalary / 8 // Salario por hora (asumiendo 8 horas por día)
+      const minuteSalary = hourSalary / 60 // Salario por minuto
+
+      console.log(`Calculando ajustes para nómina ${payrollId}. Valor del minuto: ${minuteSalary}`)
+
+      // Procesar cada asistencia
+      for (const attendance of attendances) {
+        // Ausencias injustificadas
+        if (attendance.isAbsent && !attendance.isJustified && !attendance.isHoliday) {
+          const absenceDeduction = dailySalary
+          deductions += absenceDeduction
+          details.push({
+            concept: "Ausencia Injustificada",
+            type: "deduction",
+            amount: absenceDeduction,
+            description: `Ausencia el día ${attendance.date}`,
+          })
+          console.log(`Ausencia injustificada el día ${attendance.date}. Deducción: ${absenceDeduction}`)
+        }
+
+        // Llegadas tarde
+        if (attendance.lateMinutes > 0) {
+          const lateDeduction = minuteSalary * attendance.lateMinutes
+          deductions += lateDeduction
+          details.push({
+            concept: "Llegada Tarde",
+            type: "deduction",
+            amount: lateDeduction,
+            description: `${attendance.lateMinutes} minutos tarde el día ${attendance.date}`,
+          })
+          console.log(
+            `Llegada tarde el día ${attendance.date}: ${attendance.lateMinutes} minutos. Deducción: ${lateDeduction}`,
+          )
+        }
+
+        // Salidas anticipadas
+        if (attendance.earlyDepartureMinutes > 0) {
+          const earlyDeduction = minuteSalary * attendance.earlyDepartureMinutes
+          deductions += earlyDeduction
+          details.push({
+            concept: "Salida Anticipada",
+            type: "deduction",
+            amount: earlyDeduction,
+            description: `${attendance.earlyDepartureMinutes} minutos antes el día ${attendance.date}`,
+          })
+          console.log(
+            `Salida anticipada el día ${attendance.date}: ${attendance.earlyDepartureMinutes} minutos. Deducción: ${earlyDeduction}`,
+          )
+        }
+
+        // Horas extra
+        if (attendance.extraMinutes > 0) {
+          // Las horas extra se pagan a 1.5x el valor normal
+          const extraAddition = minuteSalary * attendance.extraMinutes * 1.5
+          additions += extraAddition
+          details.push({
+            concept: "Horas Extra",
+            type: "addition",
+            amount: extraAddition,
+            description: `${attendance.extraMinutes} minutos extra el día ${attendance.date}`,
+          })
+          console.log(
+            `Horas extra el día ${attendance.date}: ${attendance.extraMinutes} minutos. Adición: ${extraAddition}`,
+          )
+        }
+
+        // Feriados trabajados
+        if (attendance.isHoliday && !attendance.isAbsent) {
+          // Los feriados se pagan doble
+          const holidayAddition = dailySalary
+          additions += holidayAddition
+          details.push({
+            concept: "Feriado Trabajado",
+            type: "addition",
+            amount: holidayAddition,
+            description: `Trabajo en día feriado ${attendance.date}`,
+          })
+          console.log(`Feriado trabajado el día ${attendance.date}. Adición: ${holidayAddition}`)
+        }
+      }
+
+      // Redondear valores para evitar problemas de precisión
+      deductions = Math.round(deductions * 100) / 100
+      additions = Math.round(additions * 100) / 100
+
+      console.log(`Total deducciones: ${deductions}, Total adiciones: ${additions}`)
+
+      // Obtener valores actuales
+      const handSalary = Number.parseFloat(payroll.handSalary || payroll.hand_salary || "0")
+      const bankSalary = Number.parseFloat(payroll.bankSalary || payroll.bank_salary || "0")
+      const attendanceBonus = Number.parseFloat(payroll.attendanceBonus || payroll.attendance_bonus || "0")
+
+      console.log(
+        `Valores actuales - Sueldo en mano: ${handSalary}, Sueldo banco: ${bankSalary}, Bono: ${attendanceBonus}`,
+      )
+
+      // Calcular sueldo final en mano (sueldo en mano - deducciones + adiciones)
+      const finalHandSalary = handSalary - deductions + additions
+
+      // Calcular total a pagar (sueldo en banco + sueldo final en mano + bono de presentismo)
+      const totalSalary = bankSalary + finalHandSalary + attendanceBonus
+
+      console.log(`Nuevos valores - Sueldo final en mano: ${finalHandSalary}, Total a pagar: ${totalSalary}`)
+
+      // Actualizar la nómina
+      const updateData = {
+        deductions,
+        additions,
+        final_hand_salary: finalHandSalary,
+        total_salary: totalSalary,
+      }
+
+      console.log("Actualizando nómina con ajustes:", updateData)
+
+      // Actualizar la nómina
+      const updatedPayroll = await dbService.updatePayroll(payrollId, updateData)
+
+      // Guardar los detalles en la tabla payroll_details
+      if (details.length > 0) {
+        try {
+          // Eliminar detalles existentes si los hay
+          await dbService.deletePayrollDetails(payrollId)
+
+          // Insertar nuevos detalles
+          for (const detail of details) {
+            await dbService.createPayrollDetail({
+              payroll_id: payrollId,
+              concept: detail.concept,
+              type: detail.type,
+              amount: detail.amount,
+              description: detail.description,
+            })
+          }
+          console.log(`Guardados ${details.length} detalles para la nómina ${payrollId}`)
+        } catch (error) {
+          console.error("Error al guardar detalles de nómina:", error)
+        }
+      }
+
+      return updatedPayroll
+    } catch (error) {
+      console.error("Error al calcular ajustes de nómina:", error)
+      throw new Error("Error al calcular ajustes de nómina")
+    }
+  }
+
+  async recalculateAllPayrolls(month: number, year: number) {
+    try {
+      // Obtener todas las nóminas del período
+      const payrolls = await this.getPayrollsByMonthYear(month, year)
+      const results = []
+
+      for (const payroll of payrolls) {
+        // Obtener asistencias del empleado para el período
+        const startDate = new Date(year, month - 1, 1)
+        const endDate = new Date(year, month, 0)
+        const startDateStr = startDate.toISOString().split("T")[0]
+        const endDateStr = endDate.toISOString().split("T")[0]
+
+        const employeeId = payroll.employeeId || payroll.employee_id
+        const attendances = await dbService.getAttendancesByDateRange(employeeId, startDateStr, endDateStr)
+
+        // Recalcular ajustes
+        const updatedPayroll = await this.calculatePayrollAdjustments(payroll.id, attendances)
+        results.push(updatedPayroll)
+      }
+
+      return results
+    } catch (error) {
+      console.error("Error al recalcular nóminas:", error)
+      throw new Error("Error al recalcular nóminas")
+    }
+  }
+
+  async generatePayrollReport(month: number, year: number) {
+    try {
+      // Obtener todas las nóminas del período
+      const payrolls = await this.getPayrollsByMonthYear(month, year)
+
+      // Calcular totales
+      const totalHandSalary = payrolls.reduce(
+        (sum, p) => sum + Number(p.finalHandSalary || p.final_hand_salary || 0),
+        0,
+      )
+      const totalBankSalary = payrolls.reduce((sum, p) => sum + Number(p.bankSalary || p.bank_salary || 0), 0)
+      const totalSalary = payrolls.reduce((sum, p) => sum + Number(p.totalSalary || p.total_salary || 0), 0)
+      const totalDeductions = payrolls.reduce((sum, p) => sum + Number(p.deductions || 0), 0)
+      const totalAdditions = payrolls.reduce((sum, p) => sum + Number(p.additions || 0), 0)
+      const totalAttendanceBonus = payrolls.reduce(
+        (sum, p) => sum + Number(p.attendanceBonus || p.attendance_bonus || 0),
+        0,
+      )
+
+      // Agrupar por local
+      const byLocation = {}
+      for (const payroll of payrolls) {
+        const employeeId = payroll.employeeId || payroll.employee_id
+        const employee = await dbService.getEmployeeById(employeeId)
+        if (employee) {
+          const location = employee.local || "Sin asignar"
+          if (!byLocation[location]) {
+            byLocation[location] = {
+              count: 0,
+              totalSalary: 0,
+              employees: [],
+            }
+          }
+          byLocation[location].count++
+          byLocation[location].totalSalary += Number(payroll.totalSalary || payroll.total_salary || 0)
+          byLocation[location].employees.push({
+            id: employee.id,
+            name: `${employee.firstName} ${employee.lastName}`,
+            salary: Number(payroll.totalSalary || payroll.total_salary || 0),
+          })
+        }
+      }
+
+      return {
+        period: {
+          month,
+          year,
+        },
+        summary: {
+          totalEmployees: payrolls.length,
+          totalHandSalary,
+          totalBankSalary,
+          totalSalary,
+          totalDeductions,
+          totalAdditions,
+          totalAttendanceBonus,
+          averageSalary: payrolls.length > 0 ? totalSalary / payrolls.length : 0,
+        },
+        byLocation,
+        payrolls: payrolls.map((p) => ({
+          id: p.id,
+          employeeId: p.employeeId || p.employee_id,
+          totalSalary: Number(p.totalSalary || p.total_salary || 0),
+          isPaid: p.isPaid || p.is_paid || false,
+        })),
+      }
+    } catch (error) {
+      console.error("Error al generar reporte de nóminas:", error)
+      throw new Error("Error al generar reporte de nóminas")
+    }
+  }
+
+  async applyBulkAttendanceBonus(employeeIds: string[], month: number, year: number, bonusAmount: number) {
+    try {
+      const results = []
+
+      for (const employeeId of employeeIds) {
+        // Obtener la nómina del empleado para el período
+        const payrolls = await dbService.getPayrollsByEmployeeAndPeriod(employeeId, month, year)
+
+        if (payrolls.length === 0) {
+          console.log(`No se encontró nómina para el empleado ${employeeId} en ${month}/${year}`)
+          continue
+        }
+
+        const payroll = payrolls[0]
+        const handSalary = Number(payroll.handSalary || payroll.hand_salary || 0)
+        const bankSalary = Number(payroll.bankSalary || payroll.bank_salary || 0)
+        const deductions = Number(payroll.deductions || 0)
+        const additions = Number(payroll.additions || 0)
+        const finalHandSalary = handSalary - deductions + additions
+
+        // Actualizar el bono de presentismo
+        const updateData = {
+          has_attendance_bonus: true,
+          attendance_bonus: bonusAmount,
+          // Recalcular totales
+          final_hand_salary: finalHandSalary,
+          total_salary: bankSalary + finalHandSalary + bonusAmount,
+        }
+
+        const updatedPayroll = await dbService.updatePayroll(payroll.id, updateData)
+        results.push(updatedPayroll)
+      }
+
+      return results
+    } catch (error) {
+      console.error("Error al aplicar bono de presentismo masivo:", error)
+      throw new Error("Error al aplicar bono de presentismo masivo")
+    }
+  }
+
+  async removeBulkAttendanceBonus(employeeIds: string[], month: number, year: number) {
+    try {
+      const results = []
+
+      for (const employeeId of employeeIds) {
+        // Obtener la nómina del empleado para el período
+        const payrolls = await dbService.getPayrollsByEmployeeAndPeriod(employeeId, month, year)
+
+        if (payrolls.length === 0) {
+          console.log(`No se encontró nómina para el empleado ${employeeId} en ${month}/${year}`)
+          continue
+        }
+
+        const payroll = payrolls[0]
+        const handSalary = Number(payroll.handSalary || payroll.hand_salary || 0)
+        const bankSalary = Number(payroll.bankSalary || payroll.bank_salary || 0)
+        const deductions = Number(payroll.deductions || 0)
+        const additions = Number(payroll.additions || 0)
+        const finalHandSalary = handSalary - deductions + additions
+
+        // Quitar el bono de presentismo
+        const updateData = {
+          has_attendance_bonus: false,
+          attendance_bonus: 0,
+          // Recalcular totales
+          final_hand_salary: finalHandSalary,
+          total_salary: bankSalary + finalHandSalary,
+        }
+
+        const updatedPayroll = await dbService.updatePayroll(payroll.id, updateData)
+        results.push(updatedPayroll)
+      }
+
+      return results
+    } catch (error) {
+      console.error("Error al quitar bono de presentismo masivo:", error)
+      throw new Error("Error al quitar bono de presentismo masivo")
+    }
+  }
+
+  async bulkUpdatePayrollStatus(payrollIds: string[], status: "paid" | "hand_paid" | "bank_paid") {
+    try {
+      const results = []
+
+      for (const payrollId of payrollIds) {
+        let field = ""
+        if (status === "paid") field = "is_paid"
+        else if (status === "hand_paid") field = "is_paid_hand"
+        else if (status === "bank_paid") field = "is_paid_bank"
+        else throw new Error("Estado de pago inválido")
+
+        const updatedPayroll = await this.updatePayrollStatus(payrollId, field, true)
+        results.push(updatedPayroll)
+      }
+
+      return results
+    } catch (error) {
+      console.error("Error al actualizar estado de nóminas masivamente:", error)
+      throw new Error("Error al actualizar estado de nóminas masivamente")
+    }
+  }
+
+  async getPayrollStatistics(year: number) {
+    try {
+      const statistics = {
+        byMonth: [] as any[],
+        totalAnnual: 0,
+        averageMonthly: 0,
+        employeeCount: 0,
+        topPaidEmployees: [] as any[],
+      }
+
+      // Obtener estadísticas por mes
+      for (let month = 1; month <= 12; month++) {
+        const payrolls = await this.getPayrollsByMonthYear(month, year)
+        const totalAmount = payrolls.reduce((sum, p) => sum + Number(p.totalSalary || p.total_salary || 0), 0)
+
+        statistics.byMonth.push({
+          month,
+          employeeCount: payrolls.length,
+          totalAmount,
+          averageSalary: payrolls.length > 0 ? totalAmount / payrolls.length : 0,
+        })
+
+        statistics.totalAnnual += totalAmount
+      }
+
+      // Calcular promedio mensual
+      statistics.averageMonthly = statistics.totalAnnual / 12
+
+      // Obtener empleados con mayor salario (promedio anual)
+      const employees = await dbService.getEmployees()
+      statistics.employeeCount = employees.length
+
+      const employeeSalaries = [] as any[]
+
+      for (const employee of employees) {
+        const payrolls = await this.getPayrollsByEmployeeId(employee.id)
+        const yearPayrolls = payrolls.filter((p) => p.year === year)
+
+        if (yearPayrolls.length > 0) {
+          const totalSalary = yearPayrolls.reduce((sum, p) => sum + Number(p.totalSalary || p.total_salary || 0), 0)
+          const averageSalary = totalSalary / yearPayrolls.length
+
+          employeeSalaries.push({
+            employeeId: employee.id,
+            name: `${employee.firstName} ${employee.lastName}`,
+            averageSalary,
+            payrollCount: yearPayrolls.length,
+          })
+        }
+      }
+
+      // Ordenar por salario promedio y tomar los 5 primeros
+      statistics.topPaidEmployees = employeeSalaries.sort((a, b) => b.averageSalary - a.averageSalary).slice(0, 5)
+
+      return statistics
+    } catch (error) {
+      console.error("Error al obtener estadísticas de nóminas:", error)
+      throw new Error("Error al obtener estadísticas de nóminas")
+    }
+  }
+
+  async exportPayrollsToCSV(month: number, year: number) {
+    try {
+      const payrolls = await this.getPayrollsByMonthYear(month, year)
+      let csvContent =
+        "ID,Empleado,Mes,Año,Salario Base,Salario Banco,Salario Mano,Deducciones,Adiciones,Bono Presentismo,Salario Final Mano,Total,Estado\n"
+
+      for (const payroll of payrolls) {
+        const employeeId = payroll.employeeId || payroll.employee_id
+        const employee = await dbService.getEmployeeById(employeeId)
+        const employeeName = employee ? `${employee.firstName} ${employee.lastName}` : "Desconocido"
+
+        const isPaid = payroll.isPaid || payroll.is_paid || false
+        const handSalaryPaid = payroll.handSalaryPaid || payroll.is_paid_hand || false
+        const bankSalaryPaid = payroll.bankSalaryPaid || payroll.is_paid_bank || false
+
+        const status = isPaid
+          ? "Pagado"
+          : handSalaryPaid && bankSalaryPaid
+            ? "Pagado"
+            : handSalaryPaid
+              ? "Mano Pagado"
+              : bankSalaryPaid
+                ? "Banco Pagado"
+                : "Pendiente"
+
+        csvContent += `${payroll.id},${employeeName},${payroll.month},${payroll.year},${payroll.baseSalary || payroll.base_salary || 0},${payroll.bankSalary || payroll.bank_salary || 0},${payroll.handSalary || payroll.hand_salary || 0},${payroll.deductions || 0},${payroll.additions || 0},${payroll.attendanceBonus || payroll.attendance_bonus || 0},${payroll.finalHandSalary || payroll.final_hand_salary || 0},${payroll.totalSalary || payroll.total_salary || 0},${status}\n`
+      }
+
+      return csvContent
+    } catch (error) {
+      console.error("Error al exportar nóminas a CSV:", error)
+      throw new Error("Error al exportar nóminas a CSV")
     }
   }
 }
