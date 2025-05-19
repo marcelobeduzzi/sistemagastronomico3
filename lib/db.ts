@@ -36,7 +36,8 @@ class DatabaseService {
     "base_salary",
     "bank_salary",
     "total_salary",
-    // Eliminamos la columna attendance_bonus que ya no debería estar en la tabla employees
+    "attendance_bonus", // Mantener el bono de asistencia
+    "has_attendance_bonus", // Mantener el indicador de bono de asistencia
     // Agregar aquí todas las columnas que existen en la tabla
   ]
 
@@ -130,13 +131,11 @@ class DatabaseService {
       if (typeof employeeData.total_salary !== "number")
         employeeData.total_salary = Number.parseFloat(employeeData.total_salary) || 0
 
-      // Eliminar los campos de bono que ya no existen en la tabla
-      if ("attendance_bonus" in employeeData) {
-        delete employeeData.attendance_bonus
-      }
-      if ("has_attendance_bonus" in employeeData) {
-        delete employeeData.has_attendance_bonus
-      }
+      // Mantener los campos de bono de asistencia
+      if (typeof employeeData.attendance_bonus !== "number")
+        employeeData.attendance_bonus = Number.parseFloat(employeeData.attendance_bonus) || 0
+      if (typeof employeeData.has_attendance_bonus !== "boolean")
+        employeeData.has_attendance_bonus = Boolean(employeeData.has_attendance_bonus)
 
       console.log("Datos finales para crear empleado después de validación:", employeeData)
 
@@ -228,27 +227,11 @@ class DatabaseService {
         }
       }
 
-      // Eliminar los campos de bono que ya no existen en la tabla
-      if ("attendanceBonus" in employeeToUpdate) {
-        delete employeeToUpdate.attendanceBonus
-      }
-      if ("hasAttendanceBonus" in employeeToUpdate) {
-        delete employeeToUpdate.hasAttendanceBonus
-      }
-
       // Convertir automáticamente de camelCase a snake_case
       const snakeCaseData = objectToSnakeCase({
         ...employeeToUpdate,
         updated_at: new Date().toISOString(),
       })
-
-      // Eliminar los campos de bono que ya no existen en la tabla (versión snake_case)
-      if ("attendance_bonus" in snakeCaseData) {
-        delete snakeCaseData.attendance_bonus
-      }
-      if ("has_attendance_bonus" in snakeCaseData) {
-        delete snakeCaseData.has_attendance_bonus
-      }
 
       // Asegurarse de que los campos numéricos tengan valores numéricos válidos
       if (typeof snakeCaseData.base_salary !== "number" && snakeCaseData.base_salary !== undefined)
@@ -869,17 +852,41 @@ class DatabaseService {
     return data.map((item) => objectToCamelCase(item))
   }
 
-  // Modificar el método createPayroll para incluir el bono de presentismo
+  // MODIFICADO: Método createPayroll para asegurar que los valores se propaguen correctamente
   async createPayroll(payroll: Omit<Payroll, "id">) {
     try {
-      // Asegurarse de que el bono de presentismo esté incluido si está definido
-      const payrollWithBonus = {
+      console.log("Datos originales recibidos en createPayroll:", payroll);
+      
+      // Asegurar que los valores se propaguen correctamente
+      const handSalary = Number(payroll.handSalary || 0);
+      const bankSalary = Number(payroll.bankSalary || 0);
+      const deductions = Number(payroll.deductions || 0);
+      const additions = Number(payroll.additions || 0);
+      const attendanceBonus = Number(payroll.attendanceBonus || 0);
+      
+      // Calcular el sueldo final en mano (handSalary - deductions + additions + attendanceBonus)
+      const finalHandSalary = handSalary - deductions + additions + attendanceBonus;
+      
+      // Calcular el total a pagar (finalHandSalary + bankSalary)
+      const totalSalary = finalHandSalary + bankSalary;
+      
+      // Crear el objeto de datos para la nómina
+      const payrollData = objectToSnakeCase({
         ...payroll,
-        attendance_bonus: payroll.attendanceBonus || 0,
-        has_attendance_bonus: payroll.hasAttendanceBonus || false,
-      }
+        hand_salary: handSalary,
+        bank_salary: bankSalary,
+        deductions: deductions,
+        additions: additions,
+        attendance_bonus: attendanceBonus,
+        has_attendance_bonus: Boolean(payroll.hasAttendanceBonus),
+        final_hand_salary: finalHandSalary,
+        total_salary: totalSalary,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      
+      console.log("Datos procesados para crear nómina:", payrollData);
 
-      const payrollData = objectToSnakeCase(payrollWithBonus)
       const { data, error } = await this.supabase.from("payroll").insert([payrollData]).select().single()
 
       if (error) {
@@ -887,6 +894,7 @@ class DatabaseService {
         throw error
       }
 
+      console.log("Nómina creada exitosamente:", data);
       return objectToCamelCase(data)
     } catch (error) {
       console.error("Error al crear nómina:", error)
@@ -902,15 +910,19 @@ class DatabaseService {
     return objectToCamelCase(data)
   }
 
-  // Método para obtener nóminas por período (mes/año)
+  // MODIFICADO: Método getPayrollsByPeriod para incluir información del empleado y asegurar valores correctos
   async getPayrollsByPeriod(month: number, year: number, isPaid: boolean) {
     try {
-      console.log(`Consultando nóminas con isPaid=${isPaid}`)
+      console.log(`Consultando nóminas con isPaid=${isPaid}, month=${month}, year=${year}`)
 
       // Construir la consulta base
       let query = this.supabase
         .from("payroll")
-        .select("*, details:payroll_details(*)")
+        .select(`
+          *,
+          employee:employees(id, first_name, last_name),
+          details:payroll_details(*)
+        `)
         .order("created_at", { ascending: false })
 
       // Si estamos buscando nóminas pagadas, filtrar por is_paid=true y por mes/año
@@ -940,10 +952,44 @@ class DatabaseService {
       const payrolls = (data || []).map((item) => {
         const payroll = objectToCamelCase(item)
 
+        // Asegurarse de que los campos de salario tengan valores numéricos
+        payroll.handSalary = Number(payroll.handSalary || 0);
+        payroll.bankSalary = Number(payroll.bankSalary || 0);
+        payroll.baseSalary = Number(payroll.baseSalary || 0);
+        payroll.deductions = Number(payroll.deductions || 0);
+        payroll.additions = Number(payroll.additions || 0);
+        payroll.attendanceBonus = Number(payroll.attendanceBonus || 0);
+        payroll.finalHandSalary = Number(payroll.finalHandSalary || 0);
+        payroll.totalSalary = Number(payroll.totalSalary || 0);
+
+        // Si no hay finalHandSalary, calcularlo
+        if (!payroll.finalHandSalary) {
+          payroll.finalHandSalary = payroll.handSalary - payroll.deductions + payroll.additions + payroll.attendanceBonus;
+        }
+
+        // Si no hay totalSalary, calcularlo
+        if (!payroll.totalSalary) {
+          payroll.totalSalary = payroll.finalHandSalary + payroll.bankSalary;
+        }
+
         // Convertir también los detalles
         if (payroll.details && Array.isArray(payroll.details)) {
           payroll.details = payroll.details.map((detail: any) => objectToCamelCase(detail))
         }
+
+        // Añadir nombre completo del empleado para facilitar la visualización
+        if (payroll.employee) {
+          payroll.employeeName = `${payroll.employee.firstName || ''} ${payroll.employee.lastName || ''}`.trim();
+        }
+
+        console.log("Nómina procesada:", {
+          id: payroll.id,
+          employeeName: payroll.employeeName,
+          handSalary: payroll.handSalary,
+          bankSalary: payroll.bankSalary,
+          finalHandSalary: payroll.finalHandSalary,
+          totalSalary: payroll.totalSalary
+        });
 
         return payroll
       })
@@ -996,101 +1042,103 @@ class DatabaseService {
     }
   }
 
-  // Modificar el método updatePayroll para incluir el manejo del bono de presentismo
+  // MODIFICADO: Método updatePayroll para asegurar cálculos correctos
   async updatePayroll(id: string, payroll: Partial<Payroll>) {
     try {
       console.log("Actualizando nómina con ID:", id, "Datos:", payroll)
 
-      // Crear objeto de actualización
-      const now = new Date().toISOString()
+      // Obtener la nómina actual para tener todos los datos necesarios
+      const { data: currentPayroll, error: fetchError } = await this.supabase
+        .from("payroll")
+        .select("*")
+        .eq("id", id)
+        .single()
+
+      if (fetchError) {
+        console.error("Error al obtener nómina actual:", fetchError)
+        throw fetchError
+      }
+
+      // Convertir a camelCase para facilitar el trabajo
+      const current = objectToCamelCase(currentPayroll)
+
+      // Crear objeto de actualización con los valores actuales
       const updateData: any = {
-        updated_at: now,
+        updated_at: new Date().toISOString(),
       }
 
       // Si se proporciona un objeto de pago, procesar los campos relacionados con el pago
       if (payroll.paymentType === "bank" || payroll.bankSalaryPaid) {
         // Pago de banco
         updateData.is_paid_bank = true
-        updateData.bank_payment_date = now
+        updateData.bank_payment_date = new Date().toISOString()
       }
 
       if (payroll.paymentType === "hand" || payroll.handSalaryPaid) {
         // Pago en mano
         updateData.is_paid_hand = true
-        updateData.hand_payment_date = now
+        updateData.hand_payment_date = new Date().toISOString()
       }
 
       if (payroll.paymentType === "all") {
         // Pago total (banco y mano)
         updateData.is_paid_bank = true
         updateData.is_paid_hand = true
-        updateData.bank_payment_date = now
-        updateData.hand_payment_date = now
+        updateData.bank_payment_date = new Date().toISOString()
+        updateData.hand_payment_date = new Date().toISOString()
       }
 
-      // IMPORTANTE: Copiar todos los campos proporcionados al objeto de actualización
-      // Esto asegura que todos los campos se actualicen correctamente
-      const fieldsToUpdate = [
-        "base_salary",
-        "bank_salary",
-        "hand_salary",
-        "deductions",
-        "additions",
-        "final_hand_salary",
-        "total_salary",
-        "has_attendance_bonus",
-        "attendance_bonus",
-        "payment_method",
-        "payment_reference",
-        "payment_date",
-      ]
+      // Procesar campos de salario si se proporcionan
+      if (payroll.handSalary !== undefined) {
+        updateData.hand_salary = Number(payroll.handSalary)
+      } else {
+        updateData.hand_salary = Number(current.handSalary || 0)
+      }
 
-      // Convertir los nombres de campos de camelCase a snake_case
-      for (const field of fieldsToUpdate) {
-        const camelField = toCamelCase(field)
-        if (payroll[camelField] !== undefined) {
-          updateData[field] = payroll[camelField]
-        }
+      if (payroll.bankSalary !== undefined) {
+        updateData.bank_salary = Number(payroll.bankSalary)
+      } else {
+        updateData.bank_salary = Number(current.bankSalary || 0)
+      }
+
+      if (payroll.deductions !== undefined) {
+        updateData.deductions = Number(payroll.deductions)
+      } else {
+        updateData.deductions = Number(current.deductions || 0)
+      }
+
+      if (payroll.additions !== undefined) {
+        updateData.additions = Number(payroll.additions)
+      } else {
+        updateData.additions = Number(current.additions || 0)
       }
 
       // Manejar explícitamente los campos del bono de presentismo
       if (payroll.hasAttendanceBonus !== undefined) {
-        updateData.has_attendance_bonus = payroll.hasAttendanceBonus
+        updateData.has_attendance_bonus = Boolean(payroll.hasAttendanceBonus)
+      } else {
+        updateData.has_attendance_bonus = Boolean(current.hasAttendanceBonus)
       }
 
       if (payroll.attendanceBonus !== undefined) {
-        updateData.attendance_bonus = payroll.attendanceBonus
+        updateData.attendance_bonus = Number(payroll.attendanceBonus)
+      } else {
+        updateData.attendance_bonus = Number(current.attendanceBonus || 0)
       }
 
-      // Si se actualizan las adiciones, deducciones o montos totales
-      if (payroll.additions !== undefined) {
-        updateData.additions = payroll.additions
-      }
+      // Calcular el sueldo final en mano
+      updateData.final_hand_salary = 
+        updateData.hand_salary - 
+        updateData.deductions + 
+        updateData.additions + 
+        (updateData.has_attendance_bonus ? updateData.attendance_bonus : 0)
 
-      if (payroll.deductions !== undefined) {
-        updateData.deductions = payroll.deductions
-      }
-
-      if (payroll.totalSalary !== undefined) {
-        updateData.total_salary = payroll.totalSalary
-      }
-
-      if (payroll.finalHandSalary !== undefined) {
-        updateData.final_hand_salary = payroll.finalHandSalary
-      }
-
-      // Añadir timestamp de actualización
-      updateData.updated_at = now
+      // Calcular el total a pagar
+      updateData.total_salary = updateData.final_hand_salary + updateData.bank_salary
 
       console.log("Datos para actualización:", updateData)
 
-      // Verificar que haya datos para actualizar
-      if (Object.keys(updateData).length <= 1) {
-        console.warn("No hay campos para actualizar en la nómina")
-        throw new Error("No se especificó ningún tipo de pago válido para actualizar")
-      }
-
-      // IMPORTANTE: Usar upsert para asegurar que los campos se actualicen correctamente
+      // Realizar la actualización
       const { data, error } = await this.supabase.from("payroll").update(updateData).eq("id", id).select().single()
 
       if (error) {
@@ -1104,31 +1152,6 @@ class DatabaseService {
       }
 
       console.log("Nómina actualizada correctamente:", data)
-
-      // Verificar si los campos del bono se actualizaron correctamente
-      if ((payroll.hasAttendanceBonus !== undefined || payroll.attendanceBonus !== undefined) && data) {
-        console.log("Verificando campos de bono en la respuesta:", {
-          has_attendance_bonus: data.has_attendance_bonus,
-          attendance_bonus: data.attendance_bonus,
-        })
-
-        // Si los campos no están en la respuesta, intentar una consulta directa
-        if (data.has_attendance_bonus === undefined && data.attendance_bonus === undefined) {
-          console.log("Los campos de bono no están en la respuesta, verificando directamente...")
-          const { data: verifyData, error: verifyError } = await this.supabase
-            .from("payroll")
-            .select("has_attendance_bonus, attendance_bonus")
-            .eq("id", id)
-            .single()
-
-          if (verifyError) {
-            console.error("Error al verificar campos de bono:", verifyError)
-          } else {
-            console.log("Valores actuales en la base de datos:", verifyData)
-          }
-        }
-      }
-
       return objectToCamelCase(data)
     } catch (error) {
       console.error("Error al actualizar nómina:", error)
