@@ -1435,10 +1435,10 @@ class DatabaseService {
           const liquidationId = employeesWithLiquidation.get(employee.id)
           console.log(`  {
           const liquidationId = employeesWithLiquidation.get(employee.id)
-          console.log(`Actualizando liquidación existente con ID ${liquidationId} para empleado ${employee.id}`)
+          console.log(`Actualizando liquidación existente con ID ${liquidationId} para empleado ${employee.id}`);
 
-          // Obtener la liquidación existente para preservar algunos campos\
-          const { data: existingLiquidation, error: getLiquidationError } = await this.supabase\
+          // Obtener la liquidación existente para preservar algunos campos
+          const { data: existingLiquidation, error: getLiquidationError } = await this.supabase
             .from("liquidations")
             .select("*")
             .eq("id", liquidationId)
@@ -1450,7 +1450,7 @@ class DatabaseService {
             continue
           }
 \
-          // Preservar los valores de include_vacation e include_bonus si ya existen\
+          // Preservar los valores de include_vacation e include_bonus si ya existen
           if (existingLiquidation) {
             liquidationData.include_vacation =
               existingLiquidation.include_vacation !== undefined
