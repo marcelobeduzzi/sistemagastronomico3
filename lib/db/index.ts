@@ -1,6 +1,3 @@
-// Log distintivo para verificar que se está cargando el sistema modular
-console.log('📦 CARGANDO: Sistema modular de base de datos (lib/db/index.ts)');
-
 // Este archivo sirve como punto de entrada para todos los servicios de base de datos
 // Exporta todas las clases y funciones necesarias para mantener compatibilidad con el código existente
 
@@ -339,3 +336,6 @@ export const db = {
     },
   },
 }
+
+// Re-exportar supabase explícitamente para mantener compatibilidad
+export { supabase } from "./db-core"

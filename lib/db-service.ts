@@ -1,17 +1,14 @@
-// Log distintivo para verificar que se está cargando el proxy
-console.log('🔄 CARGANDO: Proxy de servicio de base de datos (lib/db-service-proxy.ts)');
-
+// lib/db-service.ts
 // Este archivo sirve como proxy para mantener compatibilidad con el código existente
 // Importa y reexporta todo desde el nuevo sistema modular
 
 import * as dbModule from "./db"
-import { supabase } from "./db/db-core" // Importar supabase directamente
 
 // Reexportar todo
 export const dbService = dbModule.dbService
 export const getSupabase = dbModule.getSupabase
 export const db = dbModule.db
-export { supabase } // Exportar supabase explícitamente
+export const supabase = dbModule.supabase
 
 // Exportar por defecto para mantener compatibilidad con importaciones por defecto
 export default dbModule.dbService
