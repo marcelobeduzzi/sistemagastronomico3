@@ -1,15 +1,16 @@
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { supabase as supabaseClient } from "../supabase/client" // Ajustamos la ruta de importación
+import { supabase as supabaseClient } from "../supabase/client" // Importar el cliente original
 
 // Exportar supabase directamente para mantener compatibilidad con el código existente
 export { supabaseClient as supabase }
 
 // Clase base que contiene funcionalidad compartida
 export class DatabaseServiceBase {
-  protected supabase = createClientComponentClient()
+  // Usar el cliente original de Supabase
+  protected supabase = supabaseClient
 
   // Método para obtener el cliente de Supabase
   getSupabase() {
+    console.log("DB-CORE: Usando cliente Supabase original")
     return this.supabase
   }
 

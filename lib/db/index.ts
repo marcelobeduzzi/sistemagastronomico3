@@ -1,8 +1,14 @@
 // Este archivo sirve como punto de entrada para todos los servicios de base de datos
 // Exporta todas las clases y funciones necesarias para mantener compatibilidad con el código existente
 
+// Importar el cliente original de Supabase
+import { supabase as originalSupabase } from "../supabase/client"
+
+// Exportar el cliente original de Supabase
+export { originalSupabase as supabase }
+
 // Exportar desde db-core
-export { DatabaseServiceBase, calculateExpectedWorkday, supabase } from "./db-core"
+export { DatabaseServiceBase, calculateExpectedWorkday } from "./db-core"
 
 // Exportar desde db-employees
 export { EmployeeService, employeeService } from "./db-employees"
@@ -258,7 +264,10 @@ class DatabaseService extends DatabaseServiceBase {
 export const dbService = new DatabaseService()
 
 // Exportar la función getSupabase para mantener compatibilidad
-export const getSupabase = () => dbService.getSupabase()
+export const getSupabase = () => {
+  console.log("DB/INDEX: Obteniendo cliente Supabase original")
+  return originalSupabase
+}
 
 // Crear un objeto que imita la estructura de Prisma pero usa dbService internamente
 export const db = {
@@ -336,6 +345,3 @@ export const db = {
     },
   },
 }
-
-// Re-exportar supabase explícitamente para mantener compatibilidad
-export { supabase } from "./db-core"
