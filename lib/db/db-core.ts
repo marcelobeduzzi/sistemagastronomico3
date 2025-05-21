@@ -1,4 +1,13 @@
-import { supabase as supabaseClient } from "../supabase/client" // Importar el cliente original
+// Importar directamente desde supabase/client.ts
+import { supabase as supabaseClient } from "../supabase/client"
+
+// Verificar que el cliente de Supabase es válido
+console.log(
+  "DB-CORE: Cliente Supabase:",
+  supabaseClient ? "Disponible" : "No disponible",
+  "Métodos:",
+  Object.keys(supabaseClient || {}).join(", "),
+)
 
 // Exportar supabase directamente para mantener compatibilidad con el código existente
 export { supabaseClient as supabase }

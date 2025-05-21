@@ -3,8 +3,17 @@
 
 console.log("DB-SERVICE-PROXY: Cargando proxy de servicio de base de datos")
 
+// Importar directamente desde supabase/client.ts
+import { supabase as originalSupabase } from "./supabase/client"
 import * as dbModule from "./db"
-import { supabase as originalSupabase } from "./supabase/client" // Importar el cliente original directamente
+
+// Verificar que el cliente de Supabase es válido
+console.log(
+  "DB-SERVICE-PROXY: Cliente Supabase:",
+  originalSupabase ? "Disponible" : "No disponible",
+  "Métodos:",
+  Object.keys(originalSupabase || {}).join(", "),
+)
 
 // Reexportar todo
 export const dbService = dbModule.dbService
