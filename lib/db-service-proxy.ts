@@ -1,3 +1,6 @@
+// Log distintivo para verificar que se está cargando el proxy
+console.log('🔄 CARGANDO: Proxy de servicio de base de datos (lib/db-service-proxy.ts)');
+
 // Este archivo sirve como proxy para mantener compatibilidad con el código existente
 // Importa y reexporta todo desde el nuevo sistema modular
 

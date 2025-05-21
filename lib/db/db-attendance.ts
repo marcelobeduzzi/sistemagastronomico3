@@ -1,3 +1,6 @@
+// Log distintivo para verificar que se está cargando el módulo de asistencias
+console.log('📅 CARGANDO: Módulo de asistencias (lib/db/db-attendance.ts)');
+
 import { DatabaseServiceBase, calculateExpectedWorkday } from "./db-core"
 import { objectToCamelCase, objectToSnakeCase } from "../utils"
 import type { Attendance } from "@/types"
