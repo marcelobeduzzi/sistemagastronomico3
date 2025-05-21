@@ -34,10 +34,17 @@ function createSupabaseClient() {
         autoRefreshToken: true,
         detectSessionInUrl: true,
       },
+      global: {
+        headers: {
+          // Añadir cabeceras predeterminadas para todas las solicitudes
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+      },
     })
 
-    // SOLUCIÓN PARA EL ERROR DE HEADERS: Extender el cliente de Supabase
-    // Interceptar y modificar los métodos que podrían estar causando el error
+    // SOLUCIÓN MEJORADA PARA EL ERROR DE HEADERS Y 406
+    // Extender el cliente de Supabase para manejar correctamente las cabeceras
     const originalFrom = instance.from.bind(instance)
     instance.from = (table) => {
       const result = originalFrom(table)
@@ -50,8 +57,26 @@ function createSupabaseClient() {
         // Añadir el método headers si no existe
         if (selectResult && typeof selectResult.headers !== "function") {
           selectResult.headers = (headers) => {
-            console.log("SUPABASE/CLIENT: Llamada a método headers() interceptada", headers)
-            // Simplemente devolver el mismo objeto para permitir encadenamiento
+            // Aplicar las cabeceras a la solicitud
+            if (selectResult.headers && typeof selectResult.headers === "object") {
+              Object.assign(selectResult.headers, headers || {})
+            } else {
+              try {
+                selectResult.headers = headers || {}
+              } catch (e) {
+                console.warn("No se pudieron aplicar cabeceras:", e)
+              }
+            }
+
+            // Asegurarse de que Accept esté configurado correctamente
+            if (headers && !headers["Accept"]) {
+              try {
+                headers["Accept"] = "application/json"
+              } catch (e) {
+                console.warn("No se pudo añadir Accept header:", e)
+              }
+            }
+
             return selectResult
           }
         }
@@ -59,19 +84,98 @@ function createSupabaseClient() {
         return selectResult
       }
 
+      // Extender otros métodos de consulta para asegurar que tengan el método headers
+      const methodsToExtend = [
+        "eq", "neq", "gt", "gte", "lt", "lte", "like", "ilike", 
+        "is", "in", "contains", "containedBy", "rangeGt", "rangeGte", 
+        "rangeLt", "rangeLte", "rangeAdjacent", "overlaps", "textSearch",
+        "filter", "not", "or", "and"
+      ]
+
+      methodsToExtend.forEach(method => {
+        if (result[method]) {
+          const originalMethod = result[method].bind(result)
+          result[method] = (...args) => {
+            const methodResult = originalMethod(...args)
+            
+            // Añadir el método headers si no existe
+            if (methodResult && typeof methodResult.headers !== "function") {
+              methodResult.headers = (headers) => {
+                // Asegurarse de que Accept esté configurado correctamente
+                if (headers && !headers["Accept"]) {
+                  headers["Accept"] = "application/json"
+                }
+                return methodResult
+              }
+            }
+            
+            return methodResult
+          }
+        }
+      })
+
+      // Extender métodos de modificación
+      const modifyMethods = ["insert", "update", "upsert", "delete"]
+      
+      modifyMethods.forEach(method => {
+        if (result[method]) {
+          const originalMethod = result[method].bind(result)
+          result[method] = (...args) => {
+            const methodResult = originalMethod(...args)
+            
+            // Añadir el método headers si no existe
+            if (methodResult && typeof methodResult.headers !== "function") {
+              methodResult.headers = (headers) => {
+                // Asegurarse de que Accept y Prefer estén configurados correctamente
+                if (headers) {
+                  if (!headers["Accept"]) headers["Accept"] = "application/json"
+                  if (!headers["Prefer"]) headers["Prefer"] = "return=representation"
+                }
+                return methodResult
+              }
+            }
+            
+            return methodResult
+          }
+        }
+      })
+
+      // Extender el método single
+      if (result.single) {
+        const originalSingle = result.single.bind(result)
+        result.single = (...args) => {
+          const singleResult = originalSingle(...args)
+          
+          // Añadir el método headers si no existe
+          if (singleResult && typeof singleResult.headers !== "function") {
+            singleResult.headers = (headers) => {
+              // Asegurarse de que Accept esté configurado correctamente
+              if (headers && !headers["Accept"]) {
+                headers["Accept"] = "application/json"
+              }
+              return singleResult
+            }
+          }
+          
+          return singleResult
+        }
+      }
+
       return result
     }
 
     // Interceptar el método rpc
     const originalRpc = instance.rpc.bind(instance)
-    instance.rpc = (...args) => {
-      const rpcResult = originalRpc(...args)
+    instance.rpc = (fn, ...args) => {
+      const rpcResult = originalRpc(fn, ...args)
 
       // Añadir el método headers si no existe
       if (rpcResult && typeof rpcResult.headers !== "function") {
         rpcResult.headers = (headers) => {
-          console.log("SUPABASE/CLIENT: Llamada a método headers() interceptada en rpc", headers)
-          // Simplemente devolver el mismo objeto para permitir encadenamiento
+          // Asegurarse de que Accept esté configurado correctamente
+          if (headers && !headers["Accept"]) {
+            headers["Accept"] = "application/json"
+          }
           return rpcResult
         }
       }
