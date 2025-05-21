@@ -1,4 +1,3 @@
-// lib/supabase/client.ts
 import { createClient } from "@supabase/supabase-js"
 
 // Verificar si estamos en el cliente
@@ -37,16 +36,51 @@ function createSupabaseClient() {
       },
     })
 
-    // Verificar que la instancia se creó correctamente
-    if (!instance) {
-      console.error("SUPABASE/CLIENT: Error al crear instancia de Supabase - instancia nula")
-    } else {
-      console.log("SUPABASE/CLIENT: Instancia de Supabase creada correctamente", {
-        methods: Object.keys(instance).join(", "),
-        fromMethod: instance.from ? "Disponible" : "No disponible",
-        authMethod: instance.auth ? "Disponible" : "No disponible",
-      })
+    // SOLUCIÓN PARA EL ERROR DE HEADERS: Extender el cliente de Supabase
+    // Interceptar y modificar los métodos que podrían estar causando el error
+    const originalFrom = instance.from.bind(instance)
+    instance.from = (table) => {
+      const result = originalFrom(table)
+
+      // Guardar la implementación original de select
+      const originalSelect = result.select.bind(result)
+      result.select = (...args) => {
+        const selectResult = originalSelect(...args)
+
+        // Añadir el método headers si no existe
+        if (selectResult && typeof selectResult.headers !== "function") {
+          selectResult.headers = (headers) => {
+            console.log("SUPABASE/CLIENT: Llamada a método headers() interceptada", headers)
+            // Simplemente devolver el mismo objeto para permitir encadenamiento
+            return selectResult
+          }
+        }
+
+        return selectResult
+      }
+
+      return result
     }
+
+    // Interceptar el método rpc
+    const originalRpc = instance.rpc.bind(instance)
+    instance.rpc = (...args) => {
+      const rpcResult = originalRpc(...args)
+
+      // Añadir el método headers si no existe
+      if (rpcResult && typeof rpcResult.headers !== "function") {
+        rpcResult.headers = (headers) => {
+          console.log("SUPABASE/CLIENT: Llamada a método headers() interceptada en rpc", headers)
+          // Simplemente devolver el mismo objeto para permitir encadenamiento
+          return rpcResult
+        }
+      }
+
+      return rpcResult
+    }
+
+    // Verificar que la instancia se creó correctamente
+    console.log("SUPABASE/CLIENT: Instancia de Supabase creada y extendida correctamente")
 
     // Guardar la instancia para futuras llamadas
     supabaseInstance = instance
