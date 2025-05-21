@@ -6,7 +6,43 @@ export class PayrollService {
   // Método para obtener una nómina por su ID
   async getPayrollById(payrollId: string) {
     try {
-      return await dbService.getPayrollById(payrollId)
+      console.log(`Obteniendo nómina con ID: ${payrollId}`)
+
+      // Obtener la nómina
+      const payroll = await dbService.getPayrollById(payrollId)
+
+      if (!payroll) {
+        throw new Error(`No se encontró la nómina con ID: ${payrollId}`)
+      }
+
+      // Intentar obtener los detalles de la nómina
+      try {
+        // Verificar si ya tiene detalles cargados
+        if (!payroll.details || !Array.isArray(payroll.details)) {
+          console.log(`Cargando detalles para nómina ${payrollId}`)
+
+          // Obtener detalles desde la base de datos
+          const { data: detailsData, error } = await dbService
+            .getSupabase()
+            .from("payroll_details")
+            .select("*")
+            .eq("payroll_id", payrollId)
+            .order("type", { ascending: false })
+
+          if (error) {
+            console.error("Error al obtener detalles de nómina:", error)
+            payroll.details = []
+          } else {
+            payroll.details = detailsData || []
+            console.log(`Se encontraron ${payroll.details.length} detalles para la nómina`)
+          }
+        }
+      } catch (error) {
+        console.error("Error al cargar detalles de nómina:", error)
+        payroll.details = []
+      }
+
+      return payroll
     } catch (error) {
       console.error(`Error al obtener nómina con ID ${payrollId}:`, error)
       throw new Error(`Error al obtener nómina con ID ${payrollId}`)
@@ -37,13 +73,14 @@ export class PayrollService {
    */
   private calculateAdjustmentsFromAttendances(attendances: any[], baseSalary: number) {
     console.log("Calculando ajustes a partir de asistencias")
+    console.log("Salario base:", baseSalary)
+    console.log("Número de asistencias:", attendances.length)
 
     // Inspeccionar los datos de asistencia
-    console.log("DATOS DE ASISTENCIA RECIBIDOS:", JSON.stringify(attendances.slice(0, 3), null, 2))
-    console.log(
-      "Campos disponibles en el primer registro:",
-      attendances.length > 0 ? Object.keys(attendances[0]) : "No hay registros",
-    )
+    if (attendances.length > 0) {
+      console.log("Campos disponibles en el primer registro:", Object.keys(attendances[0]))
+      console.log("Muestra de la primera asistencia:", JSON.stringify(attendances[0], null, 2))
+    }
 
     let deductions = 0
     let additions = 0
@@ -60,8 +97,25 @@ export class PayrollService {
     for (const attendance of attendances) {
       console.log(`Procesando asistencia del día ${attendance.date}`)
 
+      // Verificar si hay datos relevantes para cálculos
+      console.log(
+        `Datos de asistencia - isAbsent: ${attendance.isAbsent}, isJustified: ${attendance.isJustified}, isHoliday: ${attendance.isHoliday}`,
+      )
+      console.log(
+        `Minutos - lateMinutes: ${attendance.lateMinutes}, earlyDepartureMinutes: ${attendance.earlyDepartureMinutes}, extraMinutes: ${attendance.extraMinutes}`,
+      )
+
+      // IMPORTANTE: Verificar si los campos existen y tienen valores numéricos
+      const lateMinutes = typeof attendance.lateMinutes === "number" ? attendance.lateMinutes : 0
+      const earlyDepartureMinutes =
+        typeof attendance.earlyDepartureMinutes === "number" ? attendance.earlyDepartureMinutes : 0
+      const extraMinutes = typeof attendance.extraMinutes === "number" ? attendance.extraMinutes : 0
+      const isAbsent = Boolean(attendance.isAbsent)
+      const isJustified = Boolean(attendance.isJustified)
+      const isHoliday = Boolean(attendance.isHoliday)
+
       // Ausencias injustificadas
-      if (attendance.isAbsent && !attendance.isJustified && !attendance.isHoliday) {
+      if (isAbsent && !isJustified && !isHoliday) {
         const absenceDeduction = dailySalary
         deductions += absenceDeduction
         details.push({
@@ -75,50 +129,50 @@ export class PayrollService {
       }
 
       // Llegadas tarde
-      if (attendance.lateMinutes > 0) {
-        const lateDeduction = minuteSalary * attendance.lateMinutes
+      if (lateMinutes > 0) {
+        const lateDeduction = minuteSalary * lateMinutes
         deductions += lateDeduction
         details.push({
           concept: "Llegada Tarde",
           type: "deduction",
           amount: lateDeduction,
-          notes: `${attendance.lateMinutes} minutos tarde el día ${attendance.date}`,
+          notes: `${lateMinutes} minutos tarde el día ${attendance.date}`,
           date: attendance.date,
         })
-        console.log(`Llegada tarde: ${attendance.lateMinutes} min. Deducción: ${lateDeduction}`)
+        console.log(`Llegada tarde: ${lateMinutes} min. Deducción: ${lateDeduction}`)
       }
 
       // Salidas anticipadas
-      if (attendance.earlyDepartureMinutes > 0) {
-        const earlyDeduction = minuteSalary * attendance.earlyDepartureMinutes
+      if (earlyDepartureMinutes > 0) {
+        const earlyDeduction = minuteSalary * earlyDepartureMinutes
         deductions += earlyDeduction
         details.push({
           concept: "Salida Anticipada",
           type: "deduction",
           amount: earlyDeduction,
-          notes: `${attendance.earlyDepartureMinutes} minutos antes el día ${attendance.date}`,
+          notes: `${earlyDepartureMinutes} minutos antes el día ${attendance.date}`,
           date: attendance.date,
         })
-        console.log(`Salida anticipada: ${attendance.earlyDepartureMinutes} min. Deducción: ${earlyDeduction}`)
+        console.log(`Salida anticipada: ${earlyDepartureMinutes} min. Deducción: ${earlyDeduction}`)
       }
 
       // Horas extra
-      if (attendance.extraMinutes > 0) {
+      if (extraMinutes > 0) {
         // Las horas extra se pagan a 1.5x el valor normal
-        const extraAddition = minuteSalary * attendance.extraMinutes * 1.5
+        const extraAddition = minuteSalary * extraMinutes * 1.5
         additions += extraAddition
         details.push({
           concept: "Horas Extra",
           type: "addition",
           amount: extraAddition,
-          notes: `${attendance.extraMinutes} minutos extra el día ${attendance.date}`,
+          notes: `${extraMinutes} minutos extra el día ${attendance.date}`,
           date: attendance.date,
         })
-        console.log(`Horas extra: ${attendance.extraMinutes} min. Adición: ${extraAddition}`)
+        console.log(`Horas extra: ${extraMinutes} min. Adición: ${extraAddition}`)
       }
 
       // Feriados trabajados
-      if (attendance.isHoliday && !attendance.isAbsent) {
+      if (isHoliday && !isAbsent) {
         // Los feriados se pagan doble
         const holidayAddition = dailySalary
         additions += holidayAddition
@@ -240,8 +294,28 @@ export class PayrollService {
 
         console.log("Creando nómina con datos completos:", payrollData)
 
-        // Crear la nómina en la base de datos
-        const createdPayroll = await dbService.createPayroll(payrollData)
+        // Verificar explícitamente que los valores numéricos sean números
+        Object.keys(payrollData).forEach((key) => {
+          if (typeof payrollData[key] === "number") {
+            // Convertir a string y luego a número para asegurar que se guarde como numérico
+            payrollData[key] = Number(payrollData[key].toString())
+            console.log(`Campo ${key} convertido a número: ${payrollData[key]}`)
+          }
+        })
+
+        // Crear la nómina en la base de datos - Usar directamente la API de Supabase para mayor control
+        const { data: insertedData, error: insertError } = await dbService
+          .getSupabase()
+          .from("payroll")
+          .insert(payrollData)
+          .select()
+
+        if (insertError) {
+          console.error("Error al crear nómina:", insertError)
+          throw insertError
+        }
+
+        const createdPayroll = insertedData[0]
         console.log(`Nómina creada con ID: ${createdPayroll.id}`)
 
         // Guardar los detalles de la nómina
@@ -250,14 +324,26 @@ export class PayrollService {
 
           for (const detail of details) {
             try {
-              await dbService.createPayrollDetail({
+              const detailData = {
                 payroll_id: createdPayroll.id,
                 concept: detail.concept,
                 type: detail.type,
                 amount: Number(detail.amount), // Asegurar que sea número
                 date: detail.date,
                 notes: detail.notes,
-              })
+              }
+
+              const { data: insertedDetail, error: detailError } = await dbService
+                .getSupabase()
+                .from("payroll_details")
+                .insert(detailData)
+                .select()
+
+              if (detailError) {
+                console.error("Error al guardar detalle:", detailError)
+              } else {
+                console.log("Detalle guardado:", insertedDetail)
+              }
             } catch (detailError) {
               console.error("Error al guardar detalle:", detailError)
             }
@@ -381,11 +467,6 @@ export class PayrollService {
    */
   async forceRegeneratePayrolls(employeeIds: string[], month: number, year: number) {
     try {
-      // Primero verificar la estructura de la tabla
-      const tableStructure = await this.checkPayrollTableStructure()
-      console.log("ESTRUCTURA DE LA TABLA PAYROLL:", tableStructure)
-
-      // Continuar con el resto de la función...
       console.log(`Forzando regeneración de nóminas para ${employeeIds.length} empleados en período ${month}/${year}`)
       const results = []
 
@@ -422,23 +503,6 @@ export class PayrollService {
         // Obtener asistencias del empleado para el período
         const attendances = await dbService.getAttendancesByDateRange(employeeId, startDateStr, endDateStr)
         console.log(`Se encontraron ${attendances.length} registros de asistencia`)
-
-        // Verificar si hay asistencias con datos relevantes para cálculos
-        if (attendances.length > 0) {
-          const hasLateMinutes = attendances.some((a) => a.lateMinutes > 0)
-          const hasEarlyDepartures = attendances.some((a) => a.earlyDepartureMinutes > 0)
-          const hasExtraMinutes = attendances.some((a) => a.extraMinutes > 0)
-          const hasAbsences = attendances.some((a) => a.isAbsent && !a.isJustified)
-          const hasHolidays = attendances.some((a) => a.isHoliday && !a.isAbsent)
-
-          console.log(`ANÁLISIS DE ASISTENCIAS: 
-            - Registros con llegadas tarde: ${hasLateMinutes}
-            - Registros con salidas anticipadas: ${hasEarlyDepartures}
-            - Registros con horas extra: ${hasExtraMinutes}
-            - Registros con ausencias injustificadas: ${hasAbsences}
-            - Registros con feriados trabajados: ${hasHolidays}
-          `)
-        }
 
         // Calcular los valores base de la nómina
         const baseSalary = Number(employee.baseSalary || employee.base_salary || 0)
@@ -492,21 +556,41 @@ export class PayrollService {
           attendance_bonus: attendanceBonus,
         }
 
+        // Verificar explícitamente que los valores numéricos sean números
+        Object.keys(payrollData).forEach((key) => {
+          if (typeof payrollData[key] === "number") {
+            // Convertir a string y luego a número para asegurar que se guarde como numérico
+            payrollData[key] = Number(payrollData[key].toString())
+            console.log(`Campo ${key} convertido a número: ${payrollData[key]}`)
+          }
+        })
+
         // Verificar que los valores de deducciones y adiciones estén presentes
         console.log(`VERIFICACIÓN DE DATOS A GUARDAR:
-  - Deducciones: ${deductions} (tipo: ${typeof deductions})
-  - Adiciones: ${additions} (tipo: ${typeof additions})
-  - Datos completos: ${JSON.stringify(payrollData, null, 2)}
+- Deducciones: ${deductions} (tipo: ${typeof deductions})
+- Adiciones: ${additions} (tipo: ${typeof additions})
+- Datos completos: ${JSON.stringify(payrollData, null, 2)}
 `)
 
         let payrollId: string
 
         if (existingPayroll) {
           console.log(`Actualizando nómina existente con ID: ${existingPayroll.id}`)
-          console.log(`Datos actuales de la nómina:`, JSON.stringify(existingPayroll, null, 2))
 
-          // Actualizar la nómina existente
-          await dbService.updatePayroll(existingPayroll.id, payrollData)
+          // Actualizar la nómina existente - Usar directamente la API de Supabase para mayor control
+          const { data: updatedData, error: updateError } = await dbService
+            .getSupabase()
+            .from("payroll")
+            .update(payrollData)
+            .eq("id", existingPayroll.id)
+            .select()
+
+          if (updateError) {
+            console.error("Error al actualizar nómina:", updateError)
+            throw updateError
+          }
+
+          console.log("Nómina actualizada:", updatedData)
           payrollId = existingPayroll.id
 
           // Eliminar detalles existentes
@@ -515,20 +599,41 @@ export class PayrollService {
         } else {
           console.log(`Creando nueva nómina para empleado ${employeeId}`)
 
-          // Crear nueva nómina
-          const createdPayroll = await dbService.createPayroll(payrollData)
-          payrollId = createdPayroll.id
+          // Crear nueva nómina - Usar directamente la API de Supabase para mayor control
+          const { data: insertedData, error: insertError } = await dbService
+            .getSupabase()
+            .from("payroll")
+            .insert(payrollData)
+            .select()
+
+          if (insertError) {
+            console.error("Error al crear nómina:", insertError)
+            throw insertError
+          }
+
+          console.log("Nómina creada:", insertedData)
+          payrollId = insertedData[0].id
 
           console.log(`Nueva nómina creada con ID: ${payrollId}`)
         }
 
         // Verificar que la nómina se haya guardado correctamente
-        const payrollAfterSave = await this.getPayrollById(payrollId)
-        console.log(`NÓMINA DESPUÉS DE GUARDAR:
-  - ID: ${payrollId}
-  - Deducciones: ${payrollAfterSave.deductions || payrollAfterSave.deductions === 0 ? payrollAfterSave.deductions : "NO PRESENTE"}
-  - Adiciones: ${payrollAfterSave.additions || payrollAfterSave.additions === 0 ? payrollAfterSave.additions : "NO PRESENTE"}
+        const { data: payrollAfterSave, error: fetchError } = await dbService
+          .getSupabase()
+          .from("payroll")
+          .select("*")
+          .eq("id", payrollId)
+          .single()
+
+        if (fetchError) {
+          console.error("Error al verificar nómina guardada:", fetchError)
+        } else {
+          console.log(`NÓMINA DESPUÉS DE GUARDAR:
+- ID: ${payrollId}
+- Deducciones: ${payrollAfterSave.deductions !== null ? payrollAfterSave.deductions : "NO PRESENTE"}
+- Adiciones: ${payrollAfterSave.additions !== null ? payrollAfterSave.additions : "NO PRESENTE"}
 `)
+        }
 
         // Guardar los detalles de la nómina
         if (details.length > 0) {
@@ -536,14 +641,26 @@ export class PayrollService {
 
           for (const detail of details) {
             try {
-              await dbService.createPayrollDetail({
+              const detailData = {
                 payroll_id: payrollId,
                 concept: detail.concept,
                 type: detail.type,
                 amount: Number(detail.amount), // Asegurar que sea número
                 date: detail.date,
                 notes: detail.notes,
-              })
+              }
+
+              const { data: insertedDetail, error: detailError } = await dbService
+                .getSupabase()
+                .from("payroll_details")
+                .insert(detailData)
+                .select()
+
+              if (detailError) {
+                console.error("Error al guardar detalle:", detailError)
+              } else {
+                console.log("Detalle guardado:", insertedDetail)
+              }
             } catch (detailError) {
               console.error("Error al guardar detalle:", detailError)
             }
