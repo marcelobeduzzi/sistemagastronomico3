@@ -90,9 +90,17 @@ export async function POST(request: Request) {
         )
 
         // 3.3 Calcular valores base de la nómina
-        const baseSalary = Number(employee.base_salary || 0)
+        // CORRECCIÓN: Usar base_salary como hand_salary inicial
+        const baseSalary = Number(employee.total_salary || 0) // Esto es el salario total
         const bankSalary = Number(employee.bank_salary || 0)
-        let handSalary = Number(employee.hand_salary || 0)
+        let handSalary = Number(employee.base_salary || 0) // base_salary es el sueldo en mano
+
+        console.log(`API: Valores originales del empleado:
+- ID: ${employee.id}
+- Nombre: ${employee.first_name} ${employee.last_name}
+- base_salary (sueldo en mano): ${employee.base_salary}
+- bank_salary (sueldo en banco): ${employee.bank_salary}
+- total_salary (total): ${employee.total_salary}`)
 
         // REGLA: Si no hay salario en mano ni en banco, el salario base se convierte en salario en mano
         if (handSalary === 0 && bankSalary === 0 && baseSalary > 0) {
@@ -105,18 +113,18 @@ export async function POST(request: Request) {
         const attendanceBonus = hasAttendanceBonus ? Number(employee.attendance_bonus || 0) : 0
 
         console.log(
-          `API: Valores base - Base: ${baseSalary}, Banco: ${bankSalary}, Mano: ${handSalary}, Bono: ${attendanceBonus}`,
+          `API: Valores base - Total: ${baseSalary}, Banco: ${bankSalary}, Mano: ${handSalary}, Bono: ${attendanceBonus}`,
         )
 
         // 3.4 Calcular deducciones y adiciones basadas en asistencias usando la misma lógica del servicio
-        const { deductions, additions, details } = calculateAdjustmentsFromAttendances(attendances || [], baseSalary)
+        const { deductions, additions, details } = calculateAdjustmentsFromAttendances(attendances || [], handSalary)
 
         console.log(`API: Cálculos - Deducciones: ${deductions}, Adiciones: ${additions}, Detalles: ${details.length}`)
 
         // 3.5 Calcular salarios finales
         const finalHandSalary = handSalary - deductions + additions
 
-        // Calcular total correctamente: banco + mano final + bono (si aplica)
+        // CORRECCIÓN: Calcular total correctamente: banco + mano final + bono (si aplica)
         const totalSalary = bankSalary + finalHandSalary + (hasAttendanceBonus ? attendanceBonus : 0)
 
         console.log(`API: Valores finales - Final Mano: ${finalHandSalary}, Total: ${totalSalary}`)
@@ -234,6 +242,10 @@ export async function POST(request: Request) {
 - ID: ${payrollId}
 - Deducciones: ${payrollAfterSave.deductions !== null ? payrollAfterSave.deductions : "NO PRESENTE"}
 - Adiciones: ${payrollAfterSave.additions !== null ? payrollAfterSave.additions : "NO PRESENTE"}
+- Sueldo en Banco: ${payrollAfterSave.bank_salary}
+- Sueldo en Mano: ${payrollAfterSave.hand_salary}
+- Sueldo Final en Mano: ${payrollAfterSave.final_hand_salary}
+- Total a Pagar: ${payrollAfterSave.total_salary}
 `)
         }
 
@@ -297,9 +309,9 @@ export async function POST(request: Request) {
 
 // Función para calcular deducciones y adiciones basadas en asistencias
 // Esta función replica la lógica del PayrollService para mantener consistencia
-function calculateAdjustmentsFromAttendances(attendances: any[], baseSalary: number) {
+function calculateAdjustmentsFromAttendances(attendances: any[], handSalary: number) {
   console.log("API: Calculando ajustes a partir de asistencias")
-  console.log("API: Salario base:", baseSalary)
+  console.log("API: Salario en mano:", handSalary)
   console.log("API: Número de asistencias:", attendances.length)
 
   // Inspeccionar los datos de asistencia
@@ -312,8 +324,8 @@ function calculateAdjustmentsFromAttendances(attendances: any[], baseSalary: num
   let additions = 0
   const details = []
 
-  // Valor del minuto (basado en el salario base)
-  const dailySalary = baseSalary / 30 // Salario diario
+  // Valor del minuto (basado en el salario en mano)
+  const dailySalary = handSalary / 30 // Salario diario
   const hourSalary = dailySalary / 8 // Salario por hora (asumiendo 8 horas por día)
   const minuteSalary = hourSalary / 60 // Salario por minuto
 
