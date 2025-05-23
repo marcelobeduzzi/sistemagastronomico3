@@ -241,17 +241,9 @@ export class PayrollService {
         console.log(`Se encontraron ${attendances.length} registros de asistencia`)
 
         // Calcular los valores base de la nómina
-        // CORRECCIÓN: Usar la estructura correcta de la tabla employees
-        const baseSalary = Number(employee.total_salary || 0) // Salario total del empleado
-        const bankSalary = Number(employee.bank_salary || 0) // Sueldo en banco
-        let handSalary = Number(employee.base_salary || 0) // base_salary es el sueldo en mano
-
-        console.log(`Valores originales del empleado:
-- ID: ${employeeId}
-- Nombre: ${employee.firstName} ${employee.lastName}
-- base_salary (sueldo en mano): ${employee.base_salary}
-- bank_salary (sueldo en banco): ${employee.bank_salary}
-- total_salary (total): ${employee.total_salary}`)
+        const baseSalary = Number(employee.baseSalary || employee.base_salary || 0)
+        const bankSalary = Number(employee.bankSalary || employee.bank_salary || 0)
+        let handSalary = Number(employee.handSalary || employee.hand_salary || 0)
 
         // REGLA: Si no hay salario en mano ni en banco, el salario base se convierte en salario en mano
         if (handSalary === 0 && bankSalary === 0 && baseSalary > 0) {
@@ -270,7 +262,7 @@ export class PayrollService {
         )
 
         // Calcular deducciones y adiciones basadas en asistencias
-        const { deductions, additions, details } = this.calculateAdjustmentsFromAttendances(attendances, handSalary)
+        const { deductions, additions, details } = this.calculateAdjustmentsFromAttendances(attendances, baseSalary)
 
         console.log(
           `Cálculos realizados: Deducciones=${deductions}, Adiciones=${additions}, Detalles=${details.length}`,
@@ -513,17 +505,9 @@ export class PayrollService {
         console.log(`Se encontraron ${attendances.length} registros de asistencia`)
 
         // Calcular los valores base de la nómina
-        // CORRECCIÓN: Usar la estructura correcta de la tabla employees
-        const baseSalary = Number(employee.total_salary || 0) // Salario total del empleado
-        const bankSalary = Number(employee.bank_salary || 0) // Sueldo en banco
-        let handSalary = Number(employee.base_salary || 0) // base_salary es el sueldo en mano
-
-        console.log(`Valores originales del empleado:
-- ID: ${employeeId}
-- Nombre: ${employee.firstName} ${employee.lastName}
-- base_salary (sueldo en mano): ${employee.base_salary}
-- bank_salary (sueldo en banco): ${employee.bank_salary}
-- total_salary (total): ${employee.total_salary}`)
+        const baseSalary = Number(employee.baseSalary || employee.base_salary || 0)
+        const bankSalary = Number(employee.bankSalary || employee.bank_salary || 0)
+        let handSalary = Number(employee.handSalary || employee.hand_salary || 0)
 
         // REGLA: Si no hay salario en mano ni en banco, el salario base se convierte en salario en mano
         if (handSalary === 0 && bankSalary === 0 && baseSalary > 0) {
@@ -542,7 +526,7 @@ export class PayrollService {
         )
 
         // Calcular deducciones y adiciones basadas en asistencias
-        const { deductions, additions, details } = this.calculateAdjustmentsFromAttendances(attendances, handSalary)
+        const { deductions, additions, details } = this.calculateAdjustmentsFromAttendances(attendances, baseSalary)
 
         console.log(
           `Cálculos realizados: Deducciones=${deductions}, Adiciones=${additions}, Detalles=${details.length}`,
