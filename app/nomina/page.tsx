@@ -143,23 +143,28 @@ export default function NominaPage() {
 
   // Función para calcular los totales de nóminas
   useEffect(() => {
-    if (filteredPayrolls.length > 0) {
-      const totals = filteredPayrolls.reduce(
-        (acc, payroll) => {
-          return {
-            totalHand: acc.totalHand + (payroll.finalHandSalary || 0),
-            totalBank: acc.totalBank + (payroll.bankSalary || 0),
-            totalAmount: acc.totalAmount + (payroll.totalSalary || 0),
-          }
-        },
-        { totalHand: 0, totalBank: 0, totalAmount: 0 },
-      )
+  if (filteredPayrolls.length > 0) {
+    const totals = filteredPayrolls.reduce(
+      (acc, payroll) => {
+        // Asegurarse de usar los campos correctos con fallbacks
+        const finalHandSalary = payroll.finalHandSalary || payroll.final_hand_salary || 0
+        const bankSalary = payroll.bankSalary || payroll.bank_salary || 0
+        const totalSalary = payroll.totalSalary || payroll.total_salary || 0
 
-      setPayrollTotals(totals)
-    } else {
-      setPayrollTotals({ totalHand: 0, totalBank: 0, totalAmount: 0 })
-    }
-  }, [filteredPayrolls])
+        return {
+          totalHand: acc.totalHand + finalHandSalary,
+          totalBank: acc.totalBank + bankSalary,
+          totalAmount: acc.totalAmount + totalSalary,
+        }
+      },
+      { totalHand: 0, totalBank: 0, totalAmount: 0 },
+    )
+
+    setPayrollTotals(totals)
+  } else {
+    setPayrollTotals({ totalHand: 0, totalBank: 0, totalAmount: 0 })
+  }
+}, [filteredPayrolls])
 
   // Función para calcular los totales de liquidaciones
   useEffect(() => {
@@ -586,10 +591,15 @@ export default function NominaPage() {
       },
     },
     {
-      accessorKey: "totalSalary",
-      header: "Total a Pagar",
-      cell: ({ row }) => formatCurrency(row.original.totalSalary),
-    },
+  accessorKey: "totalSalary",
+  header: "Total a Pagar",
+  cell: ({ row }) => {
+    // Asegurarse de usar el valor correcto para el total
+    // Debe ser la suma de final_hand_salary + bank_salary
+    const totalSalary = row.original.totalSalary || row.original.total_salary || 0
+    return formatCurrency(totalSalary)
+  },
+},
     {
       accessorKey: "status",
       header: "Estado",
@@ -1055,45 +1065,45 @@ export default function NominaPage() {
           </Button>
 
           <Button
-            variant="outline"
-            onClick={async () => {
-              try {
-                setIsGeneratingPayrolls(true)
-                // Obtener IDs de empleados activos
-                const employeeIds = employees.map((emp) => emp.id)
+  variant="outline"
+  onClick={async () => {
+    try {
+      setIsGeneratingPayrolls(true)
+      // Obtener IDs de empleados activos
+      const employeeIds = employees.map((emp) => emp.id)
 
-                console.log("=== INICIO DE REGENERACIÓN DE NÓMINAS ===")
-                console.log(`Regenerando nóminas para ${selectedMonth}/${selectedYear}`)
-                console.log(`Empleados seleccionados: ${employeeIds.length}`)
+      console.log("=== INICIO DE REGENERACIÓN DE NÓMINAS ===")
+      console.log(`Regenerando nóminas para ${selectedMonth}/${selectedYear}`)
+      console.log(`Empleados seleccionados: ${employeeIds.length}`)
 
-                // Usar el servicio de nóminas para regenerar las nóminas
-                await payrollService.forceRegeneratePayrolls(employeeIds, selectedMonth, selectedYear)
+      // Usar el servicio de nóminas para regenerar las nóminas
+      await payrollService.forceRegeneratePayrolls(employeeIds, selectedMonth, selectedYear)
 
-                console.log("=== FIN DE REGENERACIÓN DE NÓMINAS ===")
+      console.log("=== FIN DE REGENERACIÓN DE NÓMINAS ===")
 
-                toast({
-                  title: "Nóminas regeneradas",
-                  description: "Las nóminas han sido regeneradas correctamente. Revisa la consola para ver detalles.",
-                })
+      toast({
+        title: "Nóminas regeneradas",
+        description: "Las nóminas han sido regeneradas correctamente. Revisa la consola para ver detalles.",
+      })
 
-                // Recargar datos
-                loadData()
-              } catch (error) {
-                console.error("Error al regenerar nóminas:", error)
-                toast({
-                  title: "Error",
-                  description: "No se pudieron regenerar las nóminas. Intente nuevamente.",
-                  variant: "destructive",
-                })
-              } finally {
-                setIsGeneratingPayrolls(false)
-              }
-            }}
-            disabled={isGeneratingPayrolls}
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${isGeneratingPayrolls ? "animate-spin" : ""}`} />
-            {isGeneratingPayrolls ? "Regenerando..." : "Regenerar Nóminas (Debug)"}
-          </Button>
+      // Recargar datos
+      loadData()
+    } catch (error) {
+      console.error("Error al regenerar nóminas:", error)
+      toast({
+        title: "Error",
+        description: "No se pudieron regenerar las nóminas. Intente nuevamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsGeneratingPayrolls(false)
+    }
+  }}
+  disabled={isGeneratingPayrolls}
+>
+  <RefreshCw className={`mr-2 h-4 w-4 ${isGeneratingPayrolls ? "animate-spin" : ""}`} />
+  {isGeneratingPayrolls ? "Regenerando..." : "Regenerar Nóminas (Debug)"}
+</Button>
 
           {activeTab === "liquidaciones" && (
             <>
