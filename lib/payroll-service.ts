@@ -268,11 +268,15 @@ export class PayrollService {
           `Cálculos realizados: Deducciones=${deductions}, Adiciones=${additions}, Detalles=${details.length}`,
         )
 
-        // Calcular salarios finales
-        const finalHandSalary = handSalary - deductions + additions
-        const totalSalary = bankSalary + finalHandSalary + (hasAttendanceBonus ? attendanceBonus : 0)
+        // NUEVA LÓGICA: Calcular salarios finales según la fórmula correcta
+        // final_hand_salary = hand_salary + additions - deductions + bono_presentismo
+        const calculatedFinalHandSalary =
+          handSalary + additions - deductions + (hasAttendanceBonus ? attendanceBonus : 0)
 
-        console.log(`Valores finales: Final Mano=${finalHandSalary}, Total=${totalSalary}`)
+        // total_salary = final_hand_salary + bank_salary
+        const totalSalary = calculatedFinalHandSalary + bankSalary
+
+        console.log(`Valores finales: Final Mano=${calculatedFinalHandSalary}, Total=${totalSalary}`)
 
         // Crear la nueva nómina con TODOS los valores ya calculados
         const payrollData = {
@@ -281,10 +285,10 @@ export class PayrollService {
           year,
           base_salary: baseSalary,
           bank_salary: bankSalary,
-          hand_salary: handSalary,
+          hand_salary: calculatedFinalHandSalary, // CAMBIO: Guardar el valor calculado
           deductions: Number(deductions), // Asegurar que sea número
           additions: Number(additions), // Asegurar que sea número
-          final_hand_salary: finalHandSalary,
+          final_hand_salary: calculatedFinalHandSalary,
           total_salary: totalSalary,
           is_paid_hand: false,
           is_paid_bank: false,
@@ -532,11 +536,15 @@ export class PayrollService {
           `Cálculos realizados: Deducciones=${deductions}, Adiciones=${additions}, Detalles=${details.length}`,
         )
 
-        // Calcular salarios finales
-        const finalHandSalary = handSalary - deductions + additions
-        const totalSalary = bankSalary + finalHandSalary + (hasAttendanceBonus ? attendanceBonus : 0)
+        // NUEVA LÓGICA: Calcular salarios finales según la fórmula correcta
+        // final_hand_salary = hand_salary + additions - deductions + bono_presentismo
+        const calculatedFinalHandSalary =
+          handSalary + additions - deductions + (hasAttendanceBonus ? attendanceBonus : 0)
 
-        console.log(`Valores finales: Final Mano=${finalHandSalary}, Total=${totalSalary}`)
+        // total_salary = final_hand_salary + bank_salary
+        const totalSalary = calculatedFinalHandSalary + bankSalary
+
+        console.log(`Valores finales: Final Mano=${calculatedFinalHandSalary}, Total=${totalSalary}`)
 
         // Preparar los datos de la nómina
         const payrollData = {
@@ -545,10 +553,10 @@ export class PayrollService {
           year,
           base_salary: baseSalary,
           bank_salary: bankSalary,
-          hand_salary: handSalary,
+          hand_salary: calculatedFinalHandSalary, // CAMBIO: Guardar el valor calculado
           deductions: Number(deductions), // Asegurar que sea número
           additions: Number(additions), // Asegurar que sea número
-          final_hand_salary: finalHandSalary,
+          final_hand_salary: calculatedFinalHandSalary,
           total_salary: totalSalary,
           is_paid_hand: existingPayroll ? existingPayroll.is_paid_hand || false : false,
           is_paid_bank: existingPayroll ? existingPayroll.is_paid_bank || false : false,
@@ -707,29 +715,31 @@ export class PayrollService {
       const baseSalary = Number(payroll.baseSalary || payroll.base_salary || 0)
       const { deductions, additions, details } = this.calculateAdjustmentsFromAttendances(attendances, baseSalary)
 
-      // Obtener valores actuales
-      const handSalary = Number(payroll.handSalary || payroll.hand_salary || 0)
-      const bankSalary = Number(payroll.bankSalary || payroll.bank_salary || 0)
-      const attendanceBonus = Number(payroll.attendanceBonus || payroll.attendance_bonus || 0)
-      const hasAttendanceBonus = Boolean(payroll.hasAttendanceBonus || payroll.has_attendance_bonus || false)
+      // Obtener valores actuales del empleado (no de la nómina)
+      const handSalary = Number(employee.handSalary || employee.hand_salary || 0)
+      const bankSalary = Number(employee.bankSalary || employee.bank_salary || 0)
+      const attendanceBonus = Number(employee.attendanceBonus || employee.attendance_bonus || 0)
+      const hasAttendanceBonus = Boolean(employee.hasAttendanceBonus || employee.has_attendance_bonus || false)
 
       console.log(
-        `Valores actuales - Sueldo en mano: ${handSalary}, Sueldo banco: ${bankSalary}, Bono: ${attendanceBonus}`,
+        `Valores del empleado - Sueldo en mano: ${handSalary}, Sueldo banco: ${bankSalary}, Bono: ${attendanceBonus}`,
       )
 
-      // Calcular sueldo final en mano (sueldo en mano - deducciones + adiciones)
-      const finalHandSalary = handSalary - deductions + additions
+      // NUEVA LÓGICA: Calcular según la fórmula correcta
+      // final_hand_salary = hand_salary + additions - deductions + bono_presentismo
+      const calculatedFinalHandSalary = handSalary + additions - deductions + (hasAttendanceBonus ? attendanceBonus : 0)
 
-      // Calcular total a pagar (sueldo en banco + sueldo final en mano + bono de presentismo)
-      const totalSalary = bankSalary + finalHandSalary + (hasAttendanceBonus ? attendanceBonus : 0)
+      // total_salary = final_hand_salary + bank_salary
+      const totalSalary = calculatedFinalHandSalary + bankSalary
 
-      console.log(`Nuevos valores calculados - Sueldo final en mano: ${finalHandSalary}, Total a pagar: ${totalSalary}`)
+      console.log(`Nuevos valores calculados - Final Mano: ${calculatedFinalHandSalary}, Total: ${totalSalary}`)
 
       // Actualizar la nómina
       const updateData = {
         deductions: Number(deductions), // Asegurar que sea número
         additions: Number(additions), // Asegurar que sea número
-        final_hand_salary: finalHandSalary,
+        hand_salary: calculatedFinalHandSalary, // CAMBIO: Guardar el valor calculado
+        final_hand_salary: calculatedFinalHandSalary,
         total_salary: totalSalary,
       }
 
@@ -815,25 +825,27 @@ export class PayrollService {
       const baseSalary = Number(payroll.baseSalary || payroll.base_salary || 0)
       const { deductions, additions, details } = this.calculateAdjustmentsFromAttendances(attendances, baseSalary)
 
-      // Obtener valores actuales
-      const handSalary = Number(payroll.handSalary || payroll.hand_salary || 0)
-      const bankSalary = Number(payroll.bankSalary || payroll.bank_salary || 0)
-      const attendanceBonus = Number(payroll.attendanceBonus || payroll.attendance_bonus || 0)
-      const hasAttendanceBonus = Boolean(payroll.hasAttendanceBonus || payroll.has_attendance_bonus || false)
+      // Obtener valores actuales del empleado (no de la nómina)
+      const handSalary = Number(employee.handSalary || employee.hand_salary || 0)
+      const bankSalary = Number(employee.bankSalary || employee.bank_salary || 0)
+      const attendanceBonus = Number(employee.attendanceBonus || employee.attendance_bonus || 0)
+      const hasAttendanceBonus = Boolean(employee.hasAttendanceBonus || employee.has_attendance_bonus || false)
 
-      // Calcular sueldo final en mano (sueldo en mano - deducciones + adiciones)
-      const finalHandSalary = handSalary - deductions + additions
+      // NUEVA LÓGICA: Calcular según la fórmula correcta
+      // final_hand_salary = hand_salary + additions - deductions + bono_presentismo
+      const calculatedFinalHandSalary = handSalary + additions - deductions + (hasAttendanceBonus ? attendanceBonus : 0)
 
-      // Calcular total a pagar (sueldo en banco + sueldo final en mano + bono de presentismo)
-      const totalSalary = bankSalary + finalHandSalary + (hasAttendanceBonus ? attendanceBonus : 0)
+      // total_salary = final_hand_salary + bank_salary
+      const totalSalary = calculatedFinalHandSalary + bankSalary
 
-      console.log(`Valores calculados - Final Mano: ${finalHandSalary}, Total: ${totalSalary}`)
+      console.log(`Valores calculados - Final Mano: ${calculatedFinalHandSalary}, Total: ${totalSalary}`)
 
       // Actualizar la nómina
       const updateData = {
         deductions: Number(deductions), // Asegurar que sea número
         additions: Number(additions), // Asegurar que sea número
-        final_hand_salary: finalHandSalary,
+        hand_salary: calculatedFinalHandSalary, // CAMBIO: Guardar el valor calculado
+        final_hand_salary: calculatedFinalHandSalary,
         total_salary: totalSalary,
       }
 
@@ -1020,19 +1032,30 @@ export class PayrollService {
         }
 
         const payroll = payrolls[0]
-        const handSalary = Number(payroll.handSalary || payroll.hand_salary || 0)
-        const bankSalary = Number(payroll.bankSalary || payroll.bank_salary || 0)
+
+        // Obtener información del empleado para recalcular correctamente
+        const employee = await dbService.getEmployeeById(employeeId)
+        if (!employee) continue
+
+        const handSalary = Number(employee.handSalary || employee.hand_salary || 0)
+        const bankSalary = Number(employee.bankSalary || employee.bank_salary || 0)
         const deductions = Number(payroll.deductions || 0)
         const additions = Number(payroll.additions || 0)
-        const finalHandSalary = handSalary - deductions + additions
+
+        // NUEVA LÓGICA: Calcular según la fórmula correcta
+        // final_hand_salary = hand_salary + additions - deductions + bono_presentismo
+        const calculatedFinalHandSalary = handSalary + additions - deductions + bonusAmount
+
+        // total_salary = final_hand_salary + bank_salary
+        const totalSalary = calculatedFinalHandSalary + bankSalary
 
         // Actualizar el bono de presentismo
         const updateData = {
           has_attendance_bonus: true,
           attendance_bonus: bonusAmount,
-          // Recalcular totales
-          final_hand_salary: finalHandSalary,
-          total_salary: bankSalary + finalHandSalary + bonusAmount,
+          hand_salary: calculatedFinalHandSalary, // CAMBIO: Guardar el valor calculado
+          final_hand_salary: calculatedFinalHandSalary,
+          total_salary: totalSalary,
         }
 
         const updatedPayroll = await dbService.updatePayroll(payroll.id, updateData)
@@ -1060,19 +1083,30 @@ export class PayrollService {
         }
 
         const payroll = payrolls[0]
-        const handSalary = Number(payroll.handSalary || payroll.hand_salary || 0)
-        const bankSalary = Number(payroll.bankSalary || payroll.bank_salary || 0)
+
+        // Obtener información del empleado para recalcular correctamente
+        const employee = await dbService.getEmployeeById(employeeId)
+        if (!employee) continue
+
+        const handSalary = Number(employee.handSalary || employee.hand_salary || 0)
+        const bankSalary = Number(employee.bankSalary || employee.bank_salary || 0)
         const deductions = Number(payroll.deductions || 0)
         const additions = Number(payroll.additions || 0)
-        const finalHandSalary = handSalary - deductions + additions
+
+        // NUEVA LÓGICA: Calcular según la fórmula correcta (sin bono)
+        // final_hand_salary = hand_salary + additions - deductions
+        const calculatedFinalHandSalary = handSalary + additions - deductions
+
+        // total_salary = final_hand_salary + bank_salary
+        const totalSalary = calculatedFinalHandSalary + bankSalary
 
         // Quitar el bono de presentismo
         const updateData = {
           has_attendance_bonus: false,
           attendance_bonus: 0,
-          // Recalcular totales
-          final_hand_salary: finalHandSalary,
-          total_salary: bankSalary + finalHandSalary,
+          hand_salary: calculatedFinalHandSalary, // CAMBIO: Guardar el valor calculado
+          final_hand_salary: calculatedFinalHandSalary,
+          total_salary: totalSalary,
         }
 
         const updatedPayroll = await dbService.updatePayroll(payroll.id, updateData)
@@ -1302,23 +1336,25 @@ export class PayrollService {
       const baseSalary = Number(payroll.baseSalary || payroll.base_salary || 0)
       const { deductions, additions, details } = this.calculateAdjustmentsFromAttendances(attendances, baseSalary)
 
-      // Obtener valores actuales
-      const handSalary = Number(payroll.handSalary || payroll.hand_salary || 0)
-      const bankSalary = Number(payroll.bankSalary || payroll.bank_salary || 0)
-      const attendanceBonus = Number(payroll.attendanceBonus || payroll.attendance_bonus || 0)
-      const hasAttendanceBonus = Boolean(payroll.hasAttendanceBonus || payroll.has_attendance_bonus || false)
+      // Obtener valores actuales del empleado (no de la nómina)
+      const handSalary = Number(employee.handSalary || employee.hand_salary || 0)
+      const bankSalary = Number(employee.bankSalary || employee.bank_salary || 0)
+      const attendanceBonus = Number(employee.attendanceBonus || employee.attendance_bonus || 0)
+      const hasAttendanceBonus = Boolean(employee.hasAttendanceBonus || employee.has_attendance_bonus || false)
 
-      // Calcular sueldo final en mano (sueldo en mano - deducciones + adiciones)
-      const finalHandSalary = handSalary - deductions + additions
+      // NUEVA LÓGICA: Calcular según la fórmula correcta
+      // final_hand_salary = hand_salary + additions - deductions + bono_presentismo
+      const calculatedFinalHandSalary = handSalary + additions - deductions + (hasAttendanceBonus ? attendanceBonus : 0)
 
-      // Calcular total a pagar (sueldo en banco + sueldo final en mano + bono de presentismo)
-      const totalSalary = bankSalary + finalHandSalary + (hasAttendanceBonus ? attendanceBonus : 0)
+      // total_salary = final_hand_salary + bank_salary
+      const totalSalary = calculatedFinalHandSalary + bankSalary
 
       // Actualizar la nómina
       const updateData = {
         deductions: Number(deductions), // Asegurar que sea número
         additions: Number(additions), // Asegurar que sea número
-        final_hand_salary: finalHandSalary,
+        hand_salary: calculatedFinalHandSalary, // CAMBIO: Guardar el valor calculado
+        final_hand_salary: calculatedFinalHandSalary,
         total_salary: totalSalary,
       }
 
