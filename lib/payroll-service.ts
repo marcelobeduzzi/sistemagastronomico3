@@ -241,13 +241,15 @@ export class PayrollService {
         console.log(`Se encontraron ${attendances.length} registros de asistencia`)
 
         // Calcular los valores base de la nómina
-        const baseSalary = Number(employee.baseSalary || employee.base_salary || 0)
-        const bankSalary = Number(employee.bankSalary || employee.bank_salary || 0)
-        let handSalary = Number(employee.handSalary || employee.hand_salary || 0)
+        // IMPORTANTE: Obtener los valores correctos de la tabla employees
+        const baseSalary = Number(employee.base_salary || 0)
+        const bankSalary = Number(employee.bank_salary || 0)
+        const handSalary = Number(employee.hand_salary || 0)
 
         // REGLA: Si no hay salario en mano ni en banco, el salario base se convierte en salario en mano
+        let finalHandSalary = handSalary
         if (handSalary === 0 && bankSalary === 0 && baseSalary > 0) {
-          handSalary = baseSalary
+          finalHandSalary = baseSalary
           console.log(`Aplicando regla: Sueldo Base (${baseSalary}) se convierte en Sueldo en Mano`)
         }
 
@@ -262,17 +264,22 @@ export class PayrollService {
         )
 
         // Calcular deducciones y adiciones basadas en asistencias
-        const { deductions, additions, details } = this.calculateAdjustmentsFromAttendances(attendances, baseSalary)
+        const { deductions, additions, details } = this.calculateAdjustmentsFromAttendances(
+          attendances,
+          finalHandSalary,
+        )
 
         console.log(
           `Cálculos realizados: Deducciones=${deductions}, Adiciones=${additions}, Detalles=${details.length}`,
         )
 
         // Calcular salarios finales
-        const finalHandSalary = handSalary - deductions + additions
-        const totalSalary = bankSalary + finalHandSalary + (hasAttendanceBonus ? attendanceBonus : 0)
+        const calculatedFinalHandSalary = handSalary - deductions + additions
 
-        console.log(`Valores finales: Final Mano=${finalHandSalary}, Total=${totalSalary}`)
+        // CORRECCIÓN: Calcular el total como la suma de banco + mano final (no mano original)
+        const totalSalary = bankSalary + calculatedFinalHandSalary + (hasAttendanceBonus ? attendanceBonus : 0)
+
+        console.log(`Valores finales: Final Mano=${calculatedFinalHandSalary}, Total=${totalSalary}`)
 
         // Crear la nueva nómina con TODOS los valores ya calculados
         const payrollData = {
@@ -281,10 +288,10 @@ export class PayrollService {
           year,
           base_salary: baseSalary,
           bank_salary: bankSalary,
-          hand_salary: handSalary,
+          hand_salary: calculatedFinalHandSalary,
           deductions: Number(deductions), // Asegurar que sea número
           additions: Number(additions), // Asegurar que sea número
-          final_hand_salary: finalHandSalary,
+          final_hand_salary: calculatedFinalHandSalary,
           total_salary: totalSalary,
           is_paid_hand: false,
           is_paid_bank: false,
@@ -505,13 +512,15 @@ export class PayrollService {
         console.log(`Se encontraron ${attendances.length} registros de asistencia`)
 
         // Calcular los valores base de la nómina
-        const baseSalary = Number(employee.baseSalary || employee.base_salary || 0)
-        const bankSalary = Number(employee.bankSalary || employee.bank_salary || 0)
-        let handSalary = Number(employee.handSalary || employee.hand_salary || 0)
+        // IMPORTANTE: Obtener los valores correctos de la tabla employees
+        const baseSalary = Number(employee.base_salary || 0)
+        const bankSalary = Number(employee.bank_salary || 0)
+        const handSalary = Number(employee.hand_salary || 0)
 
         // REGLA: Si no hay salario en mano ni en banco, el salario base se convierte en salario en mano
+        let finalHandSalary = handSalary
         if (handSalary === 0 && bankSalary === 0 && baseSalary > 0) {
-          handSalary = baseSalary
+          finalHandSalary = baseSalary
           console.log(`Aplicando regla: Sueldo Base (${baseSalary}) se convierte en Sueldo en Mano`)
         }
 
@@ -526,17 +535,22 @@ export class PayrollService {
         )
 
         // Calcular deducciones y adiciones basadas en asistencias
-        const { deductions, additions, details } = this.calculateAdjustmentsFromAttendances(attendances, baseSalary)
+        const { deductions, additions, details } = this.calculateAdjustmentsFromAttendances(
+          attendances,
+          finalHandSalary,
+        )
 
         console.log(
           `Cálculos realizados: Deducciones=${deductions}, Adiciones=${additions}, Detalles=${details.length}`,
         )
 
         // Calcular salarios finales
-        const finalHandSalary = handSalary - deductions + additions
-        const totalSalary = bankSalary + finalHandSalary + (hasAttendanceBonus ? attendanceBonus : 0)
+        const calculatedFinalHandSalary = handSalary - deductions + additions
 
-        console.log(`Valores finales: Final Mano=${finalHandSalary}, Total=${totalSalary}`)
+        // CORRECCIÓN: Calcular el total como la suma de banco + mano final (no mano original)
+        const totalSalary = bankSalary + calculatedFinalHandSalary + (hasAttendanceBonus ? attendanceBonus : 0)
+
+        console.log(`Valores finales: Final Mano=${calculatedFinalHandSalary}, Total=${totalSalary}`)
 
         // Preparar los datos de la nómina
         const payrollData = {
@@ -545,10 +559,10 @@ export class PayrollService {
           year,
           base_salary: baseSalary,
           bank_salary: bankSalary,
-          hand_salary: handSalary,
+          hand_salary: calculatedFinalHandSalary,
           deductions: Number(deductions), // Asegurar que sea número
           additions: Number(additions), // Asegurar que sea número
-          final_hand_salary: finalHandSalary,
+          final_hand_salary: calculatedFinalHandSalary,
           total_salary: totalSalary,
           is_paid_hand: existingPayroll ? existingPayroll.is_paid_hand || false : false,
           is_paid_bank: existingPayroll ? existingPayroll.is_paid_bank || false : false,
