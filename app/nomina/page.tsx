@@ -199,8 +199,30 @@ export default function NominaPage() {
       // Cargar nóminas según la pestaña activa
       if (activeTab === "pendientes" || activeTab === "liquidaciones") {
         // Cargar todas las nóminas pendientes
-        const payrollsData = await dbService.getPayrollsByPeriod(selectedMonth, selectedYear, false)
-        setPayrolls(payrollsData)
+        // Cargar todas las nóminas pendientes
+const payrollsData = await dbService.getPayrollsByPeriod(selectedMonth, selectedYear, false)
+
+// Corregir el mapeo de datos para asegurar que los valores sean correctos
+const correctedPayrolls = payrollsData.map(payroll => {
+  console.log('Datos originales de nómina:', payroll)
+  
+  // Asegurar que usamos los campos correctos
+  const finalHandSalary = payroll.final_hand_salary || payroll.finalHandSalary || 0
+  const bankSalary = payroll.bank_salary || payroll.bankSalary || 0
+  const totalSalary = payroll.total_salary || payroll.totalSalary || (finalHandSalary + bankSalary)
+  
+  const corrected = {
+    ...payroll,
+    finalHandSalary: finalHandSalary,
+    bankSalary: bankSalary,
+    totalSalary: totalSalary
+  }
+  
+  console.log('Datos corregidos de nómina:', corrected)
+  return corrected
+})
+
+setPayrolls(correctedPayrolls)
 
         console.log("Total nóminas pendientes:", payrollsData.length)
 
