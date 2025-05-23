@@ -115,9 +115,20 @@ export async function POST(request: Request) {
 
         // 3.5 Calcular salarios finales
         const finalHandSalary = handSalary - deductions + additions
+
+        // Calcular total correctamente: banco + mano final + bono (si aplica)
         const totalSalary = bankSalary + finalHandSalary + (hasAttendanceBonus ? attendanceBonus : 0)
 
         console.log(`API: Valores finales - Final Mano: ${finalHandSalary}, Total: ${totalSalary}`)
+
+        console.log(`API: Cálculo de totales para empleado ${employee.id}:
+- Sueldo en Banco: ${bankSalary}
+- Sueldo en Mano Original: ${handSalary}
+- Deducciones: ${deductions}
+- Adiciones: ${additions}
+- Sueldo Final en Mano: ${finalHandSalary}
+- Bono Asistencia: ${attendanceBonus}
+- Total a Pagar: ${totalSalary}`)
 
         // 3.6 Crear objeto de nómina con TODOS los valores ya calculados
         const payrollData = {
