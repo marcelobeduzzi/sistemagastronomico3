@@ -128,6 +128,12 @@ export async function POST(request: Request) {
         // total_salary = final_hand_salary + bank_salary
         const totalSalary = calculatedFinalHandSalary + bankSalary
 
+        // NUEVO: Log para verificar el cálculo del total
+        console.log(`API: VERIFICACIÓN DE CÁLCULO TOTAL:
+- calculatedFinalHandSalary: ${calculatedFinalHandSalary}
+- bankSalary: ${bankSalary}
+- totalSalary calculado: ${totalSalary}`)
+
         console.log(`API: Valores finales calculados:
 - Sueldo en Mano Original: ${handSalary}
 - Deducciones: ${deductions}
@@ -246,6 +252,21 @@ export async function POST(request: Request) {
 - Sueldo Final en Mano: ${payrollAfterSave.final_hand_salary}
 - Total a Pagar: ${payrollAfterSave.total_salary}
 `)
+        }
+
+        // NUEVO: Verificación adicional después de guardar
+        const { data: verificationPayroll } = await supabase
+          .from("payroll")
+          .select("total_salary, final_hand_salary, bank_salary")
+          .eq("id", payrollId)
+          .single()
+
+        if (verificationPayroll) {
+          console.log(`API: VERIFICACIÓN POST-GUARDADO:
+- total_salary guardado: ${verificationPayroll.total_salary}
+- final_hand_salary guardado: ${verificationPayroll.final_hand_salary}
+- bank_salary guardado: ${verificationPayroll.bank_salary}
+- ¿Total correcto?: ${Math.abs(verificationPayroll.total_salary - (verificationPayroll.final_hand_salary + verificationPayroll.bank_salary)) < 1}`)
         }
 
         // 3.8 Insertar detalles de nómina
